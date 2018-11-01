@@ -2,10 +2,10 @@
 """
 Parse a protocol description and generate an ast
 """
-from enum import Enum
-from collections import namedtuple 
+import enum
+from typing import NamedTuple, Dict, Iterator, List
 
-class TokenType(Enum):
+class TokenType(enum.Enum):
 	BAD = 0
 	BOOL = 1
 	BYTES = 2
@@ -41,12 +41,13 @@ class TokenType(Enum):
 	ID = 65
 	NAMESPACE = 66
 	COLONCOLON = 67
-	
-Token = namedtuple('Token', ['type', 'index', 'length'])
 
-def tokenize(data):
-	cur = 0
-	ops = {
+Token = NamedTuple('Token', [('type', TokenType), ('index',int), ('length', int)])
+
+def tokenize(data:str) -> Iterator[Token]:
+	cur: int = 0
+	end: int = 0
+	ops : Dict[str, TokenType] = {
 		':': TokenType.COLON,
 		';': TokenType.SEMICOLON,
 		',': TokenType.COMMA,
@@ -55,7 +56,7 @@ def tokenize(data):
 		'}': TokenType.RBRACE,
 		}
 
-	keywords = {
+	keywords : Dict[str, TokenType]= {
 		'Bool': TokenType.BOOL,
 		'Bytes': TokenType.BYTES,
 		'Float32': TokenType.FLOAT32,
@@ -115,10 +116,10 @@ def tokenize(data):
 			end = cur+1
 			while end < len(data) and (data[end] == '_' or data[end].isalnum()):
 				end += 1
-			type = TokenType.IDENTIFIER
+			type: TokenType = TokenType.IDENTIFIER
 			if data[cur:end] in keywords: type = keywords[data[cur:end]]
 			yield Token(type, cur, end-cur)
-			cur = end;
+			cur = end
 			continue
 
 		if data[cur] == '@':
@@ -129,7 +130,7 @@ def tokenize(data):
 			cur = end
 			continue
 									   
-		if data[cur] == '-' or data[cur] == '.' or data[cur] in "0123456789":		  
+		if data[cur] == '-' or data[cur] == '.' or data[cur] in "0123456789":
 			end = cur
 			if end < len(data) and data[end] == '-':
 				end += 1
@@ -146,7 +147,7 @@ def tokenize(data):
 				while end < len(data) and data[end] in "0123456789":
 					end += 1
 			yield Token(TokenType.NUMBER, cur, end-cur)
-			cur = end;
+			cur = end
 			continue
 		
 		yield Token(TokenType.BAD, cur, 1)
@@ -154,7 +155,7 @@ def tokenize(data):
 	yield Token(TokenType.EOF, cur, 0)
 
 
-class NodeType(Enum):
+class NodeType(enum.Enum):
 	STRUCT = 1
 	ENUM = 2
 	TABLE = 3
@@ -164,75 +165,80 @@ class NodeType(Enum):
 	VLLIST = 7
 	VLTEXT = 8
 	VLUNION = 9
-	
-class Namespace:
-	def __init__(self, token, namespace):
-		self.t = NodeType.NAMESPACE
+
+class AstNode:
+	bytes: int
+	offset: int
+
+	def __init__(self, t: NodeType, token: Token) -> None:
+		self.t = t
 		self.token = token
+
+
+class Namespace(AstNode):
+	def __init__(self, token: Token, namespace:str) -> None:
+		super().__init__(NodeType.NAMESPACE, token)
 		self.namespace = namespace
 		
-class Struct:
-	def __init__(self, token, identifier, values):
-		self.t = NodeType.STRUCT
-		self.token = token
+class Struct(AstNode):
+	def __init__(self, token: Token, identifier: Token, values: List[AstNode]) -> None:
+		super().__init__(NodeType.STRUCT, token)
 		self.identifier = identifier
 		self.values = values
 		
-class Enum:
-	def __init__(self, token, identifier, values):
-		self.t = NodeType.ENUM
-		self.token = token
+class Enum(AstNode):
+	annotatedValues: Dict[str, int]
+
+	def __init__(self, token: Token, identifier: Token, values: List[Token]) -> None:
+		super().__init__(NodeType.ENUM, token)
 		self.identifier = identifier
 		self.values = values
 
-class Table:
-	def __init__(self, token, identifier, id, values):
-		self.t = NodeType.TABLE
-		self.token = token
+class Table(AstNode):
+	def __init__(self, token: Token, identifier: Token, id: Token, values: List[AstNode]) -> None:
+		super().__init__(NodeType.TABLE, token)
 		self.identifier = identifier
 		self.id = id
 		self.values = values
 	
-class Value:
-	def __init__(self, token, identifier, value, type, optional, list):
-		self.t = NodeType.VALUE
-		self.token = token
+class Value(AstNode):
+	hasOffset: int
+	hasBit: int
+	bit: int
+	
+	def __init__(self, token: Token, identifier: Token, value: Token, type: Token, optional: Token, list: Token) -> None:
+		super().__init__(NodeType.VALUE, token)
 		self.identifier = identifier
 		self.value = value
 		self.type = type
 		self.optional = optional
 		self.list = list
 
-
-class VLUnion:
-	def __init__(self, token, members):
-		self.t = NodeType.VLUNION
-		self.token = token
+class VLUnion(AstNode):
+	def __init__(self, token: Token, members: List[AstNode]) -> None:
+		super().__init__(NodeType.VLUNION, token)
 		self.members = members
 
-class VLBytes:
-	def __init__(self, token):
-		self.t = NodeType.VLBYTES
-		self.token = token
+class VLBytes(AstNode):
+	def __init__(self, token: Token) -> None:
+		super().__init__(NodeType.VLBYTES, token)
 
-class VLText:
-	def __init__(self, token):
-		self.t = NodeType.VLTEXT
-		self.token = token
+class VLText(AstNode):
+	def __init__(self, token: Token) -> None:
+		super().__init__(NodeType.VLTEXT, token)
 
-class VLList:
-	def __init__(self, token, type):
-		self.t = NodeType.VLLIST
-		self.token = token
+class VLList(AstNode):
+	def __init__(self, token: Token, type: Token) -> None:
+		super().__init__(NodeType.VLLIST, token)
 		self.type = type
 
 
 class ParseError(Exception):
-	def __init__(self, token, message):
+	def __init__(self, token: Token, message: str) -> None:
 		self.token = token
 		self.message = message
 
-	def describe(self, data):
+	def describe(self, data: str) -> None:
 		cnt = 1
 		idx = 0
 		start = 0
@@ -253,33 +259,35 @@ class ParseError(Exception):
 		print("%s%s%s"%('\t'*t, ' '*(self.token.index - start -t), '^'*(self.token.length)))
 		
 class Parser:
-	def __init__(self, data):
+	token: Token
+
+	def __init__(self, data:str) -> None:
 		self.data = data
 		self.tokenizer = tokenize(data)
 		self.token = None
 		self.nextToken()
 
-	def checkToken(self, t, types):
+	def checkToken(self, t: Token, types: List[TokenType]) -> None:
 		if not t.type in types:
 			raise ParseError(t, "Expected one of %s got %s"%(", ".join(map(str, types)), t.type))
 		
-	def consumeToken(self, types):
+	def consumeToken(self, types: List[TokenType]) -> Token:
 		t = self.token
 		self.checkToken(t, types)
 		self.nextToken()
 		return t
 	
-	def nextToken(self):
+	def nextToken(self) -> None:
 		self.token = next(self.tokenizer)
 
-	def parseType(self):
+	def parseType(self) -> Token:
 		return self.consumeToken([TokenType.BOOL, TokenType.TEXT, TokenType.IDENTIFIER, 
 								  TokenType.INT8, TokenType.INT16, TokenType.INT32, TokenType.INT64,
 								  TokenType.UINT8, TokenType.UINT16, TokenType.UINT32, TokenType.UINT64,
 								  TokenType.FLOAT32, TokenType.FLOAT64])
 			
-	def parseContent(self):
-		ans = []
+	def parseContent(self) -> List[AstNode]:
+		ans: List[AstNode] = []
 		self.consumeToken([TokenType.LBRACE])
 		while True:
 			t = self.consumeToken([
@@ -307,7 +315,7 @@ class Parser:
 				ans.append(Value(colon, t, value, type_, optional, list_))
 			elif t.type == TokenType.UNION:
 				self.consumeToken([TokenType.LBRACE])
-				members = []
+				members: List[AstNode] = []
 				while True:
 					t2 = self.consumeToken([TokenType.RBRACE, TokenType.IDENTIFIER])
 					if t2.type == TokenType.RBRACE:
@@ -326,7 +334,7 @@ class Parser:
 						self.nextToken()
 				ans.append(VLUnion(t, members))
 			elif t.type == TokenType.LIST:
-				ans.append(VLList(t, self.parseType()));
+				ans.append(VLList(t, self.parseType()))
 			elif t.type == TokenType.BYTES:
 				ans.append(VLBytes(t))
 			elif t.type == TokenType.TEXT:
@@ -337,8 +345,8 @@ class Parser:
 				self.nextToken()
 		return ans
 		
-	def parseDocument(self):
-		ans = []
+	def parseDocument(self) -> List[AstNode]:
+		ans: List[AstNode] = []
 		while self.token.type != TokenType.EOF:
 			t = self.consumeToken([TokenType.STRUCT, TokenType.ENUM, TokenType.TABLE, TokenType.NAMESPACE])
 			if t.type == TokenType.NAMESPACE:

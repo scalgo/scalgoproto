@@ -2,17 +2,18 @@
 """
 Perform validation of the ast, and assign offsets and such
 """
-from parser import TokenType, NodeType
+from parser import TokenType, NodeType, Token, Struct, AstNode, Value, Enum, Table
+from typing import Set, Dict, List
 
 class Annotater:
-	def __init__(self, data):
+	def __init__(self, data:str) -> None:
 		self.data = data
 		self.errors = 0
 
-	def value(self, t):
+	def value(self, t:Token) -> str:
 		return self.data[t.index: t.index + t.length]	
 		
-	def error(self, token, message):
+	def error(self, token: Token, message: str) -> None:
 		cnt = 1
 		idx = 0
 		start = 0
@@ -32,25 +33,27 @@ class Annotater:
 		print(self.data[start:end])
 		print("%s%s%s"%('\t'*t, ' '*(token.index - start -t), '^'*(token.length)))
 		
-	def annotate(self, ast):
-		enums = set()
-		structs = {}
-		tabels = set()
-		ids = set()
+	def annotate(self, ast: List[AstNode]) -> None:
+		enums: Set[str] = set()
+		structs: Dict[str, Struct] = {}
+		tabels: Set[str] = set()
+		ids: Set[str] = set()
 		for node in ast:
 			if node.t == NodeType.STRUCT:
+				assert isinstance(node, Struct)
 				name = self.value(node.identifier)
 				self.context = "struct %s"%name
 				if name in enums or name in structs or name in tabels:
 					self.error(node.identifier, "Duplicate name")
 					continue
-				values = set()
+				structValues: Set[str] = set()
 				bytes = 0
 				for v in node.values:					 
 					if v.t in (NodeType.VLUNION, NodeType.VLLIST, NodeType.VLBYTES, NodeType.VLTEXT):
 						self.error(v.token, "Not allowed in structs")
 						continue
 					elif v.t == NodeType.VALUE:
+						assert isinstance(v, Value)
 						if v.optional:
 							self.error(v.optional, "Not allowed in structs")
 						if v.list:
@@ -61,7 +64,7 @@ class Annotater:
 							
 						val = self.value(v.identifier)
 						typeName = self.value(v.type)
-						if val in values:
+						if val in structValues:
 							self.error(v.identifier, "Duplicate name")
 							continue
 						if v.type.type in (TokenType.UINT8, TokenType.INT8, TokenType.BOOL):
@@ -94,31 +97,33 @@ class Annotater:
 					else:
 						assert(False)
 					bytes += v.bytes
-				values.add(v)
+					structValues.add(val)
 				structs[name] = node
 				node.bytes = bytes
 				print("struct %s of size %d"%(name, bytes))
 			elif node.t == NodeType.ENUM:
+				assert isinstance(node, Enum)
 				name = self.value(node.identifier)
 				self.context = "enum %s"%name
 				if name in enums or name in structs or name in tabels:
 					self.error(node.identifier, "Duplicate name")
 					continue
-				values = {}
+				enumValues: Dict[str, int] = {}
 				index = 0
-				for v in node.values:
-					vv = self.value(v)
-					if vv in values:
-						self.error(v, "Duplicate name")
+				for ev in node.values:
+					vv = self.value(ev)
+					if vv in enumValues:
+						self.error(ev, "Duplicate name")
 						continue
-					values[vv] = index
-					++index
-				if len(values) > 254:
+					enumValues[vv] = index
+					index += 1
+				if len(enumValues) > 254:
 					self.error(node.identifier, "Too many enum values")
-				node.annotatedValues = values
+				node.annotatedValues = enumValues
 				enums.add(name)
-				print("enum %s with %s members"%(name, len(values)))
+				print("enum %s with %s members"%(name, len(enumValues)))
 			elif node.t == NodeType.TABLE:
+				assert isinstance(node, Table)
 				name = self.value(node.identifier)
 				self.context = "tabel %s"%name
 				if name in enums or name in structs or name in tabels:
@@ -127,18 +132,19 @@ class Annotater:
 				bytes = 0
 				boolBit = 8
 				boolOffset = 0
-				values = set()
+				tableValues: Set[str] = set()
 				for v in node.values:
 					if v.t == NodeType.VALUE:
+						assert isinstance(v, Value)
 						val = self.value(v.identifier)
-						if val in values:
+						if val in tableValues:
 							self.error(node.identifier, "Duplicate name")
 							continue
-						values.add(val)
+						tableValues.add(val)
 						if v.optional and v.type in (
 								TokenType.UINT8, TokenType.UINT16, TokenType.UINT32, TokenType.UINT64,
 								TokenType.INT8, TokenType.INT16, TokenType.INT32, TokenType.INT64,
-								TonkeType.BOOL):
+								TokenType.BOOL):
 							if boolBit == 8:
 								boolBit = 0
 								boolOffset = bytes
@@ -187,7 +193,7 @@ class Annotater:
 				tabels.add(name)
 				
 
-def annotate(data, ast):
+def annotate(data: str, ast: List[AstNode]) -> bool:
 	a = Annotater(data)
 	a.annotate(ast)
 	return a.errors == 0

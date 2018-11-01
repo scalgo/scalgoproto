@@ -6,7 +6,7 @@ from parser import Parser, ParseError
 import argparse
 import validate
 import magic
-
+import sys
 parser = argparse.ArgumentParser(description='Process schema.')
 subparsers = parser.add_subparsers(help='Subcommand to run')
 parser_cpp = subparsers.add_parser('cpp', help='Build cpp')
@@ -14,4 +14,4 @@ parser_cpp = subparsers.add_parser('cpp', help='Build cpp')
 validate.setup(subparsers)
 magic.setup(subparsers)
 args = parser.parse_args()
-args.func(args)
+sys.exit(args.func(args))

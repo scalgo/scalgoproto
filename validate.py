@@ -5,7 +5,7 @@ Validate a schema
 from parser import Parser, ParseError
 from annotate import annotate
 
-def run(args):
+def run(args) -> int:
 	data = open(args.schema).read()
 	p = Parser(data)
 	try:
@@ -17,7 +17,7 @@ def run(args):
 		err.describe(data)
 	return 1
 
-def setup(subparsers):
+def setup(subparsers) -> None:
 	cmd = subparsers.add_parser('validate', help='Validate schema')
 	cmd.add_argument('schema', help='schema to validate')
 	cmd.set_defaults(func=run)
