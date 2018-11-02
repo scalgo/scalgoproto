@@ -46,14 +46,11 @@ enum Compression {
 	zstd, 
 }
 
-struct Monkey {
-}
-
 struct Hash {
 	a : UInt64;
 	b : UInt64;
 	c : UInt64;
-        d : UInt64;
+	d : UInt64;
 }
 
 table Metadata @1234558 {
@@ -65,8 +62,8 @@ table Metadata @1234558 {
 	compression :Compression;
 	hash :Hash;
 
-        union {
-        	custom {},
+    union {
+        custom {},
 		raster {
 			scale :Int8;
 			dataType :DataType;
@@ -81,7 +78,7 @@ table Metadata @1234558 {
 			scale :UInt8;
 			graphSize :UInt32;
 		},
-	}
+	};
 }
 
 table OptionDescription @12345512 {

@@ -25,7 +25,6 @@ class TokenType(enum.Enum):
 	OPTIONAL = 17
 	RBRACE = 18
 	SEMICOLON = 20
-	STRING = 21
 	STRUCT = 22
 	TABLE = 23
 	TEXT = 24
@@ -311,7 +310,7 @@ class Parser:
 				value = None
 				if self.token.type == TokenType.EQUAL:
 					self.consumeToken([TokenType.EQUAL])
-					value = self.consumeToken([TokenType.TRUE, TokenType.FALSE, TokenType.NUMBER, TokenType.STRING])
+					value = self.consumeToken([TokenType.TRUE, TokenType.FALSE, TokenType.NUMBER, TokenType.IDENTIFIER])
 				ans.append(Value(colon, t, value, type_, optional, list_))
 			elif t.type == TokenType.UNION:
 				self.consumeToken([TokenType.LBRACE])
@@ -327,7 +326,7 @@ class Parser:
 							type_ = self.consumeToken([TokenType.IDENTIFIER])
 							members.append(Value(self.token, t2, None, type_, None, None))
 						else:
-							members.append(Table(t, t2, None, self.parseContent()))
+							members.append(Table(t2, t2, None, self.parseContent()))
 					else:
 						assert(False)
 					if self.token.type in [TokenType.COMMA, TokenType.SEMICOLON]:
