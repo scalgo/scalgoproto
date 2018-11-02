@@ -51,8 +51,8 @@ class Generator:
 		for node in values:
 			if node.t == NodeType.VALUE:
 				assert isinstance(node, Value)
-				name = self.value(node.identifier)
-				uname = name[0].upper() + name[1:]
+				n = self.value(node.identifier)
+				uname = n[0].upper() + n[1:]
 				if node.type.type in typeMap:
 					typeName = typeMap[node.type.type]
 					if node.optional:
@@ -112,6 +112,32 @@ class Generator:
 						print("\t}")
 					else:
 						assert False
+			elif node.t == NodeType.VLUNION:
+				assert isinstance(node, VLUnion)
+				print("\tenum Type {")
+				print("\t\tNONE,")
+				for member in node.members:
+					assert isinstance(member, (Table, Value))
+					print("\t\t%s,"%self.value(member.identifier).upper())
+				print("\t};")
+				print("\ttype getType() const noexcept {")
+				print("\t\treturn (Type)getInner_<std::uint16_t, %d>();"%node.offset)
+				print("\t}")
+				print("\tbool hasType() const noexcept {return getType() != NONE;}")
+				for member in node.members:
+					assert isinstance(member, (Table, Value))
+					n = self.value(member.identifier)
+					uname = n[0].upper() + n[1:]
+					tname = None
+					if isinstance(member, Value):
+						tname = self.value(member.type)
+					else:
+						tname = "%s__%s"%(name, self.value(member.identifier))
+					print("\tbool is%s() const noexcept {return getType() == %s;}"%(uname, n.upper()))
+					print("\t%sIn get%s() const noexcept {"%(tname, uname))
+					print("\t\tassert(is%s());"%(uname))
+					print("\t\treturn %sIn(data, offset+size, getInner_<std::uint32_t, %d>());"%(tname, node.offset+2))
+					print("\t}")
 		print("};")
 		print("")
 	
