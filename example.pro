@@ -84,7 +84,7 @@ table Metadata @1234558 {
 table OptionDescription @12345512 {
 	name :Text;
 	help :Text;
-	required :Bool = true;
+	optional :Bool;
 	union {
 		value {
 			union {
@@ -121,8 +121,8 @@ table ModuleDescription @123455123 {
 	name :Text;
 	help :Text;
 	options :List OptionDescription;
-	specifyTileMatrix : Bool = false;
-	spider :Bool = false;
+	specifyTileMatrix : Bool;
+	spider :Bool;
 	maxInputSizeMemoryFactor : Float64=0;
 	sumInputSizeMemoryFactor : Float64=0;
 	baseMemory : Float64=0;

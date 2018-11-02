@@ -56,8 +56,7 @@ class Annotater:
 					elif v.list:
 						self.error(v.value, "Not allowed for lists")
 					elif v.value.type in (TokenType.TRUE, TokenType.FALSE):
-						if v.type.type != TokenType.BOOL:
-							self.error(v.value, "Only allowed for bools")
+						self.error(v.value, "Booleans cannot have default values")
 					elif v.value.type == TokenType.NUMBER:
 						if v.type.type not in (TokenType.UINT8, TokenType.UINT16, TokenType.UINT32, TokenType.UINT64, TokenType.INT8, TokenType.INT16, TokenType.INT32, TokenType.INT64,  TokenType.FLOAT32,  TokenType.FLOAT64):
 							self.error(v.value, "Only allowed for number types")
@@ -97,7 +96,7 @@ class Annotater:
 					if isStruct:
 						self.error(v.list, "Not allowed in structs")
 					if v.optional:
-						self.error(v.optional, "Optional lists not supported")
+						self.error(v.optional, "Lists are alwayes optional")
 					v.bytes = 4
 					v.offset = bytes
 				if not isStruct and v.type.type == TokenType.BOOL :
@@ -122,6 +121,8 @@ class Annotater:
 					v.bytes = 8
 					v.offset = bytes
 				elif v.type.type in (TokenType.BYTES, TokenType.TEXT):
+					if v.optional:
+						self.error(v.optional, "Are alwayes optional")
 					if isStruct:
 						self.error(v.type, "Not allowed in structs")
 					v.bytes = 4
@@ -138,6 +139,8 @@ class Annotater:
 				elif typeName in self.tabels:
 					if isStruct:
 						self.error(v.type, "Tabels not allowed in structs")
+					if v.optional:
+						self.error(v.optional, "Lists are alwayes optional")
 					v.bytes = 4
 					v.offset = bytes
 				else: 
