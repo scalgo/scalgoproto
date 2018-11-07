@@ -14,6 +14,8 @@ class Generator:
 	structs: Dict[str, Struct] = {}
 	tabels: Dict[str, Table] = {}
 
+	emptyTabels = set()
+	
 	def __init__(self, data:str) -> None:
 		self.data = data
 
@@ -21,21 +23,6 @@ class Generator:
 		return self.data[t.index: t.index + t.length]
 
 	def generateTable(self, name, values: List[AstNode]) -> None:
-		for node in values:
-			if node.t == NodeType.VLUNION:
-				assert isinstance(node, VLUnion)
-				for member in node.members:
-					if member.t == NodeType.TABLE:
-						assert isinstance(member, Table)
-						if member.values:
-							self.generateTable("%s__%s"%(name, self.value(member.identifier)), member.values)
-		print("class %sIn: public scalgoproto::In {"%name)
-		print("\tfriend class scalgoproto::In;")
-		print("\tfriend class scalgoproto::Reader;")
-		print("protected:")
-		print("\t%sIn(const char * data, std::uint32_t offset, std::uint32_t size): scalgoproto::In(data, offset, size) {}"%name)
-		print("\tstatic uint32_t readSize_(const char * data, std::uint32_t offset) { return scalgoproto::In::readSize_(data, offset, 0x%08X); }"%(1234))
-		print("public:")
 		typeMap = {
 			TokenType.INT8: "std::int8_t",
 			TokenType.INT16: "std::int16_t",
@@ -48,6 +35,24 @@ class Generator:
 			TokenType.FLOAT32: "float",
 			TokenType.FLOAT64: "double",
 		}
+
+		for node in values:
+			if node.t == NodeType.VLUNION:
+				assert isinstance(node, VLUnion)
+				for member in node.members:
+					if member.t == NodeType.TABLE:
+						assert isinstance(member, Table)
+						if member.values:
+							self.generateTable("%s__%s"%(name, self.value(member.identifier)), member.values)
+						else:
+							self.emptyTabels.add("%s__%s"%(name, self.value(member.identifier)))
+		print("class %sIn: public scalgoproto::In {"%name)
+		print("\tfriend class scalgoproto::In;")
+		print("\tfriend class scalgoproto::Reader;")
+		print("protected:")
+		print("\t%sIn(const char * data, std::uint32_t offset, std::uint32_t size): scalgoproto::In(data, offset, size) {}"%name)
+		print("\tstatic uint32_t readSize_(const char * data, std::uint32_t offset) { return scalgoproto::In::readSize_(data, offset, 0x%08X); }"%(1234))
+		print("public:")
 		for node in values:
 			if node.t == NodeType.VALUE:
 				assert isinstance(node, Value)
@@ -120,7 +125,7 @@ class Generator:
 					assert isinstance(member, (Table, Value))
 					print("\t\t%s,"%self.value(member.identifier).upper())
 				print("\t};")
-				print("\ttype getType() const noexcept {")
+				print("\tType getType() const noexcept {")
 				print("\t\treturn (Type)getInner_<std::uint16_t, %d>();"%node.offset)
 				print("\t}")
 				print("\tbool hasType() const noexcept {return getType() != NONE;}")
@@ -134,10 +139,91 @@ class Generator:
 					else:
 						tname = "%s__%s"%(name, self.value(member.identifier))
 					print("\tbool is%s() const noexcept {return getType() == %s;}"%(uname, n.upper()))
-					print("\t%sIn get%s() const noexcept {"%(tname, uname))
-					print("\t\tassert(is%s());"%(uname))
-					print("\t\treturn %sIn(data, offset+size, getInner_<std::uint32_t, %d>());"%(tname, node.offset+2))
+					if not tname in self.emptyTabels:
+						print("\t%sIn get%s() const noexcept {"%(tname, uname))
+						print("\t\tassert(is%s());"%(uname))
+						print("\t\treturn getVLTable_<%sIn, %d>();"%(tname, node.offset+2))
+						print("\t}")
+		print("};")
+		print("")
+		
+		print("class %sOut: public scalgoproto::Out {"%name)
+		print("\tfriend class scalgoproto::Out;")
+		print("\tfriend class scalgoproto::Writer;")
+		print("protected:")
+		print("\t%sOut(scalgoproto::Writer & writer): scalgoproto::Out(writer) {}"%name)
+		print("public:")
+		for node in values:
+			if node.t == NodeType.VALUE:
+				assert isinstance(node, Value)
+				n = self.value(node.identifier)
+				uname = n[0].upper() + n[1:]
+				if node.type.type in typeMap:
+					typeName = typeMap[node.type.type]
+					print("\tvoid add%s(%s value) noexcept {"%(uname, typeName))
+					if node.optional and node.type.type not in (TokenType.FLOAT32, TokenType.FLOAT64):
+						print("\t\tsetBit_<%d, %d>();"%(node.hasOffset, node.hasBit))
+					print("\t\tsetInner_<%s, %d>(value);"%(typeName, node.offset))
 					print("\t}")
+				elif node.type.type == TokenType.BOOL:
+					print("\tvoid add%s(bool value) noexcept {"%(uname))
+					if node.optional:
+						print("\t\tsetBit_<%d, %d>();"%(node.hasOffset, node.hasBit))
+					print("\t\tif(value) setBit_<%d, %d>(); else unsetBit_<%d, %d>();"%(node.offset, node.bit, node.offset, node.bit))
+					print("\t}")
+				elif node.type.type == TokenType.IDENTIFIER:
+					typeName = self.value(node.type)
+					if typeName in self.enums:
+						print("\tvoid add%s(%s value) noexcept {"%(uname, typeName))
+						print("\t\tsetInner_<%s, %d>(value);"%(typeName, node.offset));
+						print("\t}")
+					elif typeName in self.structs:
+						print("\tvoid add%s(const %s & value) noexcept {"%(uname, typeName))
+						if node.optional:
+							print("\t\tsetBit_<%d, %d>();"%(node.hasOffset, node.hasBit))
+						print("\t\tsetInner_<%s, %d>(value);"%(typeName, node.offset));
+						print("\t}")
+					elif typeName in self.tabels:
+						print("\tvoid add%s(%sOut value) noexcept {"%(uname, typeName))
+						print("\t\tsetTable_<%sOut, %d>(value);"%(typeName, node.offset))
+						print("\t}")
+						pass
+					else:
+						assert False
+			elif node.t == NodeType.VLUNION:
+				assert isinstance(node, VLUnion)
+				# print("\tenum Type {")
+				# print("\t\tNONE,")
+				# for member in node.members:
+				# 	assert isinstance(member, (Table, Value))
+				# 	print("\t\t%s,"%self.value(member.identifier).upper())
+				# print("\t};")
+				print("\tbool hasType() const noexcept {")
+				print("\t\treturn getInner_<std::uint16_t, %d>() != 0;"%(node.offset))
+				print("\t}")
+				idx = 1
+				for member in node.members:
+					assert isinstance(member, (Table, Value))
+					n = self.value(member.identifier)
+					uname = n[0].upper() + n[1:]
+					tname = None
+					if isinstance(member, Value):
+						tname = self.value(member.type)
+					else:
+						tname = "%s__%s"%(name, self.value(member.identifier))
+					if tname not in self.emptyTabels:
+						print("\t%sOut add%s() noexcept {"%(tname, uname))
+						print("\t\tassert(!hasType());")
+						print("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
+						print("\t}")
+					else:
+						print("\tvoid add%s() noexcept {"%(uname))
+						print("\t\tassert(!hasType());")
+						print("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
+						print("\t}")
+					++idx
+					# print("\t\treturn %sOut(data, offset+size, getInner_<std::uint32_t, %d>());"%(tname, node.offset+2))
+
 		print("};")
 		print("")
 	
@@ -197,6 +283,7 @@ def run(args) -> int:
 		g = Generator(data)
 		print("#include \"scalgoproto.hh\"")
 		g.generate(ast)
+		return 0
 	except ParseError as err:
 		err.describe(data)
 	return 1

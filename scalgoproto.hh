@@ -45,7 +45,13 @@ protected:
         assert(offset + 4 <= size);
         memcpy(&off, data+offset, 4);
         uint32_t size = T::readSize_(data, off);
+		//TODO validate magic
         return T(data, off+8, size);
+    }
+
+    template <typename T, uint32_t offset>
+    T getVLTable_() const noexcept {
+	    return T(data, offset+size, getInner_<std::uint32_t, offset>());
     }
 
     template <uint32_t offset, uint8_t bit, uint8_t def>
@@ -118,7 +124,9 @@ class Out {
 protected:
     uint32_t offset;
     Writer & writer;
-
+  
+    Out(Writer & writer): offset(writer.size), writer(writer) {}
+  
     Out(Writer & writer, uint32_t magic, uint32_t size): offset(writer.size), writer(writer) {
         writer.expand(size + 8);
         writer.write(magic, offset);
@@ -132,9 +140,25 @@ protected:
     }
 
     template <uint32_t o, uint8_t b>
-    void setBit_(uint8_t v) {
-        if (v) *(uint8_t *)(writer.data + offset + o) |= (1 << b);
-        else *(uint8_t *)(writer.data + offset + o) &= ~(1 << b);
+    void setBit_() {
+        *(uint8_t *)(writer.data + offset + o) |= (1 << b);
+	}
+
+    template <uint32_t o, uint8_t b>
+    void unsetBit_() {
+	  *(uint8_t *)(writer.data + offset + o) &= ~(1 << b);
+	}
+
+  	template <typename T, uint32_t offset>
+  	T getInner_() const noexcept {
+		T ans;
+		memcpy(&ans, writer.data + this->offset + offset , sizeof(T));
+		return ans;
+    }
+
+    template <typename T, uint32_t offset>
+    void setTable_(T t) noexcept {
+        setInner_<std::uint32_t, offset>(t.offset);
     }
 };
 
