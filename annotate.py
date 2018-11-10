@@ -188,6 +188,8 @@ class Annotater:
 					self.error(v.type, "Unknown type")
 					continue
 				elif typeName in self.enums:
+					if v.optional:
+						self.error(v.optional, "Are alwayes optional")
 					default.append(b"\xff")
 					v.bytes = 1
 					v.offset = bytes

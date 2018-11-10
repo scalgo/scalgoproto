@@ -84,13 +84,11 @@ class Generator:
 				elif node.type.type == TokenType.IDENTIFIER:
 					typeName = self.value(node.type)
 					if node.enum:
-						if node.optional:
-							self.o("\tbool has%s() const noexcept {"%(uname))
-							self.o("\t\treturn getInner_<std::uint8_t, %d>(255) == 255;"%(node.offset))
-							self.o("\t}")
+						self.o("\tbool has%s() const noexcept {"%(uname))
+						self.o("\t\treturn getInner_<std::uint8_t, %d>(255) == 255;"%(node.offset))
+						self.o("\t}")
 						self.o("\t%s get%s() const noexcept {"%(typeName, uname))
-						if node.optional:
-							self.o("\t\tassert(has%s());"%uname)
+						self.o("\t\tassert(has%s());"%uname)
 						self.o("\t\treturn (%s)getInner_<std::uint8_t, %d>(0);"%(typeName, node.offset))
 						self.o("\t}")
 					elif node.struct:
@@ -104,13 +102,11 @@ class Generator:
 						self.o("\t\treturn getInner_<%s, %d>();"%( typeName, node.offset))
 						self.o("\t}")
 					elif node.table:
-						if node.optional:
-							self.o("\tbool has%s() const noexcept {"%(uname))
-							self.o("\t\treturn getInner_<std::uint32_t, %d>(0) == 0;"%(node.offset))
-							self.o("\t}")
+						self.o("\tbool has%s() const noexcept {"%(uname))
+						self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
+						self.o("\t}")
 						self.o("\t%sIn get%s() const noexcept {"%(typeName, uname))
-						if node.optional:
-							self.o("\t\tassert(has%s());"%uname)
+						self.o("\t\tassert(has%s());"%uname)
 						self.o("\t\treturn getTable_<%sIn, %d>();"%(typeName, node.offset))
 						self.o("\t}")
 					else:

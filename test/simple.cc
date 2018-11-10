@@ -26,6 +26,17 @@ bool validateOut(const char * data, size_t size, const char * file) {
 	return true;
 }
 
+std::vector<char> readIn(const char * file) {
+	std::ifstream is(file, std::ifstream::binary);
+	is.seekg (0, is.end);
+	auto length = is.tellg();
+	is.seekg (0, is.beg);
+	std::vector<char> o;
+	o.resize(length);
+	is.read(o.data(), length);
+	return o;
+}
+
 int main(int, char ** argv) {
 	if (!strcmp(argv[1], "out_default")) {
 		scalgoproto::Writer w;
@@ -63,15 +74,8 @@ int main(int, char ** argv) {
 		auto [data, size] = w.finalize(s);
 		return !validateOut(data, size, argv[2]);
 	} else if (!strcmp(argv[1], "in")) {
-		std::ifstream is(argv[2], std::ifstream::binary);
-		is.seekg (0, is.end);
-		auto length = is.tellg();
-		is.seekg (0, is.beg);
-		std::vector<char> o;
-		o.resize(length);
-		is.read(o.data(), length);
-
-		scalgoproto::Reader r(o.data(), length);
+		auto o = readIn(argv[2]);
+		scalgoproto::Reader r(o.data(), o.size());
 		auto s = r.root<SimpleIn>();
 		if (s.getS().x != 42) return 1;
 		if (s.getS().y != 27.0) return 1;
@@ -126,15 +130,8 @@ int main(int, char ** argv) {
 		if (s.hasNf()) return 1;
 		if (s.hasNd()) return 1;
 	} else if (!strcmp(argv[1], "in_default")) {
-		std::ifstream is(argv[2], std::ifstream::binary);
-		is.seekg (0, is.end);
-		auto length = is.tellg();
-		is.seekg (0, is.beg);
-		std::vector<char> o;
-		o.resize(length);
-		is.read(o.data(), length);
-
-		scalgoproto::Reader r(o.data(), length);
+		auto o = readIn(argv[2]);
+		scalgoproto::Reader r(o.data(), o.size());
 		auto s = r.root<SimpleIn>();
 		if (s.getS().x != 0) return 1;
 		if (s.getS().y != 0) return 1;
@@ -174,6 +171,23 @@ int main(int, char ** argv) {
 		if (s.hasNi64()) return 1;
 		if (s.hasNf()) return 1;
 		if (s.hasNd()) return 1;
+	} else if (!strcmp(argv[1], "out_complex")) {
+		scalgoproto::Writer w;
+		auto m = w.construct<MemberOut>();
+		m.addId(42);
+		auto s = w.construct<ComplexOut>();
+		s.addMember(m);
+		auto [data, size] = w.finalize(s);
+		return !validateOut(data, size, argv[2]);
+	} else if (!strcmp(argv[1], "in_complex")) {
+		auto o = readIn(argv[2]);
+		scalgoproto::Reader r(o.data(), o.size());
+		auto s = r.root<ComplexIn>();
+		if (!s.hasMember()) return 1;
+		if (s.hasNmember()) return 1;
+		auto m = s.getMember();
+		if (m.getId() != 42) return 1;
+		return 0;
 	} else {
 		return 1;
 	}

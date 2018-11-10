@@ -15,7 +15,7 @@ def runValidate(schema:str, fail:bool=False)->bool:
 
 def runCppSetup(schema: str, cpp: str) -> bool:
 	subprocess.check_call(["python3", "scalgoproto.py", "cpp", schema, "tmp/test.hh"])
-	subprocess.check_call(["g++", "-std=c++17", "-Wall", "-Wextra", "-I", "tmp", "-I", ".", cpp, "-o", "tmp/bin"])
+	subprocess.check_call(["g++", "-ggdb", "-std=c++17", "-Wall", "-Wextra", "-I", "tmp", "-I", ".", cpp, "-o", "tmp/bin"])
 	return True
 
 def runCpp(name:str, bin:str) -> bool:
@@ -46,6 +46,8 @@ if __name__ == '__main__':
 		runTest("cpp in default simple", lambda: runCpp("in_default", "test/simple_default.bin"))
 		runTest("cpp out simple", lambda: runCpp("out", "test/simple.bin"))
 		runTest("cpp in simple", lambda: runCpp("in", "test/simple.bin"))
+		runTest("cpp out complex", lambda: runCpp("out_complex", "test/complex.bin"))
+		runTest("cpp in complex", lambda: runCpp("in_complex", "test/complex.bin"))
 
 	print("="*80)
 	if not failures:

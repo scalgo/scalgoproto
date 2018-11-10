@@ -25,7 +25,7 @@ protected:
 
 	template <typename T, uint32_t o>
 	T getInner_(T def) const noexcept {
-		if (offset + sizeof(T) > size) return def;
+		if (o + sizeof(T) > size) return def;
 		T ans;
 		memcpy(&ans, data + offset + o, sizeof(T));
 		return ans;
@@ -34,7 +34,7 @@ protected:
 	template <typename T, uint32_t o>
 	T getInner_() const noexcept {
 		T ans;
-		if (offset + sizeof(T) > size)
+		if (o + sizeof(T) > size)
 			memset(&ans, 0, sizeof(T));
 		else
 			memcpy(&ans, data + offset+ o, sizeof(T));
@@ -44,7 +44,7 @@ protected:
 	template <typename T, uint32_t o>
 	T getTable_() const noexcept {
 		uint32_t off;
-		assert(offset + 8 <= size);
+		assert(o + 8 <= size);
 		memcpy(&off, data+offset + o, 4);
 		uint32_t size = T::readSize_(data, off);
 		return T(data, off+8, size);
@@ -57,7 +57,7 @@ protected:
 
 	template <uint32_t o, uint8_t bit, uint8_t def>
 	uint8_t getBit_() const noexcept {
-		if (offset < size)
+		if (o < size)
 			return *(const uint8_t *)(data + offset + o) & 1 << bit;
 		return def;
 	}
@@ -178,7 +178,7 @@ protected:
 	
 	template <typename T, uint32_t offset>
 	void setTable_(T t) noexcept {
-		setInner_<std::uint32_t, offset>(t.offset);
+		setInner_<std::uint32_t, offset>(t.offset-8);
 	}
 };
 

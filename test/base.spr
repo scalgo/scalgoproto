@@ -51,3 +51,12 @@ table Simple @F0606B0B {
     nf: Optional Float32;
     nd: Optional Float64;
 }
+
+table Member @836DE498 {
+    id: Int16;
+}
+
+table Complex @CCDD589C {
+    member: Member;
+    nmember: Member;
+}
