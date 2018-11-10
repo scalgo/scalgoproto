@@ -69,6 +69,24 @@ protected:
 		memcpy(&word, data+offset+4, 4);
 		return word;
 	}
+
+	template <uint32_t o>
+	std::string_view getText_() const {
+		uint32_t off;
+		assert(o + 8 <= size);
+		memcpy(&off, data+offset + o, 4);
+		uint32_t size = readSize_(data, off, 0xD812C8F5);
+		return std::string_view(data+off+8, size);
+	}
+
+	template <uint32_t o>
+	std::pair<const void *, size_t> getBytes_() const {
+		uint32_t off;
+		assert(o + 8 <= size);
+		memcpy(&off, data+offset + o, 4);
+		uint32_t size = readSize_(data, off, 0xDCDBBE10);
+		return std::make_pair(data+off+8, size);
+	}
 };
 
 class Reader {
@@ -90,6 +108,21 @@ public:
 };
 
 class Out;
+class Writer;
+
+class TextOut {
+	friend class Writer;
+	friend class Out;
+protected:
+	uint32_t offset;
+};
+
+class BytesOut {
+	friend class Writer;
+	friend class Out;
+protected:
+	uint32_t offset;
+};
 
 class Writer {
 private:
@@ -133,7 +166,26 @@ public:
 		return T(*this, true);
 	}
 
-	
+	TextOut constructText(std::string_view text) {
+		TextOut o;
+		o.offset = size;
+		expand(text.size()+9);
+		write((uint32_t)0xD812C8F5, o.offset);
+		write((uint32_t)text.size(), o.offset+4);
+		memcpy(data+o.offset+8, text.data(), text.size());
+		data[o.offset+8+text.size()] = 0;
+		return o;
+	}
+
+	BytesOut constructBytes(const void * data, size_t size) {
+		BytesOut o;
+		o.offset = this->size;
+		expand(size+8);
+		write((uint32_t)0xDCDBBE10, o.offset);
+		write((uint32_t)size, o.offset+4);
+		memcpy(this->data+o.offset+8, data, size);
+		return o;
+	}	
 };
 
 class Out {
@@ -179,6 +231,16 @@ protected:
 	template <typename T, uint32_t offset>
 	void setTable_(T t) noexcept {
 		setInner_<std::uint32_t, offset>(t.offset-8);
+	}
+
+	template <uint32_t offset>
+	void setText_(TextOut t) noexcept {
+		setInner_<std::uint32_t, offset>(t.offset);
+	}
+
+	template <uint32_t offset>
+	void setBytes_(BytesOut t) noexcept {
+		setInner_<std::uint32_t, offset>(t.offset);
 	}
 };
 

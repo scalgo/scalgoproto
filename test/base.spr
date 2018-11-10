@@ -59,4 +59,8 @@ table Member @836DE498 {
 table Complex @CCDD589C {
     member: Member;
     nmember: Member;
+    text: Text;
+    bytes: Bytes;
+    ntext: Text;
+    nbytes: Bytes;
 }

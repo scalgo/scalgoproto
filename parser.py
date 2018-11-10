@@ -286,7 +286,7 @@ class Parser:
 		self.token = next(self.tokenizer)
 
 	def parseType(self) -> Token:
-		return self.consumeToken([TokenType.BOOL, TokenType.TEXT, TokenType.IDENTIFIER, 
+		return self.consumeToken([TokenType.BOOL, TokenType.TEXT, TokenType.IDENTIFIER, TokenType.BYTES,
 								  TokenType.INT8, TokenType.INT16, TokenType.INT32, TokenType.INT64,
 								  TokenType.UINT8, TokenType.UINT16, TokenType.UINT32, TokenType.UINT64,
 								  TokenType.FLOAT32, TokenType.FLOAT64])

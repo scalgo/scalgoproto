@@ -105,12 +105,28 @@ class Generator:
 						self.o("\tbool has%s() const noexcept {"%(uname))
 						self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
 						self.o("\t}")
-						self.o("\t%sIn get%s() const noexcept {"%(typeName, uname))
+						self.o("\t%sIn get%s() const {"%(typeName, uname))
 						self.o("\t\tassert(has%s());"%uname)
 						self.o("\t\treturn getTable_<%sIn, %d>();"%(typeName, node.offset))
 						self.o("\t}")
 					else:
 						assert False
+				elif node.type.type == TokenType.TEXT:
+					self.o("\tbool has%s() const noexcept {"%(uname))
+					self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
+					self.o("\t}")
+					self.o("\tstd::string_view get%s() {"%(uname))
+					self.o("\tgetText_<%d>();"%(node.offset))
+					self.o("\t}")
+				elif node.type.type == TokenType.BYTES:
+					self.o("\tbool has%s() const noexcept {"%(uname))
+					self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
+					self.o("\t}")
+					self.o("\tstd::pair<const void*, size_t> get%s()  {"%(uname))
+					self.o("\tgetBytes_<%d>();"%(node.offset))
+					self.o("\t}")
+				else:
+					assert False
 			elif node.t == NodeType.VLUNION:
 				assert isinstance(node, VLUnion)
 				self.o("\tenum Type {")
@@ -196,6 +212,16 @@ class Generator:
 						pass
 					else:
 						assert False
+				elif node.type.type == TokenType.TEXT:
+					self.o("\tvoid add%s(scalgoproto::TextOut t) noexcept {"%(uname))
+					self.o("\tsetText_<%d>(t);"%(node.offset))
+					self.o("\t}")
+				elif node.type.type == TokenType.BYTES:
+					self.o("\tvoid add%s(scalgoproto::BytesOut b) noexcept {"%(uname))
+					self.o("\tsetBytes_<%d>(b);"%(node.offset))
+					self.o("\t}")
+				else:
+					assert False
 			elif node.t == NodeType.VLUNION:
 				assert isinstance(node, VLUnion)
 				# self.o("\tenum Type {")

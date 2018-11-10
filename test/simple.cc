@@ -175,16 +175,26 @@ int main(int, char ** argv) {
 		scalgoproto::Writer w;
 		auto m = w.construct<MemberOut>();
 		m.addId(42);
+		auto b = w.constructBytes("bytes", 5);
+		auto t = w.constructText("text");
 		auto s = w.construct<ComplexOut>();
 		s.addMember(m);
+		s.addText(t);
+		s.addBytes(b);
 		auto [data, size] = w.finalize(s);
 		return !validateOut(data, size, argv[2]);
 	} else if (!strcmp(argv[1], "in_complex")) {
 		auto o = readIn(argv[2]);
 		scalgoproto::Reader r(o.data(), o.size());
 		auto s = r.root<ComplexIn>();
-		if (!s.hasMember()) return 1;
 		if (s.hasNmember()) return 1;
+		if (s.hasNtext()) return 1;
+		if (s.hasNbytes()) return 1;
+		if (!s.hasText()) return 1;
+		if (!s.hasBytes()) return 1;
+		if (s.getText() != "text") return 1;
+		if (s.getBytes().second != 5 || memcmp(s.getBytes().first, "bytes", 5)) return 1;
+		if (!s.hasMember()) return 1;
 		auto m = s.getMember();
 		if (m.getId() != 42) return 1;
 		return 0;
