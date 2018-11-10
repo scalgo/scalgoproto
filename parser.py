@@ -166,9 +166,8 @@ class NodeType(enum.Enum):
 	VLUNION = 9
 
 class AstNode:
-	bytes: int
-	offset: int
-
+	bytes: int = 0
+	offset: int = 0
 	def __init__(self, t: NodeType, token: Token) -> None:
 		self.t = t
 		self.token = token
@@ -187,23 +186,30 @@ class Struct(AstNode):
 		
 class Enum(AstNode):
 	annotatedValues: Dict[str, int]
-
+	
 	def __init__(self, token: Token, identifier: Token, values: List[Token]) -> None:
 		super().__init__(NodeType.ENUM, token)
 		self.identifier = identifier
 		self.values = values
 
 class Table(AstNode):
+	default: bytes
+	magic: str = None
+	name: str = None
+	
 	def __init__(self, token: Token, identifier: Token, id: Token, values: List[AstNode]) -> None:
 		super().__init__(NodeType.TABLE, token)
 		self.identifier = identifier
 		self.id = id
 		self.values = values
-	
+		
 class Value(AstNode):
 	hasOffset: int
 	hasBit: int
 	bit: int
+	table: Table = None
+	enum: Enum = None
+	struct: Struct = None
 	
 	def __init__(self, token: Token, identifier: Token, value: Token, type: Token, optional: Token, list: Token) -> None:
 		super().__init__(NodeType.VALUE, token)

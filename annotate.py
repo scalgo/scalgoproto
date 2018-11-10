@@ -8,7 +8,7 @@ from typing import Set, Dict, List
 class Annotater:
 	enums: Dict[str, Enum]
 	structs: Dict[str, Struct]
-	tabels: Set[str]
+	tabels: Dict[str, Table]
 
 	def __init__(self, data:str) -> None:
 		self.data = data
@@ -38,9 +38,10 @@ class Annotater:
 		print(self.data[start:end])
 		print("%s%s%s"%('\t'*t, ' '*(token.index - start -t), '^'*(token.length)))
 		
-	def visitContent(self, values: List[AstNode], isStruct: bool) -> int:
+	def visitContent(self, values: List[AstNode], isStruct: bool) -> bytes:
 		content: Set[str] = set()
 		bytes = 0
+		default = []
 		boolBit = 8
 		boolOffset = 0
 		tableValues: Set[str] = set()
@@ -84,6 +85,7 @@ class Annotater:
 					if boolBit == 8:
 						boolBit = 0
 						boolOffset = bytes
+						default.append(b"\0")
 						bytes += 1
 					v.hasOffset = boolOffset
 					v.hasBit = boolBit
@@ -97,27 +99,32 @@ class Annotater:
 						self.error(v.list, "Not allowed in structs")
 					if v.optional:
 						self.error(v.optional, "Lists are alwayes optional")
+					default.append(b"\0\0\0\0")
 					v.bytes = 4
 					v.offset = bytes
-				if not isStruct and v.type.type == TokenType.BOOL :
+				elif not isStruct and v.type.type == TokenType.BOOL:
 					if boolBit == 8:
 						boolBit = 0
 						boolOffset = bytes
+						default.append(b"\0")
 						bytes += 1
-					v.bytes = 0
 					v.offset = boolOffset
 					v.bit = boolBit
 					boolBit += 1
 				elif v.type.type in (TokenType.UINT8, TokenType.INT8, TokenType.BOOL):
+					default.append(b"\0") #TODO put right default
 					v.bytes = 1
 					v.offset = bytes
 				elif v.type.type in (TokenType.UINT16, TokenType.INT16):
+					default.append(b"\0\0") #TODO put right default
 					v.bytes = 2
 					v.offset = bytes
 				elif v.type.type in (TokenType.UINT32, TokenType.INT32, TokenType.FLOAT32):
+					default.append(b"\0\0\0\0") #TODO put right default
 					v.bytes = 4
 					v.offset = bytes
 				elif v.type.type in (TokenType.UINT64, TokenType.INT64, TokenType.FLOAT64):
+					default.append(b"\0\0\0\0\0\0\0\0") #TODO put right default
 					v.bytes = 8
 					v.offset = bytes
 				elif v.type.type in (TokenType.BYTES, TokenType.TEXT):
@@ -125,24 +132,31 @@ class Annotater:
 						self.error(v.optional, "Are alwayes optional")
 					if isStruct:
 						self.error(v.type, "Not allowed in structs")
+					default.append(b"\0\0\0\0")
 					v.bytes = 4
 					v.offset = bytes
 				elif v.type.type != TokenType.IDENTIFIER:
 					self.error(v.type, "Unknown type")
 					continue
 				elif typeName in self.enums:
+					default.append(b"\xff")
 					v.bytes = 1
 					v.offset = bytes
+					v.enum = self.enums[typeName]
 				elif typeName in self.structs:
 					v.bytes = self.structs[typeName].bytes
+					default.append(b"\0" * v.bytes)
 					v.offset = bytes
+					v.struct = self.structs[typeName]
 				elif typeName in self.tabels:
 					if isStruct:
 						self.error(v.type, "Tabels not allowed in structs")
 					if v.optional:
 						self.error(v.optional, "Lists are alwayes optional")
+					default.append(b"\0\0\0\0")
 					v.bytes = 4
 					v.offset = bytes
+					v.table = self.tabels[typeName]
 				else: 
 					self.error(v.type, "Unknown identifier")
 					continue
@@ -154,9 +168,10 @@ class Annotater:
 					self.error(vl.token, "We already have this variable length")
 				else:
 					vl = v
-				v.bytes = 4 
 				v.offset = bytes
 				if v.t == NodeType.VLUNION:
+					v.bytes = 6
+					default.append(b"\0\0\0\0\0\0")									
 					assert isinstance(v, VLUnion)
 					members: Dict[str, Token] = {}
 					for member in v.members:
@@ -164,6 +179,8 @@ class Annotater:
 							assert isinstance(member, Value)
 							if member.type.type != TokenType.IDENTIFIER or self.value(member.type) not in self.tabels:
 								self.error(member.type, "Must be a table")
+							else:
+								member.table = self.tabels[self.value(member.type)]
 							name = self.value(member.identifier)
 							if name in members:
 								self.error(member.identifier, "Duplicate union member")
@@ -182,22 +199,28 @@ class Annotater:
 						else:
 							self.error(member.token, "Unknown member type")
 				elif v.t == NodeType.VLLIST:
+					v.bytes = 4
+					default.append(b"\0\0\0\0")
 					assert isinstance(v, VLList)
 					if v.type.type == TokenType.IDENTIFIER:
 						typeName = self.value(v.type)
 						if typeName not in self.enums and typeName not in self.structs and typeName not in self.tabels:
 							self.error(v.type, "Unknown type")
-					
-
+				else:
+					v.bytes = 4
+					default.append(b"\0\0\0\0")
 			else:
 				assert(False)
 			bytes += v.bytes
-		return bytes
+
+		default2 = b"".join(default)
+		assert(len(default2) == bytes)
+		return default2
 	
 	def annotate(self, ast: List[AstNode]) -> None:
 		self.enums = {}
 		self.structs = {}
-		self.tabels = set()		
+		self.tabels = {}
 		ids: Set[str] = set()
 		for node in ast:
 			if node.t == NodeType.STRUCT:
@@ -208,10 +231,10 @@ class Annotater:
 					self.error(node.identifier, "Duplicate name")
 					continue
 				structValues: Set[str] = set()
-				bytes = self.visitContent(node.values, True)
+				bytes = len(self.visitContent(node.values, True))
 				self.structs[name] = node
 				node.bytes = bytes
-				#print("struct %s of size %d"%(name, bytes))
+				print("struct %s of size %d"%(name, bytes), file=sys.stderr)
 			elif node.t == NodeType.ENUM:
 				assert isinstance(node, Enum)
 				name = self.value(node.identifier)
@@ -232,17 +255,18 @@ class Annotater:
 					self.error(node.identifier, "Too many enum values")
 				node.annotatedValues = enumValues
 				self.enums[name] = node
-				#print("enum %s with %s members"%(name, len(enumValues)))
+				print("enum %s with %s members"%(name, len(enumValues)), file=sys.stderr)
 			elif node.t == NodeType.TABLE:
 				assert isinstance(node, Table)
 				name = self.value(node.identifier)
+				node.name = name
 				self.context = "tabel %s"%name
 				if name in self.enums or name in self.structs or name in self.tabels:
 					self.error(node.identifier, "Duplicate name")
 					continue
-				bytes = self.visitContent(node.values, False)
-				self.tabels.add(name)
-				#print("table %s of size >= %d"%(name, bytes+8))
+				node.default = self.visitContent(node.values, False)
+				self.tabels[name] = node
+				print("table %s of size >= %d"%(name, len(node.default)+8), file=sys.stderr)
 
 				
 
