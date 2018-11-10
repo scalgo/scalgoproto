@@ -185,7 +185,7 @@ class Struct(AstNode):
 		self.values = values
 		
 class Enum(AstNode):
-	annotatedValues: Dict[str, int]
+	annotatedValues: Dict[str, int] = None
 	
 	def __init__(self, token: Token, identifier: Token, values: List[Token]) -> None:
 		super().__init__(NodeType.ENUM, token)
@@ -193,8 +193,8 @@ class Enum(AstNode):
 		self.values = values
 
 class Table(AstNode):
-	default: bytes
-	magic: str = None
+	default: bytes = None
+	magic: int = 0
 	name: str = None
 	
 	def __init__(self, token: Token, identifier: Token, id: Token, values: List[AstNode]) -> None:
@@ -204,9 +204,9 @@ class Table(AstNode):
 		self.values = values
 		
 class Value(AstNode):
-	hasOffset: int
-	hasBit: int
-	bit: int
+	hasOffset: int = 0
+	hasBit: int = 0
+	bit: int = 0
 	table: Table = None
 	enum: Enum = None
 	struct: Struct = None

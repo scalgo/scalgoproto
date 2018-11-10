@@ -16,7 +16,7 @@
 
 namespace tsng::monkey;  
     
-table Location @1234556 {
+table Location @268BA14D {
 	union {
 		tile {
 			x : UInt32;
@@ -53,7 +53,7 @@ struct Hash {
 	d : UInt64;
 }
 
-table Metadata @1234558 {
+table Metadata @9B8E30D1 {
 	tileMatrixId :Int32;
 	source :Location;
 	target :Location;
@@ -81,7 +81,7 @@ table Metadata @1234558 {
 	};
 }
 
-table OptionDescription @12345512 {
+table OptionDescription @3803B5A6 {
 	name :Text;
 	help :Text;
 	optional :Bool;
@@ -117,7 +117,7 @@ table OptionDescription @12345512 {
 	}
 }
 
-table ModuleDescription @123455123 {
+table ModuleDescription @E6358978 {
 	name :Text;
 	help :Text;
 	options :List OptionDescription;
@@ -128,7 +128,7 @@ table ModuleDescription @123455123 {
 	baseMemory : Float64=0;
 }
 
-table FloodingBInput @1334558 {
+table FloodingBInput @803432F7 {
 	scale :UInt32;
 	numOfNodes :UInt32;
 	location :Location;

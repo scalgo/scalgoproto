@@ -23,43 +23,42 @@ protected:
 
 	In(const char * data, uint32_t offset, uint32_t size) : data(data), offset(offset), size(size) {};
 
-	template <typename T, uint32_t offset>
+	template <typename T, uint32_t o>
 	T getInner_(T def) const noexcept {
 		if (offset + sizeof(T) > size) return def;
 		T ans;
-		memcpy(&ans, data + offset, sizeof(T));
+		memcpy(&ans, data + offset + o, sizeof(T));
 		return ans;
 	}
 
-	template <typename T, uint32_t offset>
+	template <typename T, uint32_t o>
 	T getInner_() const noexcept {
 		T ans;
 		if (offset + sizeof(T) > size)
 			memset(&ans, 0, sizeof(T));
 		else
-			memcpy(&ans, data + offset, sizeof(T));
+			memcpy(&ans, data + offset+ o, sizeof(T));
 		return ans;
 	}
 
-	template <typename T, uint32_t offset>
+	template <typename T, uint32_t o>
 	T getTable_() const noexcept {
 		uint32_t off;
-		assert(offset + 4 <= size);
-		memcpy(&off, data+offset, 4);
+		assert(offset + 8 <= size);
+		memcpy(&off, data+offset + o, 4);
 		uint32_t size = T::readSize_(data, off);
-		//TODO validate magic
 		return T(data, off+8, size);
 	}
 
-	template <typename T, uint32_t offset>
+	template <typename T, uint32_t o>
 	T getVLTable_() const noexcept {
-		return T(data, offset+size, getInner_<std::uint32_t, offset>());
+		return T(data, offset+size, getInner_<std::uint32_t, o>());
 	}
 
-	template <uint32_t offset, uint8_t bit, uint8_t def>
+	template <uint32_t o, uint8_t bit, uint8_t def>
 	uint8_t getBit_() const noexcept {
 		if (offset < size)
-			return *(const uint8_t *)(data + offset) & 1 << bit;
+			return *(const uint8_t *)(data + offset + o) & 1 << bit;
 		return def;
 	}
 
@@ -106,11 +105,16 @@ private:
 	}
 
 	void expand(uint32_t s) {
-		if (size + s > capacity) reserve(capacity * 2);
+		while (size + s > capacity) reserve(capacity * 2);
 		size += s;
 	}
+
+	template <typename T>
+	void write(const T & t, uint32_t offset) {
+		memcpy(data + offset, &t, sizeof(T));
+	}
 public:
-	Writer() {}
+	Writer(size_t capacity=256): size(8) {reserve(capacity);}
 	~Writer() {
 		if (data) free(data);
 		data = nullptr;
@@ -119,35 +123,35 @@ public:
 	}
 	
 	void clear() {
-		size = 0;
+		size = 8;
 	}
   
-	std::pair<const char *, size_t> finalize(Out root);
+	inline std::pair<const char *, size_t> finalize(const Out & root);
 	
 	template <typename T>
 	T construct() {
-		return T(*this);
+		return T(*this, true);
 	}
 
-	template <typename T>
-	void write(const T & t, uint32_t offset) {
-		memcpy(data, &t, sizeof(T));
-		size += sizeof(T);
-	}
+	
 };
 
 class Out {
 protected:
-	uint32_t offset;
+	friend class Writer;
+
 	Writer & writer;
-  
-	Out(Writer & writer): offset(writer.size), writer(writer) {}
-  
-	Out(Writer & writer, uint32_t magic, uint32_t size): offset(writer.size), writer(writer) {
-		writer.expand(size + 8);
-		writer.write(magic, offset);
-		writer.write(size, offset+4);
-		offset += 8;
+	uint32_t offset;
+
+	Out(Writer & writer, bool withHeader, std::uint32_t magic, const char * def, std::uint32_t size): writer(writer), offset(writer.size) {
+		if (withHeader) {
+			writer.expand(8);
+			writer.write(magic, offset);
+			writer.write(size, offset+4);
+			offset += 8;
+		}
+		writer.expand(size);
+		memcpy(writer.data + offset, def, size);
 	}
 
 	template <typename T, uint32_t o>
@@ -178,5 +182,11 @@ protected:
 	}
 };
 
+
+std::pair<const char *, size_t> Writer::finalize(const Out & root) {
+	write((std::uint32_t)0xB5C0C4B3, 0);
+	write(root.offset - 8, 4);
+	return std::make_pair(data, size);
+}
 
 } //namespace scalgoproto

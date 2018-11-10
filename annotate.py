@@ -4,6 +4,7 @@ Perform validation of the ast, and assign offsets and such
 """
 from parser import TokenType, NodeType, Token, Struct, AstNode, Value, Enum, Table, VLUnion, VLList
 from typing import Set, Dict, List
+import sys, struct
 
 class Annotater:
 	enums: Dict[str, Enum]
@@ -120,11 +121,17 @@ class Annotater:
 					v.bytes = 2
 					v.offset = bytes
 				elif v.type.type in (TokenType.UINT32, TokenType.INT32, TokenType.FLOAT32):
-					default.append(b"\0\0\0\0") #TODO put right default
+					if v.type.type == TokenType.FLOAT32:
+						default.append(struct.pack("<f", float('nan'))) #TODO put right default
+					else:
+						default.append(b"\0\0\0\0") #TODO put right default
 					v.bytes = 4
 					v.offset = bytes
 				elif v.type.type in (TokenType.UINT64, TokenType.INT64, TokenType.FLOAT64):
-					default.append(b"\0\0\0\0\0\0\0\0") #TODO put right default
+					if v.type.type == TokenType.FLOAT64:
+						default.append(struct.pack("<d", float('nan'))) #TODO put right default
+					else:
+						default.append(b"\0\0\0\0\0\0\0\0") #TODO put right default
 					v.bytes = 8
 					v.offset = bytes
 				elif v.type.type in (TokenType.BYTES, TokenType.TEXT):
@@ -144,6 +151,15 @@ class Annotater:
 					v.offset = bytes
 					v.enum = self.enums[typeName]
 				elif typeName in self.structs:
+					if v.optional:
+						if boolBit == 8:
+							boolBit = 0
+							boolOffset = bytes
+							default.append(b"\0")
+							bytes += 1
+						v.hasOffset = boolOffset
+						v.hasBit = boolBit
+						boolBit += 1
 					v.bytes = self.structs[typeName].bytes
 					default.append(b"\0" * v.bytes)
 					v.offset = bytes
@@ -195,7 +211,7 @@ class Annotater:
 								self.error(members[name], "Allready declare here")
 							else:
 								members[name] = member.identifier
-							self.visitContent(member.values, False)
+							member.default = self.visitContent(member.values, False)
 						else:
 							self.error(member.token, "Unknown member type")
 				elif v.t == NodeType.VLLIST:
@@ -260,6 +276,7 @@ class Annotater:
 				assert isinstance(node, Table)
 				name = self.value(node.identifier)
 				node.name = name
+				node.magic = int(self.value(node.id)[1:], 16)
 				self.context = "tabel %s"%name
 				if name in self.enums or name in self.structs or name in self.tabels:
 					self.error(node.identifier, "Duplicate name")

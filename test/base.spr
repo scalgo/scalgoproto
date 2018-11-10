@@ -1,0 +1,53 @@
+namespace scalgoprototest;
+
+enum MyEnum {
+    a, b, c, d
+}
+
+struct MyStruct {
+    x: UInt32;
+    y: Float32;
+    z: Bool;
+}
+
+table Simple @F0606B0B {
+    e: MyEnum;
+    s: MyStruct;
+    b: Bool;
+    u8: UInt8 = 2;
+    u16: UInt16 = 3;
+    u32: UInt32 = 4;
+    u64: UInt64 = 5;
+    i8: Int8 = 6;
+    i16: Int16 = 7;
+    i32: Int32 = 8;
+    i64: Int64 = 9;
+    f: Float32 = 10;
+    d: Float64 = 11;
+
+    os: Optional MyStruct;
+    ob: Optional Bool; 
+    ou8: Optional UInt8;
+    ou16: Optional UInt16;
+    ou32: Optional UInt32;
+    ou64: Optional UInt64;
+    oi8: Optional Int8;
+    oi16: Optional Int16;
+    oi32: Optional Int32;
+    oi64: Optional Int64;
+    of: Optional Float32;
+    od: Optional Float64;
+
+    ns: Optional MyStruct;
+    nb: Optional Bool; 
+    nu8: Optional UInt8;
+    nu16: Optional UInt16;
+    nu32: Optional UInt32;
+    nu64: Optional UInt64;
+    ni8: Optional Int8;
+    ni16: Optional Int16;
+    ni32: Optional Int32;
+    ni64: Optional Int64;
+    nf: Optional Float32;
+    nd: Optional Float64;
+}
