@@ -61,7 +61,7 @@ class Annotater:
 			self.error(value, "Must be a float")
 		return d
 
-	def visitContent(self, values: List[AstNode], isStruct: bool) -> bytes:
+	def visitContent(self, tableName: str, values: List[AstNode], isStruct: bool) -> bytes:
 		content: Set[str] = set()
 		bytes = 0
 		default = []
@@ -253,7 +253,9 @@ class Annotater:
 								self.error(members[name], "Allready declare here")
 							else:
 								members[name] = member.identifier
-							member.default = self.visitContent(member.values, False)
+							member.name = "%s_%s"%(tableName, name)
+							member.default = self.visitContent(member.name, member.values, False)
+							
 						else:
 							self.error(member.token, "Unknown member type")
 				elif v.t == NodeType.VLLIST:
@@ -289,7 +291,7 @@ class Annotater:
 					self.error(node.identifier, "Duplicate name")
 					continue
 				structValues: Set[str] = set()
-				bytes = len(self.visitContent(node.values, True))
+				bytes = len(self.visitContent(name, node.values, True))
 				self.structs[name] = node
 				node.bytes = bytes
 				print("struct %s of size %d"%(name, bytes), file=sys.stderr)
@@ -323,7 +325,7 @@ class Annotater:
 				if name in self.enums or name in self.structs or name in self.tabels:
 					self.error(node.identifier, "Duplicate name")
 					continue
-				node.default = self.visitContent(node.values, False)
+				node.default = self.visitContent(name, node.values, False)
 				self.tabels[name] = node
 				print("table %s of size >= %d"%(name, len(node.default)+8), file=sys.stderr)
 

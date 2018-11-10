@@ -10,10 +10,6 @@ from typing import Set, Dict, List, TextIO
 from types import SimpleNamespace
 
 class Generator:
-	enums: Dict[str, Enum] = None
-	structs: Dict[str, Struct] = None
-	tables: Dict[str, Table] = None
-	emptyTables: Set[str] = None
 	out: TextIO = None
 
 	def o(self, text=""):
@@ -21,16 +17,12 @@ class Generator:
 	
 	def __init__(self, data:str, out:TextIO) -> None:
 		self.data = data
-		self.enums = {}
-		self.structs = {}
-		self.tables = {}
-		self.emptyTables = set()
 		self.out = out
 		
 	def value(self, t:Token) -> str:
 		return self.data[t.index: t.index + t.length]
 
-	def generateTable(self, name, table:Table ) -> None:
+	def generateTable(self, table:Table ) -> None:
 		typeMap = {
 			TokenType.INT8: "std::int8_t",
 			TokenType.INT16: "std::int16_t",
@@ -51,14 +43,12 @@ class Generator:
 					if member.t == NodeType.TABLE:
 						assert isinstance(member, Table)
 						if member.values:
-							self.generateTable("%s__%s"%(name, self.value(member.identifier)), member)
-						else:
-							self.emptyTables.add("%s__%s"%(name, self.value(member.identifier)))
-		self.o("class %sIn: public scalgoproto::In {"%name)
+							self.generateTable(member)
+		self.o("class %sIn: public scalgoproto::In {"%table.name)
 		self.o("\tfriend class scalgoproto::In;")
 		self.o("\tfriend class scalgoproto::Reader;")
 		self.o("protected:")
-		self.o("\t%sIn(const char * data, std::uint32_t offset, std::uint32_t size): scalgoproto::In(data, offset, size) {}"%name)
+		self.o("\t%sIn(const char * data, std::uint32_t offset, std::uint32_t size): scalgoproto::In(data, offset, size) {}"%table.name)
 		self.o("\tstatic uint32_t readSize_(const char * data, std::uint32_t offset) { return scalgoproto::In::readSize_(data, offset, 0x%08X); }"%(table.magic))
 		self.o("public:")
 		for node in table.values:
@@ -93,7 +83,7 @@ class Generator:
 					self.o("\t}")
 				elif node.type.type == TokenType.IDENTIFIER:
 					typeName = self.value(node.type)
-					if typeName in self.enums:
+					if node.enum:
 						if node.optional:
 							self.o("\tbool has%s() const noexcept {"%(uname))
 							self.o("\t\treturn getInner_<std::uint8_t, %d>(255) == 255;"%(node.offset))
@@ -103,7 +93,7 @@ class Generator:
 							self.o("\t\tassert(has%s());"%uname)
 						self.o("\t\treturn (%s)getInner_<std::uint8_t, %d>(0);"%(typeName, node.offset))
 						self.o("\t}")
-					elif typeName in self.structs:
+					elif node.struct:
 						if node.optional:
 							self.o("\tbool has%s() const noexcept {"%(uname))
 							self.o("\t\treturn getBit_<%d, %s, 0>();"%(node.hasOffset, node.hasBit))
@@ -113,7 +103,7 @@ class Generator:
 							self.o("\t\tassert(has%s());"%uname)
 						self.o("\t\treturn getInner_<%s, %d>();"%( typeName, node.offset))
 						self.o("\t}")
-					elif typeName in self.tables:
+					elif node.table:
 						if node.optional:
 							self.o("\tbool has%s() const noexcept {"%(uname))
 							self.o("\t\treturn getInner_<std::uint32_t, %d>(0) == 0;"%(node.offset))
@@ -141,21 +131,17 @@ class Generator:
 					assert isinstance(member, (Table, Value))
 					n = self.value(member.identifier)
 					uname = n[0].upper() + n[1:]
-					tname = None
-					if isinstance(member, Value):
-						tname = self.value(member.type)
-					else:
-						tname = "%s__%s"%(name, self.value(member.identifier))
+					table = member.table if isinstance(member, Value) else member
 					self.o("\tbool is%s() const noexcept {return getType() == %s;}"%(uname, n.upper()))
-					if not tname in self.emptyTables:
-						self.o("\t%sIn get%s() const noexcept {"%(tname, uname))
+					if table.values:
+						self.o("\t%sIn get%s() const noexcept {"%(table.name, uname))
 						self.o("\t\tassert(is%s());"%(uname))
-						self.o("\t\treturn getVLTable_<%sIn, %d>();"%(tname, node.offset+2))
+						self.o("\t\treturn getVLTable_<%sIn, %d>();"%(table.name, node.offset+2))
 						self.o("\t}")
 		self.o("};")
 		self.o("")
 		
-		self.o("class %sOut: public scalgoproto::Out {"%name)
+		self.o("class %sOut: public scalgoproto::Out {"%table.name)
 		self.o("\tfriend class scalgoproto::Out;")
 		self.o("\tfriend class scalgoproto::Writer;")
 		self.o("protected:")
@@ -175,7 +161,7 @@ class Generator:
 			else:
 				default.append("\\x%02x"%c)
 				
-		self.o("\t%sOut(scalgoproto::Writer & writer, bool withHeader): scalgoproto::Out(writer, withHeader, 0x%08X, \"%s\", %d) {}"%(name, table.magic, "".join(default), len(table.default)))
+		self.o("\t%sOut(scalgoproto::Writer & writer, bool withHeader): scalgoproto::Out(writer, withHeader, 0x%08X, \"%s\", %d) {}"%(table.name, table.magic, "".join(default), len(table.default)))
 		self.o("public:")
 		for node in table.values:
 			if node.t == NodeType.VALUE:
@@ -197,17 +183,17 @@ class Generator:
 					self.o("\t}")
 				elif node.type.type == TokenType.IDENTIFIER:
 					typeName = self.value(node.type)
-					if typeName in self.enums:
+					if node.enum:
 						self.o("\tvoid add%s(%s value) noexcept {"%(uname, typeName))
-						self.o("\t\tsetInner_<%s, %d>(value);"%(typeName, node.offset));
+						self.o("\t\tsetInner_<%s, %d>(value);"%(typeName, node.offset))
 						self.o("\t}")
-					elif typeName in self.structs:
+					elif node.struct:
 						self.o("\tvoid add%s(const %s & value) noexcept {"%(uname, typeName))
 						if node.optional:
 							self.o("\t\tsetBit_<%d, %d>();"%(node.hasOffset, node.hasBit))
-						self.o("\t\tsetInner_<%s, %d>(value);"%(typeName, node.offset));
+						self.o("\t\tsetInner_<%s, %d>(value);"%(typeName, node.offset))
 						self.o("\t}")
-					elif typeName in self.tables:
+					elif node.table:
 						self.o("\tvoid add%s(%sOut value) noexcept {"%(uname, typeName))
 						self.o("\t\tsetTable_<%sOut, %d>(value);"%(typeName, node.offset))
 						self.o("\t}")
@@ -230,13 +216,9 @@ class Generator:
 					assert isinstance(member, (Table, Value))
 					n = self.value(member.identifier)
 					uname = n[0].upper() + n[1:]
-					tname = None
-					if isinstance(member, Value):
-						tname = self.value(member.type)
-					else:
-						tname = "%s__%s"%(name, self.value(member.identifier))
-					if tname not in self.emptyTables:
-						self.o("\t%sOut add%s() noexcept {"%(tname, uname))
+					table = member.table if isinstance(member, Value) else member
+					if table.values:
+						self.o("\t%sOut add%s() noexcept {"%(table.name, uname))
 						self.o("\t\tassert(!hasType());")
 						self.o("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
 						self.o("\t}")
@@ -278,7 +260,6 @@ class Generator:
 				self.o("};")
 				self.o("#pragma pack(pop)")
 				self.o()
-				self.structs[name] = node
 			elif node.t == NodeType.ENUM:
 				assert isinstance(node, Enum)
 				name = self.value(node.identifier)
@@ -289,12 +270,10 @@ class Generator:
 					index += 1
 				self.o("};")
 				self.o()
-				self.enums[name] = node
 			elif node.t == NodeType.TABLE:
 				assert isinstance(node, Table)
 				name = self.value(node.identifier)
-				self.generateTable(name, node)
-				self.tables[name] = node
+				self.generateTable(node)
 
 def run(args) -> int:
 	data = open(args.schema, "r").read()
@@ -319,6 +298,4 @@ def setup(subparsers) -> None:
 	cmd.add_argument('output', help="where do we store the output")
 	cmd.set_defaults(func=run)
 
-class A:
-	pass
 
