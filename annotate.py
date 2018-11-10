@@ -38,7 +38,29 @@ class Annotater:
 			end += 1
 		print(self.data[start:end])
 		print("%s%s%s"%('\t'*t, ' '*(token.index - start -t), '^'*(token.length)))
-		
+	
+
+	def getInt(self, value:Token, min:int, max:int, d:int) -> int:
+		if not value:
+			return d
+		try:
+			v = int(self.value(value))
+			if min <= v <= max:
+				return v
+			self.error(value, "Value %d outside allowed range %d to %d"%(v, min, max))
+		except ValueError:
+			self.error(value, "Must be an integer")
+		return d
+
+	def getFloat(self, value:Token, d:float) -> float:
+		if not value:
+			return d
+		try:
+			return float(self.value(value))
+		except ValueError:
+			self.error(value, "Must be a float")
+		return d
+
 	def visitContent(self, values: List[AstNode], isStruct: bool) -> bytes:
 		content: Set[str] = set()
 		bytes = 0
@@ -113,25 +135,45 @@ class Annotater:
 					v.bit = boolBit
 					boolBit += 1
 				elif v.type.type in (TokenType.UINT8, TokenType.INT8, TokenType.BOOL):
-					default.append(b"\0") #TODO put right default
+					if v.type.type == TokenType.UINT8:
+						default.append(struct.pack("<B", self.getInt(v.value, 0, 255, 0)))
+					elif v.type.type == TokenType.INT8:
+						default.append(struct.pack("<b", self.getInt(v.value, -128, 127, 0)))
+					elif v.type.type == TokenType.BOOL:
+						default.append(b"\0")
+					else:
+						self.error(v.type.type, "Internal error")
 					v.bytes = 1
 					v.offset = bytes
 				elif v.type.type in (TokenType.UINT16, TokenType.INT16):
-					default.append(b"\0\0") #TODO put right default
+					if v.type.type == TokenType.UINT16:
+						default.append(struct.pack("<H", self.getInt(v.value, 0, 2**16-1, 0)))
+					elif v.type.type == TokenType.INT16:
+						default.append(struct.pack("<h", self.getInt(v.value, -2**15, 2**15-1, 0)))
+					else:
+						self.error(v.type.type, "Internal error")
 					v.bytes = 2
 					v.offset = bytes
 				elif v.type.type in (TokenType.UINT32, TokenType.INT32, TokenType.FLOAT32):
-					if v.type.type == TokenType.FLOAT32:
-						default.append(struct.pack("<f", float('nan'))) #TODO put right default
+					if v.type.type == TokenType.UINT32:
+						default.append(struct.pack("<I", self.getInt(v.value, 0, 2**32-1, 0)))
+					elif v.type.type == TokenType.INT32:
+						default.append(struct.pack("<i", self.getInt(v.value, -2**31, 2**31-1, 0)))
+					elif v.type.type == TokenType.FLOAT32:
+						default.append(struct.pack("<f", self.getFloat(v.value, float('nan') if v.optional else 0.0)))
 					else:
-						default.append(b"\0\0\0\0") #TODO put right default
+						self.error(v.type.type, "Internal error")
 					v.bytes = 4
 					v.offset = bytes
 				elif v.type.type in (TokenType.UINT64, TokenType.INT64, TokenType.FLOAT64):
-					if v.type.type == TokenType.FLOAT64:
-						default.append(struct.pack("<d", float('nan'))) #TODO put right default
+					if v.type.type == TokenType.UINT64:
+						default.append(struct.pack("<Q", self.getInt(v.value, 0, 2**64-1, 0)))
+					elif v.type.type == TokenType.INT64:
+						default.append(struct.pack("<q", self.getInt(v.value, -2**64, 2**64-1, 0)))
+					elif v.type.type == TokenType.FLOAT64:
+						default.append(struct.pack("<d", self.getFloat(v.value, float('nan') if v.optional else 0.0)))
 					else:
-						default.append(b"\0\0\0\0\0\0\0\0") #TODO put right default
+						self.error(v.type.type, "Internal error")
 					v.bytes = 8
 					v.offset = bytes
 				elif v.type.type in (TokenType.BYTES, TokenType.TEXT):

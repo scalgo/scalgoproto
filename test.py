@@ -13,13 +13,16 @@ def runValidate(schema:str, fail:bool=False)->bool:
 	code = subprocess.call(["python3", "scalgoproto.py", "validate", schema])
 	return fail == (code != 0)
 
-def runCpp(schema: str, cpp: str, name:str, bin:str) -> bool:
+def runCppSetup(schema: str, cpp: str) -> bool:
 	subprocess.check_call(["python3", "scalgoproto.py", "cpp", schema, "tmp/test.hh"])
 	subprocess.check_call(["g++", "-std=c++17", "-Wall", "-Wextra", "-I", "tmp", "-I", ".", cpp, "-o", "tmp/bin"])
+	return True
+
+def runCpp(name:str, bin:str) -> bool:
 	subprocess.check_call(["tmp/bin", name, bin])
 	return True
 	
-def runTest(name:str, func: Callable[[],bool]) -> None:
+def runTest(name:str, func: Callable[[],bool]) -> bool:
 	l = 80 - len(name) - 4
 	print("%s> %s <%s"%("="*(l//2 ), name, "="*(l - l//2)))
 	ok = False
@@ -29,16 +32,20 @@ def runTest(name:str, func: Callable[[],bool]) -> None:
 		pass
 	if ok:
 		print("SUCCESS")
+		return True
 	else:
 		print("FAILURE")
 		failures.append(name)
+		return False
 		
 if __name__ == '__main__':
 	runTest("validate base", lambda: runValidate("test/base.spr"))
 	runTest("validate update", lambda: runValidate("test/update.spr"))
-	runTest("cpp out simple", lambda: runCpp("test/base.spr", "test/simple.cc", "out_default", "test/simple_default.bin"))
-	runTest("cpp out simple", lambda: runCpp("test/base.spr", "test/simple.cc", "out", "test/simple.bin"))
-	runTest("cpp in simple", lambda: runCpp("test/base.spr", "test/simple.cc", "in", "test/simple.bin"))
+	if runTest("cpp setup", lambda: runCppSetup("test/base.spr", "test/simple.cc")):
+		runTest("cpp out default simple", lambda: runCpp("out_default", "test/simple_default.bin"))
+		runTest("cpp in default simple", lambda: runCpp("in_default", "test/simple_default.bin"))
+		runTest("cpp out simple", lambda: runCpp("out", "test/simple.bin"))
+		runTest("cpp in simple", lambda: runCpp("in", "test/simple.bin"))
 
 	print("="*80)
 	if not failures:

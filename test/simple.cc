@@ -125,6 +125,55 @@ int main(int, char ** argv) {
 		if (s.hasNi64()) return 1;
 		if (s.hasNf()) return 1;
 		if (s.hasNd()) return 1;
+	} else if (!strcmp(argv[1], "in_default")) {
+		std::ifstream is(argv[2], std::ifstream::binary);
+		is.seekg (0, is.end);
+		auto length = is.tellg();
+		is.seekg (0, is.beg);
+		std::vector<char> o;
+		o.resize(length);
+		is.read(o.data(), length);
+
+		scalgoproto::Reader r(o.data(), length);
+		auto s = r.root<SimpleIn>();
+		if (s.getS().x != 0) return 1;
+		if (s.getS().y != 0) return 1;
+		if (s.getS().z != false) return 1;
+		if (s.getB() != false) return 1;
+		if (s.getU8() != 2) return 1;
+		if (s.getU16() != 3) return 1;
+		if (s.getU32() != 4) return 1;
+		if (s.getU64() != 5) return 1;
+		if (s.getI8() != 6) return 1;
+		if (s.getI16() != 7) return 1;
+		if (s.getI32() != 8) return 1;
+		if (s.getI64() != 9) return 1;
+		if (s.getF() != 10.0) return 1;
+		if (s.getD() != 11.0) return 1;
+		if (s.hasOs()) return 1;
+		if (s.hasOb()) return 1;
+		if (s.hasOu8()) return 1;
+		if (s.hasOu16()) return 1;
+		if (s.hasOu32()) return 1;
+		if (s.hasOu64()) return 1;
+		if (s.hasOi8()) return 1;
+		if (s.hasOi16()) return 1;
+		if (s.hasOi32()) return 1;
+		if (s.hasOi64()) return 1;
+		if (s.hasOf()) return 1;
+		if (s.hasOd()) return 1;
+		if (s.hasNs()) return 1;
+		if (s.hasNb()) return 1;
+		if (s.hasNu8()) return 1;
+		if (s.hasNu16()) return 1;
+		if (s.hasNu32()) return 1;
+		if (s.hasNu64()) return 1;
+		if (s.hasNi8()) return 1;
+		if (s.hasNi16()) return 1;
+		if (s.hasNi32()) return 1;
+		if (s.hasNi64()) return 1;
+		if (s.hasNf()) return 1;
+		if (s.hasNd()) return 1;
 	} else {
 		return 1;
 	}

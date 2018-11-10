@@ -173,7 +173,7 @@ class Generator:
 			elif 32 <= c <= 125:
 				default.append(chr(c))
 			else:
-				default.append("\\x%2x"%c)
+				default.append("\\x%02x"%c)
 				
 		self.o("\t%sOut(scalgoproto::Writer & writer, bool withHeader): scalgoproto::Out(writer, withHeader, 0x%08X, \"%s\", %d) {}"%(name, table.magic, "".join(default), len(table.default)))
 		self.o("public:")
