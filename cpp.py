@@ -69,13 +69,12 @@ class Generator:
 						typeName = self.value(node.type)
 						if node.enum or node.struct:
 							rawType = typeName
-
 					#	if node.table:
 					#		typeName = "%sOut"%typeName
-					#elif node.type.type == TokenType.TEXT:
-					#	typeName = "TextOut"
-					#elif node.type.type == TokenType.BYTES:
-					#	typeName = "BytesOut";
+					elif node.type.type == TokenType.TEXT:
+						typeName = "std::string_view"
+					elif node.type.type == TokenType.BYTES:
+						typeName = "std::pair<const void *, size_t>"
 					else:
 						assert False
 					self.o("\tbool has%s() const noexcept {"%(uname))
@@ -225,9 +224,9 @@ class Generator:
 						if node.table:
 							typeName = "%sOut"%typeName
 					elif node.type.type == TokenType.TEXT:
-						typeName = "TextOut"
+						typeName = "scalgoproto::TextOut"
 					elif node.type.type == TokenType.BYTES:
-						typeName = "BytesOut";
+						typeName = "scalgoproto::BytesOut"
 					self.o("\tvoid add%s(scalgoproto::ListOut<%s> value) noexcept {"%(uname, typeName))
 					self.o("\t\tsetList_<%s, %d>(value);"%(typeName, node.offset))
 					self.o("\t}")

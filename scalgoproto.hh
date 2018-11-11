@@ -10,6 +10,8 @@
 
 namespace scalgoproto {
 
+class Out;
+class Writer;
 struct EnumTag;
 struct PodTag;
 struct TableTag;
@@ -17,6 +19,33 @@ struct ListTag;
 struct TextTag;
 struct BytesTag;
 struct UnknownTag;
+
+
+template <typename, typename>
+class ListAccessHelp;
+
+
+class MagicError: std::runtime_error {
+public:
+	MagicError() : std::runtime_error("MagicError") {}
+};
+
+class TextOut {
+	friend class Writer;
+	friend class Out;
+	template <typename, typename> friend class ListAccessHelp;
+protected:
+	uint32_t offset;
+};
+
+class BytesOut {
+	friend class Writer;
+	friend class Out;
+	template <typename, typename> friend class ListAccessHelp;
+protected:
+	uint32_t offset;
+};
+
 
 template <typename T> struct MetaMagic {using t=UnknownTag;};
 template <> struct MetaMagic<bool> {using t=PodTag;};
@@ -68,13 +97,53 @@ struct ListAccessHelp<EnumTag, T> {
 };
 
 template <typename T>
-using ListAccess = ListAccessHelp<typename MetaMagic<T>::t, T>;
-
-
-class MagicError: std::runtime_error {
-public:
-	MagicError() : std::runtime_error("MagicError") {}
+struct ListAccessHelp<TextTag, T> {
+	static constexpr bool optional = true;
+	static constexpr size_t size = 4;
+	static constexpr int def = 0;
+	static bool has(const char * data, uint32_t offset, uint32_t index) noexcept {
+		uint32_t off;
+		memcpy(&off, data + offset + index * 4, 4);
+		return off != 0;
+	}
+	static std::string_view get(const char * data, uint32_t offset, uint32_t index) noexcept {
+		uint32_t off, word;
+		memcpy(&off, data + offset + index * 4, 4);
+		memcpy(&word, data + off, 4);
+		assert(word == 0xD812C8F5);
+		memcpy(&word, data + off + 4, 4);
+		return std::string_view(data+off+8, word);
+	}
+	static void set(char * data, uint32_t offset, uint32_t index, const TextOut & value) noexcept {
+		memcpy(data + offset + index * 4, &value.offset, 4);
+	}
 };
+
+template <typename T>
+struct ListAccessHelp<BytesTag, T> {
+	static constexpr bool optional = true;
+	static constexpr size_t size = 4;
+	static constexpr int def = 0;
+	static bool has(const char * data, uint32_t offset, uint32_t index) noexcept {
+		uint32_t off;
+		memcpy(&off, data + offset + index * 4, 4);
+		return off != 0;
+	}
+	static std::pair<const void *, size_t> get(const char * data, uint32_t offset, uint32_t index) noexcept {
+		uint32_t off, word;
+		memcpy(&off, data + offset + index * 4, 4);
+		memcpy(&word, data + off, 4);
+		assert(word == 0xDCDBBE10);
+		memcpy(&word, data + off + 4, 4);
+		return std::make_pair(data+off+8, word);
+	}
+	static void set(char * data, uint32_t offset, uint32_t index, const BytesOut & value) noexcept {
+		memcpy(data + offset + index * 4, &value.offset, 4);
+	}
+};
+
+template <typename T>
+using ListAccess = ListAccessHelp<typename MetaMagic<T>::t, T>;
 
 
 template <typename T>
@@ -290,22 +359,17 @@ public:
 	}
 };
 
-class Out;
-class Writer;
 
-class TextOut {
-	friend class Writer;
-	friend class Out;
-protected:
-	uint32_t offset;
-};
 
-class BytesOut {
-	friend class Writer;
-	friend class Out;
-protected:
-	uint32_t offset;
-};
+template <>
+struct MetaMagic<TextOut> {using t=TextTag;};
+template <>
+struct MetaMagic<std::string_view> {using t=TextTag;};
+
+template <>
+struct MetaMagic<BytesOut> {using t=BytesTag;};
+template <>
+struct MetaMagic<std::pair<const void *, size_t>> {using t=BytesTag;};
 
 template <typename T>
 class ListOut {
@@ -405,6 +469,9 @@ public:
 		memset(data+o.offset, A::def, size*A::size);
 		return o;
 	}
+
+	ListOut<TextOut> constructTextList(size_t size) {return constructList<TextOut>(size);}
+	ListOut<BytesOut> constructBytesList(size_t size) {return constructList<BytesOut>(size);}
 };
 
 class Out {

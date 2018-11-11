@@ -184,12 +184,20 @@ int main(int, char ** argv) {
 		auto b = w.constructBytes("bytes", 5);
 		auto t = w.constructText("text");
 		auto s = w.construct<ComplexOut>();
+
+		auto l4 = w.constructTextList(2);
+		l4.add(0, t);
+		auto l5 = w.constructBytesList(1);
+		l5.add(0, b);
+
 		s.addMember(m);
 		s.addText(t);
 		s.addBytes(b);
 		s.addList(l);
 		s.addStructList(l3);
 		s.addEnumList(l2);
+		s.addTextList(l4);
+		s.addBytesList(l5);
 		auto [data, size] = w.finalize(s);
 		return !validateOut(data, size, argv[2]);
 	} else if (!strcmp(argv[1], "in_complex")) {
@@ -230,6 +238,19 @@ int main(int, char ** argv) {
 		auto l3 = s.getStructList();
 		if (l3.size() != 1) return 1;
 		
+		if (!s.hasTextList()) return 1;
+		auto l4 = s.getTextList();
+		if (l4.size() != 2) return 1;
+		if (!l4.has(0)) return 1;
+		if (l4.has(1)) return 1;
+		if (l4[0] != "text") return 1;
+
+		if (!s.hasBytesList()) return 1;
+		auto l5 = s.getBytesList();
+		if (l5.size() != 1) return 1;
+		if (!l5.has(0)) return 1;
+		if (l5.front().second != 5 || memcmp(l5.front().first, "bytes", 5)) return 1;
+
 
 		return 0;
 	} else {
