@@ -47,6 +47,7 @@ class Generator:
 		self.o("class %sIn: public scalgoproto::In {"%table.name)
 		self.o("\tfriend class scalgoproto::In;")
 		self.o("\tfriend class scalgoproto::Reader;")
+		self.o("\ttemplate <typename, typename> friend class scalgoproto::ListAccessHelp;")
 		self.o("protected:")
 		self.o("\t%sIn(const char * data, std::uint32_t offset, std::uint32_t size): scalgoproto::In(data, offset, size) {}"%table.name)
 		self.o("\tstatic uint32_t readSize_(const char * data, std::uint32_t offset) { return scalgoproto::In::readSize_(data, offset, 0x%08X); }"%(table.magic))
@@ -69,8 +70,8 @@ class Generator:
 						typeName = self.value(node.type)
 						if node.enum or node.struct:
 							rawType = typeName
-					#	if node.table:
-					#		typeName = "%sOut"%typeName
+						if node.table:
+							typeName = "%sIn"%typeName
 					elif node.type.type == TokenType.TEXT:
 						typeName = "std::string_view"
 					elif node.type.type == TokenType.BYTES:
@@ -184,6 +185,7 @@ class Generator:
 						self.o("\t\treturn getVLTable_<%sIn, %d>();"%(table.name, node.offset+2))
 						self.o("\t}")
 		self.o("};")
+		self.o("namespace scalgoproto {template <> struct MetaMagic<%sIn> {using t=TableTag;};}"%table.name)
 		self.o("")
 		
 		self.o("class %sOut: public scalgoproto::Out {"%table.name)
@@ -303,6 +305,7 @@ class Generator:
 					# self.o("\t\treturn %sOut(data, offset+size, getInner_<std::uint32_t, %d>());"%(tname, node.offset+2))
 
 		self.o("};")
+		self.o("namespace scalgoproto {template <> struct MetaMagic<%sOut> {using t=TableTag;};}"%table.name)
 		self.o("")
 	
 	def generate(self, ast: List[AstNode]) -> None:

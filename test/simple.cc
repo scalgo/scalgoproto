@@ -183,13 +183,17 @@ int main(int, char ** argv) {
 		auto l3 = w.constructList<MyStruct>(1);
 		auto b = w.constructBytes("bytes", 5);
 		auto t = w.constructText("text");
-		auto s = w.construct<ComplexOut>();
 
 		auto l4 = w.constructTextList(2);
 		l4.add(0, t);
 		auto l5 = w.constructBytesList(1);
 		l5.add(0, b);
 
+		auto l6 = w.constructList<MemberOut>(3);
+		l6.add(0, m);
+		l6.add(2, m);
+
+		auto s = w.construct<ComplexOut>();
 		s.addMember(m);
 		s.addText(t);
 		s.addBytes(b);
@@ -198,6 +202,7 @@ int main(int, char ** argv) {
 		s.addEnumList(l2);
 		s.addTextList(l4);
 		s.addBytesList(l5);
+		s.addMemberList(l6);
 		auto [data, size] = w.finalize(s);
 		return !validateOut(data, size, argv[2]);
 	} else if (!strcmp(argv[1], "in_complex")) {
@@ -251,7 +256,14 @@ int main(int, char ** argv) {
 		if (!l5.has(0)) return 1;
 		if (l5.front().second != 5 || memcmp(l5.front().first, "bytes", 5)) return 1;
 
-
+		if (!s.hasMemberList()) return 1;
+		auto l6 = s.getMemberList();
+		if (l6.size() != 3) return 1;
+		if (!l6.has(0)) return 1;
+		if (l6.has(1)) return 1;
+		if (!l6.has(2)) return 1;
+		if (l6[0].getId() != 42) return 1;
+		if (l6[2].getId() != 42) return 1;
 		return 0;
 	} else {
 		return 1;

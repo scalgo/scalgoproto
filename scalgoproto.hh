@@ -109,6 +109,7 @@ struct ListAccessHelp<TextTag, T> {
 	static std::string_view get(const char * data, uint32_t offset, uint32_t index) noexcept {
 		uint32_t off, word;
 		memcpy(&off, data + offset + index * 4, 4);
+		assert(off != 0);
 		memcpy(&word, data + off, 4);
 		assert(word == 0xD812C8F5);
 		memcpy(&word, data + off + 4, 4);
@@ -132,6 +133,7 @@ struct ListAccessHelp<BytesTag, T> {
 	static std::pair<const void *, size_t> get(const char * data, uint32_t offset, uint32_t index) noexcept {
 		uint32_t off, word;
 		memcpy(&off, data + offset + index * 4, 4);
+		assert(off != 0);
 		memcpy(&word, data + off, 4);
 		assert(word == 0xDCDBBE10);
 		memcpy(&word, data + off + 4, 4);
@@ -142,9 +144,33 @@ struct ListAccessHelp<BytesTag, T> {
 	}
 };
 
+
+template <typename T>
+struct ListAccessHelp<TableTag, T> {
+	static constexpr bool optional = true;
+	static constexpr size_t size = 4;
+	static constexpr int def = 0;
+	static bool has(const char * data, uint32_t offset, uint32_t index) noexcept {
+		uint32_t off;
+		memcpy(&off, data + offset + index * 4, 4);
+		return off != 0;
+	}
+	static T get(const char * data, uint32_t offset, uint32_t index) noexcept {
+		uint32_t off;
+		memcpy(&off, data + offset + index * 4, 4);
+		assert(off != 0);
+		uint32_t size = T::readSize_(data, off);
+		return T(data, off+8, size);
+	}
+
+	static void set(char * data, uint32_t offset, uint32_t index, T v) noexcept {
+		std::uint32_t o = v.offset - 8;
+		memcpy(data + offset + index * 4, &o, 4);
+	}
+};
+
 template <typename T>
 using ListAccess = ListAccessHelp<typename MetaMagic<T>::t, T>;
-
 
 template <typename T>
 class ListIn;
@@ -477,6 +503,7 @@ public:
 class Out {
 protected:
 	friend class Writer;
+	template <typename, typename> friend class ListAccessHelp;
 
 	Writer & writer;
 	uint32_t offset;

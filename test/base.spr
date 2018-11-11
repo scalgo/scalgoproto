@@ -69,4 +69,5 @@ table Complex @CCDD589C {
     structList: List MyStruct;
     textList: List Text;
     bytesList: List Bytes;
+    memberList: List Member;
 }
