@@ -177,13 +177,21 @@ class Generator:
 					assert isinstance(member, (Table, Value))
 					n = self.value(member.identifier)
 					uname = n[0].upper() + n[1:]
-					table = member.table if isinstance(member, Value) else member
+					tbl = member.table if isinstance(member, Value) else member
 					self.o("\tbool is%s() const noexcept {return getType() == %s;}"%(uname, n.upper()))
-					if table.values:
-						self.o("\t%sIn get%s() const noexcept {"%(table.name, uname))
+					if tbl.values:
+						self.o("\t%sIn get%s() const noexcept {"%(tbl.name, uname))
 						self.o("\t\tassert(is%s());"%(uname))
-						self.o("\t\treturn getVLTable_<%sIn, %d>();"%(table.name, node.offset+2))
+						self.o("\t\treturn getVLTable_<%sIn, %d>();"%(tbl.name, node.offset+2))
 						self.o("\t}")
+			elif node.t == NodeType.VLBYTES:
+				pass #TODO
+			elif node.t == NodeType.VLLIST:
+				pass #TODO
+			elif node.t == NodeType.VLTEXT:
+				pass #TODO
+			else:
+				assert(False)
 		self.o("};")
 		self.o("namespace scalgoproto {template <> struct MetaMagic<%sIn> {using t=TableTag;};}"%table.name)
 		self.o("")
@@ -276,12 +284,6 @@ class Generator:
 					assert False
 			elif node.t == NodeType.VLUNION:
 				assert isinstance(node, VLUnion)
-				# self.o("\tenum Type {")
-				# self.o("\t\tNONE,")
-				# for member in node.members:
-				# 	assert isinstance(member, (Table, Value))
-				# 	self.o("\t\t%s,"%self.value(member.identifier).upper())
-				# self.o("\t};")
 				self.o("\tbool hasType() const noexcept {")
 				self.o("\t\treturn getInner_<std::uint16_t, %d>() != 0;"%(node.offset))
 				self.o("\t}")
@@ -290,20 +292,30 @@ class Generator:
 					assert isinstance(member, (Table, Value))
 					n = self.value(member.identifier)
 					uname = n[0].upper() + n[1:]
-					table = member.table if isinstance(member, Value) else member
-					if table.values:
-						self.o("\t%sOut add%s() noexcept {"%(table.name, uname))
+					tbl = member.table if isinstance(member, Value) else member
+					if tbl.values:
+						self.o("\t%sOut add%s() noexcept {"%(tbl.name, uname))
 						self.o("\t\tassert(!hasType());")
 						self.o("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
+						self.o("\t\tsetInner_<std::uint32_t, %d>(%d);"%(node.offset+4, len(tbl.default)))
+						self.o("\t\treturn constructUnionMember_<%sOut>();"%tbl.name)
 						self.o("\t}")
 					else:
 						self.o("\tvoid add%s() noexcept {"%(uname))
 						self.o("\t\tassert(!hasType());")
 						self.o("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
+						self.o("\t\tsetInner_<std::uint32_t, %d>(%d);"%(node.offset+4, 0))
 						self.o("\t}")
 					idx += 1
 					# self.o("\t\treturn %sOut(data, offset+size, getInner_<std::uint32_t, %d>());"%(tname, node.offset+2))
-
+			elif node.t == NodeType.VLBYTES:
+				pass #TODO
+			elif node.t == NodeType.VLLIST:
+				pass #TODO
+			elif node.t == NodeType.VLTEXT:
+				pass #TODO
+			else:
+				assert(False)
 		self.o("};")
 		self.o("namespace scalgoproto {template <> struct MetaMagic<%sOut> {using t=TableTag;};}"%table.name)
 		self.o("")

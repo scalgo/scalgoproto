@@ -41,13 +41,15 @@ def runTest(name:str, func: Callable[[],bool]) -> bool:
 if __name__ == '__main__':
 	runTest("validate base", lambda: runValidate("test/base.spr"))
 	runTest("validate update", lambda: runValidate("test/update.spr"))
-	if runTest("cpp setup", lambda: runCppSetup("test/base.spr", "test/simple.cc")):
+	if runTest("cpp setup", lambda: runCppSetup("test/base.spr", "test/cpp.cc")):
 		runTest("cpp out default simple", lambda: runCpp("out_default", "test/simple_default.bin"))
 		runTest("cpp in default simple", lambda: runCpp("in_default", "test/simple_default.bin"))
 		runTest("cpp out simple", lambda: runCpp("out", "test/simple.bin"))
 		runTest("cpp in simple", lambda: runCpp("in", "test/simple.bin"))
 		runTest("cpp out complex", lambda: runCpp("out_complex", "test/complex.bin"))
 		runTest("cpp in complex", lambda: runCpp("in_complex", "test/complex.bin"))
+		runTest("cpp out vl", lambda: runCpp("out_vl", "test/complex.bin"))
+		runTest("cpp in vl", lambda: runCpp("in_vl", "test/complex.bin"))
 
 	print("="*80)
 	if not failures:

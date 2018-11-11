@@ -6,7 +6,7 @@
 #include <cstdio>
 #include <vector>
 
-constexpr bool writeMode = false;
+constexpr bool writeMode = true;
 
 bool validateOut(const char * data, size_t size, const char * file) {
 	if (writeMode) {
@@ -227,7 +227,7 @@ int main(int, char ** argv) {
 
 		if (l.size() != 31 || rl.second != 31) return 1;
 
-		for (size_t i=0; i < 31; ++i) {
+		for (int i=0; i < 31; ++i) {
 			if (rl.first[i] != 100-2*i) return 1;
 			if (l[i] != 100-2*i) return 1;
 		}
@@ -265,6 +265,28 @@ int main(int, char ** argv) {
 		if (l6[0].getId() != 42) return 1;
 		if (l6[2].getId() != 42) return 1;
 		return 0;
+	} else if (!strcmp(argv[1], "out_vl")) {
+		scalgoproto::Writer w;
+		auto name = w.constructText("nilson");
+		auto u = w.construct<VLUnionOut>();
+		u.addMonkey().addName(name);
+
+		auto root = w.construct<VLRootOut>();
+		root.addU(u);
+		auto [data, size] = w.finalize(root);
+		return !validateOut(data, size, argv[2]);
+	} else if (!strcmp(argv[1], "in_vl")) {
+		auto o = readIn(argv[2]);
+		scalgoproto::Reader r(o.data(), o.size());
+		auto s = r.root<VLRootIn>();
+		if (!s.hasU()) return 1;
+		
+		auto u = s.getU();
+		if (!u.isMonkey()) return 1;
+		auto monkey = u.getMonkey();
+		if (!monkey.hasName()) return 1;
+		if (monkey.getName() != "nilson") return 1;
+		return 0;		
 	} else {
 		return 1;
 	}

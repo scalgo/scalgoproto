@@ -519,6 +519,11 @@ protected:
 		memcpy(writer.data + offset, def, size);
 	}
 
+	template <typename T>
+	T constructUnionMember_() const noexcept {
+		return T(writer, false);
+	}
+
 	template <typename T, uint32_t o>
 	void setInner_(const T & t) {
 		writer.write(t, offset + o);

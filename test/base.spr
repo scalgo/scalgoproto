@@ -71,3 +71,36 @@ table Complex @CCDD589C {
     bytesList: List Bytes;
     memberList: List Member;
 }
+
+table VLList @793045DD {
+    id: Int32;
+    List Int32;
+}
+
+table VLText @DC784D79 {
+    id: Int32;
+    Text;
+}
+
+table VLBytes @259A2E79 {
+    id: Int32;
+    Bytes;
+}
+
+table VLUnion @944099A8 {
+    id: Int32;
+    union {
+        monkey {
+            name: Text;
+        };
+        text: VLText;
+        empty {};
+    }
+}
+
+table VLRoot @971A3362 {
+    u: VLUnion;
+    l: VLList;
+    t: VLText;
+    b: VLBytes;
+}
