@@ -64,9 +64,12 @@ class Generator:
 						rawType = typeName
 					elif node.type.type == TokenType.BOOL:
 						typeName = "bool"
-						rawType = char
-					#elif node.type.type == TokenType.IDENTIFIER:
-					#	typeName = self.value(node.type)
+						rawType = "char"
+					elif node.type.type == TokenType.IDENTIFIER:
+						typeName = self.value(node.type)
+						if node.enum or node.struct:
+							rawType = typeName
+
 					#	if node.table:
 					#		typeName = "%sOut"%typeName
 					#elif node.type.type == TokenType.TEXT:
@@ -329,6 +332,7 @@ class Generator:
 					self.o("\t%s %s;"%(typeName, self.value(v.identifier)))
 				self.o("};")
 				self.o("#pragma pack(pop)")
+				self.o("namespace scalgoproto {template <> struct MetaMagic<%s> {using t=PodTag;};}"%name)
 				self.o()
 			elif node.t == NodeType.ENUM:
 				assert isinstance(node, Enum)
@@ -339,6 +343,7 @@ class Generator:
 					self.o("\t%s = %d,"%(self.value(ev), index))
 					index += 1
 				self.o("};")
+				self.o("namespace scalgoproto {template <> struct MetaMagic<%s> {using t=EnumTag;};}"%name)
 				self.o()
 			elif node.t == NodeType.TABLE:
 				assert isinstance(node, Table)

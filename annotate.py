@@ -116,7 +116,13 @@ class Annotater:
 				if v.list:
 					if v.type.type == TokenType.IDENTIFIER:
 						typeName = self.value(v.type)
-						if typeName not in self.enums and typeName not in self.structs and typeName not in self.tabels:
+						if typeName in self.enums:
+							v.enum = self.enums[typeName]
+						elif typeName in self.tabels:
+							v.table = self.tabels[typeName]
+						elif typeName in self.structs:
+							v.struct = self.structs[typeName]
+						else:
 							self.error(v.type, "Unknown type")
 					if isStruct:
 						self.error(v.list, "Not allowed in structs")

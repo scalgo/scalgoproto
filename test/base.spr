@@ -65,4 +65,6 @@ table Complex @CCDD589C {
     nbytes: Bytes;
     list: List Int32;
     nlist: List Int32;
+    enumList: List MyEnum;
+    structList: List MyStruct;
 }

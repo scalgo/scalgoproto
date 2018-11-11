@@ -178,7 +178,9 @@ int main(int, char ** argv) {
 		auto l = w.constructList<std::int32_t>(31);
 		for (size_t i=0; i < 31; ++i)
 			l.add(i, 100-2*i);
-
+		auto l2 = w.constructList<MyEnum>(2);
+		l2.add(0, MyEnum::a);
+		auto l3 = w.constructList<MyStruct>(1);
 		auto b = w.constructBytes("bytes", 5);
 		auto t = w.constructText("text");
 		auto s = w.construct<ComplexOut>();
@@ -186,6 +188,8 @@ int main(int, char ** argv) {
 		s.addText(t);
 		s.addBytes(b);
 		s.addList(l);
+		s.addStructList(l3);
+		s.addEnumList(l2);
 		auto [data, size] = w.finalize(s);
 		return !validateOut(data, size, argv[2]);
 	} else if (!strcmp(argv[1], "in_complex")) {
@@ -214,6 +218,19 @@ int main(int, char ** argv) {
 			if (rl.first[i] != 100-2*i) return 1;
 			if (l[i] != 100-2*i) return 1;
 		}
+
+		if (!s.hasEnumList()) return 1;
+		auto l2 = s.getEnumList();
+		if (!l2.has(0)) return 1;
+		if (l2.has(1)) return 1;
+		if (l2[0] != MyEnum::a) return 1;
+		if (l2.size() != 2) return 1;
+
+		if (!s.hasStructList()) return 1;
+		auto l3 = s.getStructList();
+		if (l3.size() != 1) return 1;
+		
+
 		return 0;
 	} else {
 		return 1;

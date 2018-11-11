@@ -54,7 +54,7 @@ struct ListAccessHelp<EnumTag, T> {
 	static constexpr bool optional = true;
 	static constexpr size_t size = sizeof(T);
 	static constexpr int def = 255;
-	static T has(const char * data, uint32_t offset, uint32_t index) noexcept {
+	static bool has(const char * data, uint32_t offset, uint32_t index) noexcept {
 		return ((const unsigned char *)(data + offset))[index] != 255;
 	}
 	static T get(const char * data, uint32_t offset, uint32_t index) noexcept {
@@ -204,7 +204,7 @@ protected:
 	template <typename T, uint32_t o>
 	T getTable_() const {
 		uint32_t off;
-		assert(o + 8 <= size);
+		assert(o + 4 <= size);
 		memcpy(&off, data+offset + o, 4);
 		uint32_t size = T::readSize_(data, off);
 		return T(data, off+8, size);
@@ -213,7 +213,7 @@ protected:
 	template <typename T, uint32_t o>
 	ListIn<T> getList_() const {
 		uint32_t off;
-		assert(o + 8 <= size);
+		assert(o + 4 <= size);
 		memcpy(&off, data+offset + o, 4);
 		uint32_t size = readSize_(data, off, 0x3400BB46);
 
@@ -227,7 +227,7 @@ protected:
 	template <typename T, uint32_t o>
 	std::pair<const T *, size_t> getListRaw_() const {
 		uint32_t off;
-		assert(o + 8 <= size);
+		assert(o + 4 <= size);
 		memcpy(&off, data+offset + o, 4);
 		uint32_t size = readSize_(data, off, 0x3400BB46);
 		return std::make_pair(reinterpret_cast<const T *>(data+off+8), size);
@@ -256,7 +256,7 @@ protected:
 	template <uint32_t o>
 	std::string_view getText_() const {
 		uint32_t off;
-		assert(o + 8 <= size);
+		assert(o + 4 <= size);
 		memcpy(&off, data+offset + o, 4);
 		uint32_t size = readSize_(data, off, 0xD812C8F5);
 		return std::string_view(data+off+8, size);
@@ -265,7 +265,7 @@ protected:
 	template <uint32_t o>
 	std::pair<const void *, size_t> getBytes_() const {
 		uint32_t off;
-		assert(o + 8 <= size);
+		assert(o + 4 <= size);
 		memcpy(&off, data+offset + o, 4);
 		uint32_t size = readSize_(data, off, 0xDCDBBE10);
 		return std::make_pair(data+off+8, size);
