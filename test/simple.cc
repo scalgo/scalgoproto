@@ -17,7 +17,7 @@ bool validateOut(const char * data, size_t size, const char * file) {
 		is.seekg (0, is.end);
 		auto length = is.tellg();
 		is.seekg (0, is.beg);
-		if (length != size) return false;
+		if (length != (int)size) return false;
 		std::vector<char> o;
 		o.resize(size);
 		is.read(o.data(), size);
@@ -175,12 +175,17 @@ int main(int, char ** argv) {
 		scalgoproto::Writer w;
 		auto m = w.construct<MemberOut>();
 		m.addId(42);
+		auto l = w.constructList<std::int32_t>(31);
+		for (size_t i=0; i < 31; ++i)
+			l.add(i, 100-2*i);
+
 		auto b = w.constructBytes("bytes", 5);
 		auto t = w.constructText("text");
 		auto s = w.construct<ComplexOut>();
 		s.addMember(m);
 		s.addText(t);
 		s.addBytes(b);
+		s.addList(l);
 		auto [data, size] = w.finalize(s);
 		return !validateOut(data, size, argv[2]);
 	} else if (!strcmp(argv[1], "in_complex")) {
@@ -197,6 +202,18 @@ int main(int, char ** argv) {
 		if (!s.hasMember()) return 1;
 		auto m = s.getMember();
 		if (m.getId() != 42) return 1;
+
+		if (!s.hasList()) return 1;
+		if (s.hasNlist()) return 1;
+		auto l = s.getList();
+		auto rl = s.getListRaw();
+
+		if (l.size() != 31 || rl.second != 31) return 1;
+
+		for (size_t i=0; i < 31; ++i) {
+			if (rl.first[i] != 100-2*i) return 1;
+			if (l[i] != 100-2*i) return 1;
+		}
 		return 0;
 	} else {
 		return 1;

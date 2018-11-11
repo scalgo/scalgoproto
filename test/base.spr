@@ -63,4 +63,6 @@ table Complex @CCDD589C {
     bytes: Bytes;
     ntext: Text;
     nbytes: Bytes;
+    list: List Int32;
+    nlist: List Int32;
 }

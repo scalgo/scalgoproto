@@ -10,9 +10,169 @@
 
 namespace scalgoproto {
 
+struct EnumTag;
+struct PodTag;
+struct TableTag;
+struct ListTag;
+struct TextTag;
+struct BytesTag;
+struct UnknownTag;
+
+template <typename T> struct MetaMagic {using t=UnknownTag;};
+template <> struct MetaMagic<bool> {using t=PodTag;};
+template <> struct MetaMagic<std::uint8_t> {using t=PodTag;};
+template <> struct MetaMagic<std::uint16_t> {using t=PodTag;};
+template <> struct MetaMagic<std::uint32_t> {using t=PodTag;};
+template <> struct MetaMagic<std::uint64_t> {using t=PodTag;};
+template <> struct MetaMagic<std::int8_t> {using t=PodTag;};
+template <> struct MetaMagic<std::int16_t> {using t=PodTag;};
+template <> struct MetaMagic<std::int32_t> {using t=PodTag;};
+template <> struct MetaMagic<std::int64_t> {using t=PodTag;};
+template <> struct MetaMagic<float> {using t=PodTag;};
+template <> struct MetaMagic<double> {using t=PodTag;};
+
+template <typename Tag, typename T>
+struct ListAccessHelp {};
+
+template <typename T>
+struct ListAccessHelp<PodTag, T> {
+	static constexpr bool optional = false;
+	static constexpr size_t size = sizeof(T);
+	static constexpr int def = 0;
+	static T get(const char * data, uint32_t offset, uint32_t index) noexcept {
+		T ans;
+		memcpy(&ans, data + offset + index * sizeof(T), sizeof(T));
+		return ans;
+	}
+	static void set(char * data, uint32_t offset, uint32_t index, const T & value) noexcept {
+		memcpy(data + offset + index * sizeof(T), &value, sizeof(T));
+	}
+};
+
+template <typename T>
+struct ListAccessHelp<EnumTag, T> {
+	static constexpr bool optional = true;
+	static constexpr size_t size = sizeof(T);
+	static constexpr int def = 255;
+	static T has(const char * data, uint32_t offset, uint32_t index) noexcept {
+		return ((const unsigned char *)(data + offset))[index] != 255;
+	}
+	static T get(const char * data, uint32_t offset, uint32_t index) noexcept {
+		T ans;
+		memcpy(&ans, data + offset + index * sizeof(T), sizeof(T));
+		return ans;
+	}
+	static void set(char * data, uint32_t offset, uint32_t index, const T & value) noexcept {
+		memcpy(data + offset + index * sizeof(T), &value, sizeof(T));
+	}
+};
+
+template <typename T>
+using ListAccess = ListAccessHelp<typename MetaMagic<T>::t, T>;
+
+
 class MagicError: std::runtime_error {
 public:
 	MagicError() : std::runtime_error("MagicError") {}
+};
+
+
+template <typename T>
+class ListIn;
+
+template <typename T>
+class ListInIterator {
+private:
+	const char * data;
+	std::uint32_t offset;
+	std::uint32_t index;
+	using A = ListAccess<T>;
+	friend class ListIn<T>;
+	ListInIterator(const char *data, std::uint32_t offset, std::uint32_t index): data(data), offset(offset), index(index) {}
+public:
+	using value_type = T;
+	using size_type = std::size_t;
+
+	ListInIterator(const ListInIterator &) = default;
+	ListInIterator(ListInIterator &&) = default;
+	ListInIterator & operator=(const ListInIterator &) = default;
+	ListInIterator & operator=(ListInIterator &&) = default;
+
+	explicit operator bool() const noexcept {
+		if constexpr(A::optional)
+			return A::has(data, offset, index);
+		else
+			return true;
+	}
+
+	value_type operator*() const noexcept {
+		if constexpr(A::optional)
+			assert(A::has(data, offset, index));
+		return A::get(data, offset, index);
+	}
+
+	//Compare
+	bool operator < (const ListInIterator & o) const noexcept {return index < o.index;}
+	bool operator > (const ListInIterator & o) const noexcept {return index > o.index;}
+	bool operator <= (const ListInIterator & o) const noexcept {return index <= o.index;}
+	bool operator >= (const ListInIterator & o) const noexcept {return index >= o.index;}
+	bool operator != (const ListInIterator & o) const noexcept {return index != o.index;}
+	bool operator == (const ListInIterator & o) const noexcept {return index == o.index;}
+
+	// Movement
+	ListInIterator & operator++() noexcept {index++;}
+	ListInIterator & operator--() noexcept {index--;}
+	ListInIterator operator++(int) noexcept {ListInIterator t=*this; index++; return t;}
+	ListInIterator operator--(int)  noexcept {ListInIterator t=*this; index--; return t;}
+	ListInIterator operator+(int delta) const noexcept {ListInIterator t=*this; t += delta; return t;}
+	ListInIterator operator-(int delta) const noexcept {ListInIterator t=*this; t -= delta; return t;}
+	ListInIterator & operator+=(int delta) noexcept {index += delta;}
+	ListInIterator & operator-=(int delta) noexcept {index -= delta;}
+};
+
+class In;
+
+template <typename T>
+class ListIn {
+	friend class In;
+	const char * data;
+	std::uint32_t offset;
+	std::uint32_t size_;
+	using A = ListAccess<T>;
+public:
+	using value_type = T;
+	using size_type = std::size_t;
+	using iterator = ListInIterator<T>;
+
+	bool hasFront() const noexcept{
+		if (empty()) return false;
+		if constexpr (A::optional) return A::has(data, offset, 0);
+		else return true;
+	}
+	value_type front() const noexcept {assert(hasFront()); return A::get(data, offset, 0);}
+	bool hasBack() const noexcept{
+		if (empty()) return false;
+		if constexpr (A::optional) return A::has(data, offset, size_-1);
+		else return true;
+	}
+	value_type back() const noexcept {assert(hasBack()); return A::get(data, offset, size_-1);}
+	size_type size() const noexcept {return size_;}
+	bool empty() const noexcept {return size_ == 0;}
+	iterator begin() const noexcept {return ListInIterator(data, offset, 0);}
+	iterator end() const noexcept {return ListInIterator(data, offset, size_);}
+	value_type at(size_type pos) const {
+		if (pos >= size_) throw std::out_of_range("out of range");
+		if (!has(pos)) throw std::out_of_range("unset member");
+		return A::get(data, offset, pos);
+	};
+	value_type operator[] (size_type pos) const noexcept {assert(pos < size_ && has(pos)); return A::get(data, offset, pos);}
+	bool has(size_type pos) const noexcept {
+		if constexpr (A::optional)
+			return A::has(data, offset, pos);
+		else
+			(void)pos;
+		return true;
+	}
 };
 
 class In {
@@ -42,13 +202,36 @@ protected:
 	}
 
 	template <typename T, uint32_t o>
-	T getTable_() const noexcept {
+	T getTable_() const {
 		uint32_t off;
 		assert(o + 8 <= size);
 		memcpy(&off, data+offset + o, 4);
 		uint32_t size = T::readSize_(data, off);
 		return T(data, off+8, size);
 	}
+
+	template <typename T, uint32_t o>
+	ListIn<T> getList_() const {
+		uint32_t off;
+		assert(o + 8 <= size);
+		memcpy(&off, data+offset + o, 4);
+		uint32_t size = readSize_(data, off, 0x3400BB46);
+
+		ListIn<T> ans;
+		ans.data = data;
+		ans.offset = off + 8;
+		ans.size_ = size;
+		return ans;
+	}
+
+	template <typename T, uint32_t o>
+	std::pair<const T *, size_t> getListRaw_() const {
+		uint32_t off;
+		assert(o + 8 <= size);
+		memcpy(&off, data+offset + o, 4);
+		uint32_t size = readSize_(data, off, 0x3400BB46);
+		return std::make_pair(reinterpret_cast<const T *>(data+off+8), size);
+	}	
 
 	template <typename T, uint32_t o>
 	T getVLTable_() const noexcept {
@@ -93,7 +276,7 @@ class Reader {
 private:
 	const char * data;
 public:
-	Reader(const char * data, size_t size): data(data) {}
+	Reader(const char * data, size_t size): data(data) {(void)size;}
 
 	template <typename T>
 	T root() {
@@ -123,6 +306,27 @@ class BytesOut {
 protected:
 	uint32_t offset;
 };
+
+template <typename T>
+class ListOut {
+protected:
+	friend class Writer;
+	friend class Out;
+	char * data;
+	uint32_t offset;
+	uint32_t size_;
+	using A=ListAccess<T>;
+public:
+	using value_type = T;
+	void add(uint32_t index, value_type value) noexcept {
+		assert(index < size_);
+		A::set(data, offset, index, value);
+	}
+	uint32_t size() const noexcept {return size_;}
+};
+
+template <typename A>
+struct MetaMagic<ListOut<A>> {using t=ListTag;};
 
 class Writer {
 private:
@@ -185,7 +389,22 @@ public:
 		write((uint32_t)size, o.offset+4);
 		memcpy(this->data+o.offset+8, data, size);
 		return o;
-	}	
+	}
+
+	template <typename T>
+	ListOut<T> constructList(size_t size) {
+		using A = ListAccess<T>;
+		ListOut<T> o;
+		o.offset = this->size;
+		o.size_ = size;
+		o.data = data;
+		expand(size*A::size+8);
+		write((uint32_t)0x3400BB46, o.offset);
+		write((uint32_t)size, o.offset+4);
+		o.offset += 8;
+		memset(data+o.offset, A::def, size*A::size);
+		return o;
+	}
 };
 
 class Out {
@@ -230,6 +449,11 @@ protected:
 	
 	template <typename T, uint32_t offset>
 	void setTable_(T t) noexcept {
+		setInner_<std::uint32_t, offset>(t.offset-8);
+	}
+
+	template <typename T, uint32_t offset>
+	void setList_(ListOut<T> t) noexcept {
 		setInner_<std::uint32_t, offset>(t.offset-8);
 	}
 

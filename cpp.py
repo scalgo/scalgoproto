@@ -56,7 +56,38 @@ class Generator:
 				assert isinstance(node, Value)
 				n = self.value(node.identifier)
 				uname = n[0].upper() + n[1:]
-				if node.type.type in typeMap:
+				if node.list:
+					typeName:str = None
+					rawType:str = None
+					if node.type.type in typeMap:
+						typeName = typeMap[node.type.type]
+						rawType = typeName
+					elif node.type.type == TokenType.BOOL:
+						typeName = "bool"
+						rawType = char
+					#elif node.type.type == TokenType.IDENTIFIER:
+					#	typeName = self.value(node.type)
+					#	if node.table:
+					#		typeName = "%sOut"%typeName
+					#elif node.type.type == TokenType.TEXT:
+					#	typeName = "TextOut"
+					#elif node.type.type == TokenType.BYTES:
+					#	typeName = "BytesOut";
+					else:
+						assert False
+					self.o("\tbool has%s() const noexcept {"%(uname))
+					self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
+					self.o("\t}")
+					self.o("\tscalgoproto::ListIn<%s> get%s() const {"%(typeName, uname))
+					self.o("\t\tassert(has%s());"%uname)
+					self.o("\t\treturn getList_<%s, %d>();"%(typeName, node.offset))
+					self.o("\t}")
+					if rawType:
+						self.o("\tstd::pair<const %s *, size_t> get%sRaw() const {"%(rawType, uname))
+						self.o("\t\tassert(has%s());"%uname)
+						self.o("\t\treturn getListRaw_<%s, %d>();"%(rawType, node.offset))
+						self.o("\t}")
+				elif node.type.type in typeMap:
 					typeName = typeMap[node.type.type]
 					if node.optional:
 						self.o("\tbool has%s() const noexcept {"%( uname))
@@ -116,14 +147,14 @@ class Generator:
 					self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
 					self.o("\t}")
 					self.o("\tstd::string_view get%s() {"%(uname))
-					self.o("\tgetText_<%d>();"%(node.offset))
+					self.o("\t\treturn getText_<%d>();"%(node.offset))
 					self.o("\t}")
 				elif node.type.type == TokenType.BYTES:
 					self.o("\tbool has%s() const noexcept {"%(uname))
 					self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
 					self.o("\t}")
 					self.o("\tstd::pair<const void*, size_t> get%s()  {"%(uname))
-					self.o("\tgetBytes_<%d>();"%(node.offset))
+					self.o("\t\treturn getBytes_<%d>();"%(node.offset))
 					self.o("\t}")
 				else:
 					assert False
@@ -180,7 +211,24 @@ class Generator:
 				assert isinstance(node, Value)
 				n = self.value(node.identifier)
 				uname = n[0].upper() + n[1:]
-				if node.type.type in typeMap:
+				if node.list:
+					typenName:str = None
+					if node.type.type in typeMap:
+						typeName = typeMap[node.type.type]
+					elif node.type.type == TokenType.BOOL:
+						typeName = "bool"
+					elif node.type.type == TokenType.IDENTIFIER:
+						typeName = self.value(node.type)
+						if node.table:
+							typeName = "%sOut"%typeName
+					elif node.type.type == TokenType.TEXT:
+						typeName = "TextOut"
+					elif node.type.type == TokenType.BYTES:
+						typeName = "BytesOut";
+					self.o("\tvoid add%s(scalgoproto::ListOut<%s> value) noexcept {"%(uname, typeName))
+					self.o("\t\tsetList_<%s, %d>(value);"%(typeName, node.offset))
+					self.o("\t}")
+				elif node.type.type in typeMap:
 					typeName = typeMap[node.type.type]
 					self.o("\tvoid add%s(%s value) noexcept {"%(uname, typeName))
 					if node.optional and node.type.type not in (TokenType.FLOAT32, TokenType.FLOAT64):
