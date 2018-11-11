@@ -233,6 +233,9 @@ class VLText(AstNode):
 		super().__init__(NodeType.VLTEXT, token)
 
 class VLList(AstNode):
+	table: Table = None
+	enum: Enum = None
+	struct: Struct = None
 	def __init__(self, token: Token, type: Token) -> None:
 		super().__init__(NodeType.VLLIST, token)
 		self.type = type

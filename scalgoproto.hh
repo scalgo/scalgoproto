@@ -329,6 +329,26 @@ protected:
 	}	
 
 	template <typename T, uint32_t o>
+	ListIn<T> getVLList_() const {
+		uint32_t s;
+		assert(o + 4 <= size);
+		memcpy(&s, data + offset + o, 4);
+		ListIn<T> ans;
+		ans.data = data;
+		ans.offset = offset + size;
+		ans.size_ = s;
+		return ans;
+	}
+
+	template <typename T, uint32_t o>
+	std::pair<const T *, size_t> getVLListRaw_() const {
+		uint32_t s;
+		assert(o + 4 <= size);
+		memcpy(&s, data + offset + o, 4);
+		return std::make_pair(reinterpret_cast<const T *>(data+offset+size), s);
+	}	
+
+	template <typename T, uint32_t o>
 	T getVLTable_() const noexcept {
 		return T(data, offset+size, getInner_<std::uint32_t, o>());
 	}
@@ -364,6 +384,22 @@ protected:
 		memcpy(&off, data+offset + o, 4);
 		uint32_t size = readSize_(data, off, 0xDCDBBE10);
 		return std::make_pair(data+off+8, size);
+	}
+
+	template <uint32_t o>
+	std::string_view getVLText_() const {
+		uint32_t s;
+		assert(o + 4 <= size);
+		memcpy(&s, data + offset + o, 4);
+		return std::string_view(data + offset + size, s);
+	}
+
+	template <uint32_t o>
+	std::pair<const void *, size_t> getVLBytes_() const {
+		uint32_t s;
+		assert(o + 4 <= size);
+		memcpy(&s, data + offset + o, 4);
+		return std::make_pair(data + offset + size, s);
 	}
 };
 
@@ -402,16 +438,14 @@ class ListOut {
 protected:
 	friend class Writer;
 	friend class Out;
-	char * data;
+	Writer & writer;
 	uint32_t offset;
 	uint32_t size_;
 	using A=ListAccess<T>;
+	ListOut(Writer & writer, uint32_t offset, uint32_t size_): writer(writer), offset(offset), size_(size_) {}
 public:
 	using value_type = T;
-	void add(uint32_t index, value_type value) noexcept {
-		assert(index < size_);
-		A::set(data, offset, index, value);
-	}
+	void add(uint32_t index, value_type value) noexcept;
 	uint32_t size() const noexcept {return size_;}
 };
 
@@ -424,7 +458,7 @@ private:
 	size_t size = 0;
 	size_t capacity = 0;
 	friend class Out;
-
+	template <typename> friend class ListOut;
 	void reserve(size_t size) {
 		if (size <= capacity) return;
 		data = (char *)realloc(data, size);
@@ -484,10 +518,7 @@ public:
 	template <typename T>
 	ListOut<T> constructList(size_t size) {
 		using A = ListAccess<T>;
-		ListOut<T> o;
-		o.offset = this->size;
-		o.size_ = size;
-		o.data = data;
+		ListOut<T> o(*this, this->size, size);
 		expand(size*A::size+8);
 		write((uint32_t)0x3400BB46, o.offset);
 		write((uint32_t)size, o.offset+4);
@@ -499,6 +530,12 @@ public:
 	ListOut<TextOut> constructTextList(size_t size) {return constructList<TextOut>(size);}
 	ListOut<BytesOut> constructBytesList(size_t size) {return constructList<BytesOut>(size);}
 };
+
+template <typename T>
+void ListOut<T>::add(uint32_t index, value_type value) noexcept {
+	assert(index < size_);
+	A::set(writer.data, offset, index, value);
+}
 
 class Out {
 protected:
@@ -517,11 +554,6 @@ protected:
 		}
 		writer.expand(size);
 		memcpy(writer.data + offset, def, size);
-	}
-
-	template <typename T>
-	T constructUnionMember_() const noexcept {
-		return T(writer, false);
 	}
 
 	template <typename T, uint32_t o>
@@ -564,6 +596,38 @@ protected:
 	template <uint32_t offset>
 	void setBytes_(BytesOut t) noexcept {
 		setInner_<std::uint32_t, offset>(t.offset);
+	}
+
+	template <typename T>
+	T constructUnionMember_() const noexcept {
+		return T(writer, false);
+	}
+
+	template <uint32_t offset>
+	void addVLBytes_(const char *data, size_t size) noexcept {
+		setInner_<uint32_t, offset>(size);
+		auto start = writer.size;
+		writer.expand(size);
+		memcpy(writer.data+start, data, size);
+	}
+
+	template <uint32_t offset>
+	void addVLText_(std::string_view str) noexcept {
+		setInner_<uint32_t, offset>(str.size());
+		auto start = writer.size;
+		writer.expand(str.size());
+		memcpy(writer.data+start, str.data(), str.size());
+	}
+
+	template <uint32_t offset, typename T>
+	ListOut<T> addVLList_(size_t size) noexcept {
+		setInner_<uint32_t, offset>(size);
+		using A = ListAccess<T>;
+		ListOut<T> o(writer, writer.size, size);
+		size_t bsize = size * A::size;
+		writer.expand(bsize);
+		memset(writer.data+o.offset, A::def, bsize);
+		return o;
 	}
 };
 

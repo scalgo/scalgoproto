@@ -6,7 +6,7 @@
 #include <cstdio>
 #include <vector>
 
-constexpr bool writeMode = true;
+constexpr bool writeMode = false;
 
 bool validateOut(const char * data, size_t size, const char * file) {
 	if (writeMode) {
@@ -271,21 +271,70 @@ int main(int, char ** argv) {
 		auto u = w.construct<VLUnionOut>();
 		u.addMonkey().addName(name);
 
+		auto u2 = w.construct<VLUnionOut>();
+		u2.addText().addText("foobar");
+
+		auto t = w.construct<VLTextOut>();
+		t.addId(45);
+		t.addText("cake");
+
+		auto b = w.construct<VLBytesOut>();
+		b.addId(46);
+		b.addBytes("hi", 2);
+
+		auto l = w.construct<VLListOut>();
+		l.addId(47);
+		auto ll = l.addList(2);
+		ll.add(0, 24);
+		ll.add(1, 99);
+
 		auto root = w.construct<VLRootOut>();
 		root.addU(u);
+		root.addU2(u2);
+		root.addT(t);
+		root.addB(b);
+		root.addL(l);
 		auto [data, size] = w.finalize(root);
 		return !validateOut(data, size, argv[2]);
 	} else if (!strcmp(argv[1], "in_vl")) {
 		auto o = readIn(argv[2]);
 		scalgoproto::Reader r(o.data(), o.size());
 		auto s = r.root<VLRootIn>();
+
 		if (!s.hasU()) return 1;
-		
 		auto u = s.getU();
 		if (!u.isMonkey()) return 1;
 		auto monkey = u.getMonkey();
 		if (!monkey.hasName()) return 1;
 		if (monkey.getName() != "nilson") return 1;
+
+		if (!s.hasU2()) return 1;
+		auto u2 = s.getU2();
+		if (!u2.isText()) return 1;
+		auto u2t = u2.getText();
+		if (!u2t.hasText()) return 1;
+		if (u2t.getText() != "foobar") return 1; //TODO this failes
+
+		if (!s.hasT()) return 1;
+		auto t = s.getT();
+		if (t.getId() != 45) return 1;
+		if (!t.hasText()) return 1;
+		if (t.getText() != "cake") return 1;
+
+		if (!s.hasB()) return 1;
+		auto b = s.getB();
+		if (b.getId() != 46) return 1;
+		if (!b.hasBytes()) return 1;
+		if (b.getBytes().second != 2 || memcmp(b.getBytes().first, "hi", 2)) return 1;
+
+		if (!s.hasL()) return 1;
+		auto l = s.getL();
+		if (l.getId() != 47) return 1;
+		if (!l.hasList()) return 1;
+		auto ll = l.getList();
+		if (ll.size() != 2) return 1;
+		if (ll[0] != 24) return 1;
+		if (ll[1] != 99) return 1;
 		return 0;		
 	} else {
 		return 1;

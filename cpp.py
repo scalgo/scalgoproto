@@ -5,12 +5,25 @@ Validate a schema
 from parser import Parser, ParseError
 from annotate import annotate
 
-from parser import TokenType, NodeType, Token, Struct, AstNode, Value, Enum, Table, VLUnion, VLList
-from typing import Set, Dict, List, TextIO
+from parser import TokenType, NodeType, Token, Struct, AstNode, Value, Enum, Table, VLUnion, VLList, VLBytes, VLText
+from typing import Set, Dict, List, TextIO, Tuple, Union
 from types import SimpleNamespace
 
 class Generator:
 	out: TextIO = None
+	typeMap = {
+		TokenType.INT8: "std::int8_t",
+		TokenType.INT16: "std::int16_t",
+		TokenType.INT32: "std::int32_t",
+		TokenType.INT64: "std::int64_t",
+		TokenType.UINT8: "std::uint8_t",
+		TokenType.UINT16: "std::uint16_t",
+		TokenType.UINT32: "std::uint32_t",
+		TokenType.UINT64: "std::uint64_t",
+		TokenType.FLOAT32: "float",
+		TokenType.FLOAT64: "double",
+	}
+
 
 	def o(self, text=""):
 		print(text, file=self.out)
@@ -22,20 +35,47 @@ class Generator:
 	def value(self, t:Token) -> str:
 		return self.data[t.index: t.index + t.length]
 
-	def generateTable(self, table:Table ) -> None:
-		typeMap = {
-			TokenType.INT8: "std::int8_t",
-			TokenType.INT16: "std::int16_t",
-			TokenType.INT32: "std::int32_t",
-			TokenType.INT64: "std::int64_t",
-			TokenType.UINT8: "std::uint8_t",
-			TokenType.UINT16: "std::uint16_t",
-			TokenType.UINT32: "std::uint32_t",
-			TokenType.UINT64: "std::uint64_t",
-			TokenType.FLOAT32: "float",
-			TokenType.FLOAT64: "double",
-		}
 
+	def listTypes(self, node: Union[Value, VLList]) -> Tuple[str,str]:
+		typeName:str = None
+		rawType:str = None
+		if node.type.type in self.typeMap:
+			typeName = self.typeMap[node.type.type]
+			rawType = typeName
+		elif node.type.type == TokenType.BOOL:
+			typeName = "bool"
+			rawType = "char"
+		elif node.type.type == TokenType.IDENTIFIER:
+			typeName = self.value(node.type)
+			if node.enum or node.struct:
+				rawType = typeName
+			if node.table:
+				typeName = "%sIn"%typeName
+		elif node.type.type == TokenType.TEXT:
+			typeName = "std::string_view"
+		elif node.type.type == TokenType.BYTES:
+			typeName = "std::pair<const void *, size_t>"
+		else:
+			assert False
+		return (typeName, rawType)
+
+	def outListType(self, node: Union[Value, VLList]) -> str:
+		typeName:str = None
+		if node.type.type in self.typeMap:
+			typeName = self.typeMap[node.type.type]
+		elif node.type.type == TokenType.BOOL:
+			typeName = "bool"
+		elif node.type.type == TokenType.IDENTIFIER:
+			typeName = self.value(node.type)
+			if node.table:
+				typeName = "%sOut"%typeName
+		elif node.type.type == TokenType.TEXT:
+			typeName = "scalgoproto::TextOut"
+		elif node.type.type == TokenType.BYTES:
+			typeName = "scalgoproto::BytesOut"
+		return typeName
+
+	def generateTable(self, table:Table ) -> None:
 		for node in table.values:
 			if node.t == NodeType.VLUNION:
 				assert isinstance(node, VLUnion)
@@ -58,26 +98,7 @@ class Generator:
 				n = self.value(node.identifier)
 				uname = n[0].upper() + n[1:]
 				if node.list:
-					typeName:str = None
-					rawType:str = None
-					if node.type.type in typeMap:
-						typeName = typeMap[node.type.type]
-						rawType = typeName
-					elif node.type.type == TokenType.BOOL:
-						typeName = "bool"
-						rawType = "char"
-					elif node.type.type == TokenType.IDENTIFIER:
-						typeName = self.value(node.type)
-						if node.enum or node.struct:
-							rawType = typeName
-						if node.table:
-							typeName = "%sIn"%typeName
-					elif node.type.type == TokenType.TEXT:
-						typeName = "std::string_view"
-					elif node.type.type == TokenType.BYTES:
-						typeName = "std::pair<const void *, size_t>"
-					else:
-						assert False
+					typeName, rawType = self.listTypes(node)
 					self.o("\tbool has%s() const noexcept {"%(uname))
 					self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
 					self.o("\t}")
@@ -90,8 +111,8 @@ class Generator:
 						self.o("\t\tassert(has%s());"%uname)
 						self.o("\t\treturn getListRaw_<%s, %d>();"%(rawType, node.offset))
 						self.o("\t}")
-				elif node.type.type in typeMap:
-					typeName = typeMap[node.type.type]
+				elif node.type.type in self.typeMap:
+					typeName = self.typeMap[node.type.type]
 					if node.optional:
 						self.o("\tbool has%s() const noexcept {"%( uname))
 						if node.type.type in (TokenType.FLOAT32, TokenType.FLOAT64):
@@ -185,11 +206,37 @@ class Generator:
 						self.o("\t\treturn getVLTable_<%sIn, %d>();"%(tbl.name, node.offset+2))
 						self.o("\t}")
 			elif node.t == NodeType.VLBYTES:
-				pass #TODO
+				assert isinstance(node, VLBytes)
+				self.o("\tbool hasBytes() const noexcept {")
+				self.o("\t\treturn getInner_<std::uint32_t, %d>() != 0;"%(node.offset))
+				self.o("\t}")
+				self.o("\tstd::pair<const void *, size_t> getBytes() const noexcept {")
+				self.o("\t\tassert(hasBytes());")
+				self.o("\t\treturn getVLBytes_<%d>();"%(node.offset))
+				self.o("\t}")
 			elif node.t == NodeType.VLLIST:
-				pass #TODO
+				assert isinstance(node, VLList)
+				typeName, rawType = self.listTypes(node)
+				self.o("\tbool hasList() const noexcept {")
+				self.o("\t\treturn getInner_<std::uint32_t, %d>() != 0;"%(node.offset))
+				self.o("\t}")
+				self.o("\tscalgoproto::ListIn<%s> getList() const {"%(typeName))
+				self.o("\t\treturn getVLList_<%s, %d>();"%(typeName, node.offset))
+				self.o("\t}")
+				if rawType:
+					self.o("\tstd::pair<const %s *, size_t> getListRaw() const {"%(rawType))
+					self.o("\t\tassert(hasList());")
+					self.o("\t\treturn getVLListRaw_<%s, %d>();"%(rawType, node.offset))
+					self.o("\t}")
 			elif node.t == NodeType.VLTEXT:
-				pass #TODO
+				assert isinstance(node,VLText)
+				self.o("\tbool hasText() const noexcept {")
+				self.o("\t\treturn getInner_<std::uint32_t, %d>() != 0;"%(node.offset))
+				self.o("\t}")
+				self.o("\tstd::string_view getText() const noexcept {")
+				self.o("\t\tassert(hasText());")
+				self.o("\t\treturn getVLText_<%d>();"%(node.offset))
+				self.o("\t}")
 			else:
 				assert(False)
 		self.o("};")
@@ -224,24 +271,12 @@ class Generator:
 				n = self.value(node.identifier)
 				uname = n[0].upper() + n[1:]
 				if node.list:
-					typenName:str = None
-					if node.type.type in typeMap:
-						typeName = typeMap[node.type.type]
-					elif node.type.type == TokenType.BOOL:
-						typeName = "bool"
-					elif node.type.type == TokenType.IDENTIFIER:
-						typeName = self.value(node.type)
-						if node.table:
-							typeName = "%sOut"%typeName
-					elif node.type.type == TokenType.TEXT:
-						typeName = "scalgoproto::TextOut"
-					elif node.type.type == TokenType.BYTES:
-						typeName = "scalgoproto::BytesOut"
+					typeName = self.outListType(node)
 					self.o("\tvoid add%s(scalgoproto::ListOut<%s> value) noexcept {"%(uname, typeName))
 					self.o("\t\tsetList_<%s, %d>(value);"%(typeName, node.offset))
 					self.o("\t}")
-				elif node.type.type in typeMap:
-					typeName = typeMap[node.type.type]
+				elif node.type.type in self.typeMap:
+					typeName = self.typeMap[node.type.type]
 					self.o("\tvoid add%s(%s value) noexcept {"%(uname, typeName))
 					if node.optional and node.type.type not in (TokenType.FLOAT32, TokenType.FLOAT64):
 						self.o("\t\tsetBit_<%d, %d>();"%(node.hasOffset, node.hasBit))
@@ -307,13 +342,22 @@ class Generator:
 						self.o("\t\tsetInner_<std::uint32_t, %d>(%d);"%(node.offset+4, 0))
 						self.o("\t}")
 					idx += 1
-					# self.o("\t\treturn %sOut(data, offset+size, getInner_<std::uint32_t, %d>());"%(tname, node.offset+2))
 			elif node.t == NodeType.VLBYTES:
-				pass #TODO
+				assert isinstance(node, VLBytes)
+				self.o("\tvoid addBytes(const char * data, size_t size) noexcept {")
+				self.o("\t\taddVLBytes_<%d>(data, size);"%(node.offset))
+				self.o("\t}")
 			elif node.t == NodeType.VLLIST:
-				pass #TODO
+				assert isinstance(node, VLList)
+				typeName = self.outListType(node)
+				self.o("\tscalgoproto::ListOut<%s> addList(size_t size) noexcept {"%(typeName))
+				self.o("\t\treturn addVLList_<%d, %s>(size);"%(node.offset, typeName))
+				self.o("\t}")
 			elif node.t == NodeType.VLTEXT:
-				pass #TODO
+				assert isinstance(node,VLText)
+				self.o("\tvoid addText(std::string_view text) noexcept {")
+				self.o("\t\taddVLText_<%d>(text);"%(node.offset))
+				self.o("\t}")
 			else:
 				assert(False)
 		self.o("};")

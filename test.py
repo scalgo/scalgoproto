@@ -48,8 +48,8 @@ if __name__ == '__main__':
 		runTest("cpp in simple", lambda: runCpp("in", "test/simple.bin"))
 		runTest("cpp out complex", lambda: runCpp("out_complex", "test/complex.bin"))
 		runTest("cpp in complex", lambda: runCpp("in_complex", "test/complex.bin"))
-		runTest("cpp out vl", lambda: runCpp("out_vl", "test/complex.bin"))
-		runTest("cpp in vl", lambda: runCpp("in_vl", "test/complex.bin"))
+		runTest("cpp out vl", lambda: runCpp("out_vl", "test/vl.bin"))
+		runTest("cpp in vl", lambda: runCpp("in_vl", "test/vl.bin"))
 
 	print("="*80)
 	if not failures:
