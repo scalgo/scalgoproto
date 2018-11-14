@@ -3,7 +3,7 @@
 Parse a protocol description and generate an ast
 """
 import enum
-from typing import NamedTuple, Dict, Iterator, List
+from typing import NamedTuple, Dict, Iterator, List, Union
 
 class TokenType(enum.Enum):
 	BAD = 0
@@ -210,6 +210,7 @@ class Value(AstNode):
 	table: Table = None
 	enum: Enum = None
 	struct: Struct = None
+	parsedValue: Union[int, float] = 0
 	
 	def __init__(self, token: Token, identifier: Token, value: Token, type: Token, optional: Token, list: Token) -> None:
 		super().__init__(NodeType.VALUE, token)

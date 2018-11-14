@@ -8,6 +8,7 @@ from annotate import annotate
 from parser import TokenType, NodeType, Token, Struct, AstNode, Value, Enum, Table, VLUnion, VLList, VLBytes, VLText
 from typing import Set, Dict, List, TextIO, Tuple, Union
 from types import SimpleNamespace
+import math
 
 class Generator:
 	out: TextIO = None
@@ -124,7 +125,7 @@ class Generator:
 					self.o("\t%s get%s() const noexcept {"%(typeName, uname))
 					if node.optional:
 						self.o("\t\tassert(has%s());"%uname)
-					self.o("\t\treturn getInner_<%s, %d>(0);"%( typeName, node.offset))
+					self.o("\t\treturn getInner_<%s, %d>(%s);"%(typeName, node.offset, node.parsedValue if not math.isnan(node.parsedValue) else "NAN"))
 					self.o("\t}")
 				elif node.type.type == TokenType.BOOL:
 					if node.optional:
@@ -144,7 +145,7 @@ class Generator:
 						self.o("\t}")
 						self.o("\t%s get%s() const noexcept {"%(typeName, uname))
 						self.o("\t\tassert(has%s());"%uname)
-						self.o("\t\treturn (%s)getInner_<std::uint8_t, %d>(0);"%(typeName, node.offset))
+						self.o("\t\treturn (%s)getInner_<std::uint8_t, %d>(%s);"%(typeName, node.offset, node.parsedValue))
 						self.o("\t}")
 					elif node.struct:
 						if node.optional:

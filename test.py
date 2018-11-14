@@ -50,7 +50,10 @@ if __name__ == '__main__':
 		runTest("cpp in complex", lambda: runCpp("in_complex", "test/complex.bin"))
 		runTest("cpp out vl", lambda: runCpp("out_vl", "test/vl.bin"))
 		runTest("cpp in vl", lambda: runCpp("in_vl", "test/vl.bin"))
-
+		runTest("cpp out extend1", lambda: runCpp("out_extend1", "test/extend1.bin"))
+		runTest("cpp in extend1", lambda: runCpp("in_extend1", "test/extend1.bin"))
+		runTest("cpp out extend2", lambda: runCpp("out_extend2", "test/extend2.bin"))
+		runTest("cpp in extend2", lambda: runCpp("in_extend2", "test/extend2.bin"))
 	print("="*80)
 	if not failures:
 		print("ALL GOOD")

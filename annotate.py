@@ -142,9 +142,11 @@ class Annotater:
 					boolBit += 1
 				elif v.type.type in (TokenType.UINT8, TokenType.INT8, TokenType.BOOL):
 					if v.type.type == TokenType.UINT8:
-						default.append(struct.pack("<B", self.getInt(v.value, 0, 255, 0)))
+						v.parsedValue = self.getInt(v.value, 0, 255, 0)
+						default.append(struct.pack("<B", v.parsedValue))
 					elif v.type.type == TokenType.INT8:
-						default.append(struct.pack("<b", self.getInt(v.value, -128, 127, 0)))
+						v.parsedValue = self.getInt(v.value, -128, 127, 0)
+						default.append(struct.pack("<b", v.parsedValue))
 					elif v.type.type == TokenType.BOOL:
 						default.append(b"\0")
 					else:
@@ -153,31 +155,39 @@ class Annotater:
 					v.offset = bytes
 				elif v.type.type in (TokenType.UINT16, TokenType.INT16):
 					if v.type.type == TokenType.UINT16:
-						default.append(struct.pack("<H", self.getInt(v.value, 0, 2**16-1, 0)))
+						v.parsedValue = self.getInt(v.value, 0, 2**16-1, 0)
+						default.append(struct.pack("<H", v.parsedValue))
 					elif v.type.type == TokenType.INT16:
-						default.append(struct.pack("<h", self.getInt(v.value, -2**15, 2**15-1, 0)))
+						v.parsedValue = self.getInt(v.value, -2**15, 2**15-1, 0)
+						default.append(struct.pack("<h", v.parsedValue))
 					else:
 						self.error(v.type.type, "Internal error")
 					v.bytes = 2
 					v.offset = bytes
 				elif v.type.type in (TokenType.UINT32, TokenType.INT32, TokenType.FLOAT32):
 					if v.type.type == TokenType.UINT32:
-						default.append(struct.pack("<I", self.getInt(v.value, 0, 2**32-1, 0)))
+						v.parsedValue = self.getInt(v.value, 0, 2**32-1, 0)
+						default.append(struct.pack("<I", v.parsedValue))
 					elif v.type.type == TokenType.INT32:
-						default.append(struct.pack("<i", self.getInt(v.value, -2**31, 2**31-1, 0)))
+						v.parsedValue = self.getInt(v.value, -2**31, 2**31-1, 0)
+						default.append(struct.pack("<i", v.parsedValue))
 					elif v.type.type == TokenType.FLOAT32:
-						default.append(struct.pack("<f", self.getFloat(v.value, float('nan') if v.optional else 0.0)))
+						v.parsedValue = self.getFloat(v.value, float('nan') if v.optional else 0.0)
+						default.append(struct.pack("<f", v.parsedValue))
 					else:
 						self.error(v.type.type, "Internal error")
 					v.bytes = 4
 					v.offset = bytes
 				elif v.type.type in (TokenType.UINT64, TokenType.INT64, TokenType.FLOAT64):
 					if v.type.type == TokenType.UINT64:
-						default.append(struct.pack("<Q", self.getInt(v.value, 0, 2**64-1, 0)))
+						v.parsedValue = self.getInt(v.value, 0, 2**64-1, 0)
+						default.append(struct.pack("<Q", v.parsedValue))
 					elif v.type.type == TokenType.INT64:
-						default.append(struct.pack("<q", self.getInt(v.value, -2**64, 2**64-1, 0)))
+						v.parsedValue = self.getInt(v.value, -2**64, 2**64-1, 0)
+						default.append(struct.pack("<q", v.parsedValue))
 					elif v.type.type == TokenType.FLOAT64:
-						default.append(struct.pack("<d", self.getFloat(v.value, float('nan') if v.optional else 0.0)))
+						v.parsedValue = self.getFloat(v.value, float('nan') if v.optional else 0.0)
+						default.append(struct.pack("<d", v.parsedValue))
 					else:
 						self.error(v.type.type, "Internal error")
 					v.bytes = 8
@@ -196,10 +206,17 @@ class Annotater:
 				elif typeName in self.enums:
 					if v.optional:
 						self.error(v.optional, "Are alwayes optional")
-					default.append(b"\xff")
+					v.enum = self.enums[typeName]
+					d = 255
+					if v.value:
+						dn = self.value(v.value)
+						if not dn in v.enum.annotatedValues:
+							self.error(v.value, "Not member of enum")
+						d = v.enum.annotatedValues[dn]
+					v.parsedValue = d
+					default.append(struct.pack("<B", d))
 					v.bytes = 1
 					v.offset = bytes
-					v.enum = self.enums[typeName]
 				elif typeName in self.structs:
 					if v.optional:
 						if boolBit == 8:

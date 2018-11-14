@@ -105,3 +105,68 @@ table VLRoot @971A3362 {
     t: VLText;
     b: VLBytes;
 }
+
+table Gen1 @B4957DF9 {
+    aa: Int32;
+}
+
+table Gen2 @B4957DF9 {
+    aa: Int32;
+    bb: Int32 = 42;
+    union {
+    	  monkey {},
+	  cake {v:Int32},
+    }
+}
+
+table Gen3 @B4957DF9 {
+    aa: Int32;
+    bb: Int32 = 42;
+
+    union {
+    	  monkey {},
+         cake {v:Int32},
+         bat {}
+    }
+
+    e: MyEnum = c;
+    s: MyStruct;
+    b: Bool;
+    u8: UInt8 = 2;
+    u16: UInt16 = 3;
+    u32: UInt32 = 4;
+    u64: UInt64 = 5;
+    i8: Int8 = 6;
+    i16: Int16 = 7;
+    i32: Int32 = 8;
+    i64: Int64 = 9;
+    f: Float32 = 10;
+    d: Float64 = 11;
+
+    os: Optional MyStruct;
+    ob: Optional Bool;
+    ou8: Optional UInt8;
+    ou16: Optional UInt16;
+    ou32: Optional UInt32;
+    ou64: Optional UInt64;
+    oi8: Optional Int8;
+    oi16: Optional Int16;
+    oi32: Optional Int32;
+    oi64: Optional Int64;
+    of: Optional Float32;
+    od: Optional Float64;
+
+    member: Member;
+    nmember: Member;
+    text: Text;
+    bytes: Bytes;
+    ntext: Text;
+    nbytes: Bytes;
+    list: List Int32;
+    nlist: List Int32;
+    enumList: List MyEnum;
+    structList: List MyStruct;
+    textList: List Text;
+    bytesList: List Bytes;
+    memberList: List Member;
+}
