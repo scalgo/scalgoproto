@@ -313,8 +313,8 @@ int main(int, char ** argv) {
 		if (!u2.isText()) return 1;
 		auto u2t = u2.getText();
 		if (!u2t.hasText()) return 1;
-		if (u2t.getText() != "foobar") return 1; //TODO this failes
-
+		if (u2t.getText() != "foobar") return 1;
+		
 		if (!s.hasT()) return 1;
 		auto t = s.getT();
 		if (t.getId() != 45) return 1;

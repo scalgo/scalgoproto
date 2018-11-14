@@ -332,14 +332,14 @@ class Generator:
 						self.o("\t%sOut add%s() noexcept {"%(tbl.name, uname))
 						self.o("\t\tassert(!hasType());")
 						self.o("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
-						self.o("\t\tsetInner_<std::uint32_t, %d>(%d);"%(node.offset+4, len(tbl.default)))
+						self.o("\t\tsetInner_<std::uint32_t, %d>(%d);"%(node.offset+2, len(tbl.default)))
 						self.o("\t\treturn constructUnionMember_<%sOut>();"%tbl.name)
 						self.o("\t}")
 					else:
 						self.o("\tvoid add%s() noexcept {"%(uname))
 						self.o("\t\tassert(!hasType());")
 						self.o("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
-						self.o("\t\tsetInner_<std::uint32_t, %d>(%d);"%(node.offset+4, 0))
+						self.o("\t\tsetInner_<std::uint32_t, %d>(%d);"%(node.offset+2, 0))
 						self.o("\t}")
 					idx += 1
 			elif node.t == NodeType.VLBYTES:
