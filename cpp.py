@@ -90,8 +90,8 @@ class Generator:
 		self.o("\tfriend class scalgoproto::Reader;")
 		self.o("\ttemplate <typename, typename> friend class scalgoproto::ListAccessHelp;")
 		self.o("protected:")
-		self.o("\t%sIn(const char * data, std::uint32_t offset, std::uint32_t size): scalgoproto::In(data, offset, size) {}"%table.name)
-		self.o("\tstatic uint32_t readSize_(const char * data, std::uint32_t offset) { return scalgoproto::In::readSize_(data, offset, 0x%08X); }"%(table.magic))
+		self.o("\t%sIn(const scalgoproto::Reader & reader, const char * start, std::uint32_t size): scalgoproto::In(reader, start, size) {}"%table.name)
+		self.o("\tstatic uint32_t readSize_(const scalgoproto::Reader & reader, std::uint32_t offset) { return In::readObjectSize_<0x%08X>(reader, offset); }"%(table.magic))
 		self.o("public:")
 		for node in table.values:
 			if node.t == NodeType.VALUE:
