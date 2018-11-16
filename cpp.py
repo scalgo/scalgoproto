@@ -76,6 +76,22 @@ class Generator:
 			typeName = "scalgoproto::BytesOut"
 		return typeName
 
+	def outputDoc(self, node: AstNode, indent:str="", prefix:List[str] = [], suffix:List[str] = []):
+		if not node.docstring and not suffix and not prefix: return
+		self.o("%s/**"%indent)
+		for line in prefix:
+			self.o("%s * %s"%(indent, line))
+		if prefix and (node.docstring or suffix):
+			self.o("%s *"%indent)
+		if node.docstring:
+			for line in node.docstring:
+				self.o("%s * %s"%(indent, line))
+		if node.docstring and suffix:
+			self.o("%s *"%indent)
+		for line in suffix:
+			self.o("%s * %s"%(indent, line))
+		self.o("%s */"%indent)
+	
 	def generateTable(self, table:Table ) -> None:
 		for node in table.values:
 			if node.t == NodeType.VLUNION:
@@ -85,6 +101,7 @@ class Generator:
 						assert isinstance(member, Table)
 						if member.values:
 							self.generateTable(member)
+		self.outputDoc(table)
 		self.o("class %sIn: public scalgoproto::In {"%table.name)
 		self.o("\tfriend class scalgoproto::In;")
 		self.o("\tfriend class scalgoproto::Reader;")
@@ -103,11 +120,15 @@ class Generator:
 					self.o("\tbool has%s() const noexcept {"%(uname))
 					self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
 					self.o("\t}")
+					self.o("\t")
+					self.outputDoc(node, "\t")
 					self.o("\tscalgoproto::ListIn<%s> get%s() const {"%(typeName, uname))
 					self.o("\t\tassert(has%s());"%uname)
 					self.o("\t\treturn getList_<%s, %d>();"%(typeName, node.offset))
 					self.o("\t}")
 					if rawType:
+						self.o("\t")
+						self.outputDoc(node, "\t", [], ["\\note accessing this is undefined behaivour"])
 						self.o("\tstd::pair<const %s *, size_t> get%sRaw() const {"%(rawType, uname))
 						self.o("\t\tassert(has%s());"%uname)
 						self.o("\t\treturn getListRaw_<%s, %d>();"%(rawType, node.offset))
@@ -121,7 +142,8 @@ class Generator:
 						else: 
 							self.o("\t\treturn getBit_<%d, %s, 0>();"%(node.hasOffset, node.hasBit))
 						self.o("\t}")
-						
+					self.o("\t")
+					self.outputDoc(node, "\t")
 					self.o("\t%s get%s() const noexcept {"%(typeName, uname))
 					if node.optional:
 						self.o("\t\tassert(has%s());"%uname)
@@ -132,6 +154,8 @@ class Generator:
 						self.o("\tbool has%s() const noexcept {"%( uname))
 						self.o("\t\treturn getBit_<%d, %s, 0>();"%(node.hasOffset, node.hasBit))
 						self.o("\t}")
+					self.o("\t")
+					self.outputDoc(node, "\t")
 					self.o("\tbool get%s() const noexcept {"%(uname))
 					if node.optional:
 						self.o("\t\tassert(has%s());"%uname)
@@ -143,6 +167,8 @@ class Generator:
 						self.o("\tbool has%s() const noexcept {"%(uname))
 						self.o("\t\treturn getInner_<std::uint8_t, %d>(255) == 255;"%(node.offset))
 						self.o("\t}")
+						self.o("\t")
+						self.outputDoc(node, "\t")
 						self.o("\t%s get%s() const noexcept {"%(typeName, uname))
 						self.o("\t\tassert(has%s());"%uname)
 						self.o("\t\treturn (%s)getInner_<std::uint8_t, %d>(%s);"%(typeName, node.offset, node.parsedValue))
@@ -152,6 +178,8 @@ class Generator:
 							self.o("\tbool has%s() const noexcept {"%(uname))
 							self.o("\t\treturn getBit_<%d, %s, 0>();"%(node.hasOffset, node.hasBit))
 							self.o("\t}")
+						self.o("\t")
+						self.outputDoc(node, "\t")
 						self.o("\t%s get%s() const noexcept {"%(typeName, uname))
 						if node.optional:
 							self.o("\t\tassert(has%s());"%uname)
@@ -161,6 +189,8 @@ class Generator:
 						self.o("\tbool has%s() const noexcept {"%(uname))
 						self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
 						self.o("\t}")
+						self.o("\t")
+						self.outputDoc(node, "\t")
 						self.o("\t%sIn get%s() const {"%(typeName, uname))
 						self.o("\t\tassert(has%s());"%uname)
 						self.o("\t\treturn getTable_<%sIn, %d>();"%(typeName, node.offset))
@@ -171,6 +201,8 @@ class Generator:
 					self.o("\tbool has%s() const noexcept {"%(uname))
 					self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
 					self.o("\t}")
+					self.o("\t")
+					self.outputDoc(node, "\t")
 					self.o("\tstd::string_view get%s() {"%(uname))
 					self.o("\t\treturn getText_<%d>();"%(node.offset))
 					self.o("\t}")
@@ -178,6 +210,8 @@ class Generator:
 					self.o("\tbool has%s() const noexcept {"%(uname))
 					self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
 					self.o("\t}")
+					self.o("\t")
+					self.outputDoc(node, "\t")
 					self.o("\tstd::pair<const void*, size_t> get%s()  {"%(uname))
 					self.o("\t\treturn getBytes_<%d>();"%(node.offset))
 					self.o("\t}")
@@ -191,6 +225,8 @@ class Generator:
 					assert isinstance(member, (Table, Value))
 					self.o("\t\t%s,"%self.value(member.identifier).upper())
 				self.o("\t};")
+				self.o("\t")
+				self.outputDoc(node, "\t")
 				self.o("\tType getType() const noexcept {")
 				self.o("\t\treturn (Type)getInner_<std::uint16_t, %d>();"%node.offset)
 				self.o("\t}")
@@ -202,6 +238,8 @@ class Generator:
 					tbl = member.table if isinstance(member, Value) else member
 					self.o("\tbool is%s() const noexcept {return getType() == %s;}"%(uname, n.upper()))
 					if tbl.values:
+						self.o("\t")
+						self.outputDoc(node, "\t")
 						self.o("\t%sIn get%s() const noexcept {"%(tbl.name, uname))
 						self.o("\t\tassert(is%s());"%(uname))
 						self.o("\t\treturn getVLTable_<%sIn, %d>();"%(tbl.name, node.offset+2))
@@ -211,6 +249,8 @@ class Generator:
 				self.o("\tbool hasBytes() const noexcept {")
 				self.o("\t\treturn getInner_<std::uint32_t, %d>() != 0;"%(node.offset))
 				self.o("\t}")
+				self.o("\t")
+				self.outputDoc(node, "\t")
 				self.o("\tstd::pair<const void *, size_t> getBytes() const noexcept {")
 				self.o("\t\tassert(hasBytes());")
 				self.o("\t\treturn getVLBytes_<%d>();"%(node.offset))
@@ -221,10 +261,14 @@ class Generator:
 				self.o("\tbool hasList() const noexcept {")
 				self.o("\t\treturn getInner_<std::uint32_t, %d>() != 0;"%(node.offset))
 				self.o("\t}")
+				self.o("\t")
+				self.outputDoc(node, "\t")
 				self.o("\tscalgoproto::ListIn<%s> getList() const {"%(typeName))
 				self.o("\t\treturn getVLList_<%s, %d>();"%(typeName, node.offset))
 				self.o("\t}")
 				if rawType:
+					self.o("\t")
+					self.outputDoc(node, "\t", [], ["\\note accessing this is undefined behaivour"])
 					self.o("\tstd::pair<const %s *, size_t> getListRaw() const {"%(rawType))
 					self.o("\t\tassert(hasList());")
 					self.o("\t\treturn getVLListRaw_<%s, %d>();"%(rawType, node.offset))
@@ -234,6 +278,8 @@ class Generator:
 				self.o("\tbool hasText() const noexcept {")
 				self.o("\t\treturn getInner_<std::uint32_t, %d>() != 0;"%(node.offset))
 				self.o("\t}")
+				self.o("\t")
+				self.outputDoc(node, "\t")
 				self.o("\tstd::string_view getText() const noexcept {")
 				self.o("\t\tassert(hasText());")
 				self.o("\t\treturn getVLText_<%d>();"%(node.offset))
@@ -243,7 +289,7 @@ class Generator:
 		self.o("};")
 		self.o("namespace scalgoproto {template <> struct MetaMagic<%sIn> {using t=TableTag;};}"%table.name)
 		self.o("")
-		
+		self.outputDoc(table)
 		self.o("class %sOut: public scalgoproto::Out {"%table.name)
 		self.o("\tfriend class scalgoproto::Out;")
 		self.o("\tfriend class scalgoproto::Writer;")
@@ -271,6 +317,7 @@ class Generator:
 				assert isinstance(node, Value)
 				n = self.value(node.identifier)
 				uname = n[0].upper() + n[1:]
+				self.outputDoc(node, "\t")
 				if node.list:
 					typeName = self.outListType(node)
 					self.o("\tvoid add%s(scalgoproto::ListOut<%s> value) noexcept {"%(uname, typeName))
@@ -320,6 +367,7 @@ class Generator:
 					assert False
 			elif node.t == NodeType.VLUNION:
 				assert isinstance(node, VLUnion)
+				self.outputDoc(node, "\t")
 				self.o("\tbool hasType() const noexcept {")
 				self.o("\t\treturn getInner_<std::uint16_t, %d>() != 0;"%(node.offset))
 				self.o("\t}")
@@ -329,6 +377,7 @@ class Generator:
 					n = self.value(member.identifier)
 					uname = n[0].upper() + n[1:]
 					tbl = member.table if isinstance(member, Value) else member
+					self.outputDoc(member, "\t")
 					if tbl.values:
 						self.o("\t%sOut add%s() noexcept {"%(tbl.name, uname))
 						self.o("\t\tassert(!hasType());")
@@ -345,17 +394,20 @@ class Generator:
 					idx += 1
 			elif node.t == NodeType.VLBYTES:
 				assert isinstance(node, VLBytes)
+				self.outputDoc(node, "\t")
 				self.o("\tvoid addBytes(const char * data, size_t size) noexcept {")
 				self.o("\t\taddVLBytes_<%d>(data, size);"%(node.offset))
 				self.o("\t}")
 			elif node.t == NodeType.VLLIST:
 				assert isinstance(node, VLList)
 				typeName = self.outListType(node)
+				self.outputDoc(node, "\t")
 				self.o("\tscalgoproto::ListOut<%s> addList(size_t size) noexcept {"%(typeName))
 				self.o("\t\treturn addVLList_<%d, %s>(size);"%(node.offset, typeName))
 				self.o("\t}")
 			elif node.t == NodeType.VLTEXT:
 				assert isinstance(node,VLText)
+				self.outputDoc(node, "\t")
 				self.o("\tvoid addText(std::string_view text) noexcept {")
 				self.o("\t\taddVLText_<%d>(text);"%(node.offset))
 				self.o("\t}")

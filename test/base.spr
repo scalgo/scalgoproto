@@ -4,13 +4,22 @@ enum MyEnum {
     a, b, c, d
 }
 
+/**
+ * Simple struct used for testing
+ */
 struct MyStruct {
     x: UInt32;
     y: Float32;
     z: Bool;
 }
 
+/**
+ * Simple table used for testing
+ *
+ * Hey there
+ */
 table Simple @F0606B0B {
+    /** My enum */
     e: MyEnum;
     s: MyStruct;
     b: Bool;

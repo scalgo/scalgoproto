@@ -61,6 +61,24 @@ class Annotater:
 			self.error(value, "Must be a float")
 		return d
 
+	def createDocString(self, node: AstNode) -> None:
+		if not node.docccomment: return
+		v = self.value(node.docccomment)
+		node.docstring = []
+		for line in v.split("\n"):
+			line = line.strip()
+			if line[0:3] in ("/**", '///'): line = line[3:]
+			elif line[0:2] in ('##', '*/', '//'): line = line[2:]
+			elif line[0:1] in ("#", "*"): line = line[1:]
+			if line[0:1] == ' ': line = line[1:]
+			if node.docstring or line: node.docstring.append(line)
+		while node.docstring and not node.docstring[-1]:
+			node.docstring.pop()
+		if node.docstring and node.docstring[-1].endswith("*/"):
+			node.docstring[-1] = node.docstring[-1][0:-2].strip()
+		while node.docstring and not node.docstring[-1]:
+			node.docstring.pop()
+
 	def visitContent(self, tableName: str, values: List[AstNode], isStruct: bool) -> bytes:
 		content: Set[str] = set()
 		bytes = 0
@@ -69,7 +87,8 @@ class Annotater:
 		boolOffset = 0
 		tableValues: Set[str] = set()
 		vl:AstNode = None
-		for v in values:					 
+		for v in values:
+			self.createDocString(v)
 			if v.t == NodeType.VALUE:
 				assert isinstance(v, Value)
 				if v.value:
@@ -258,6 +277,7 @@ class Annotater:
 					assert isinstance(v, VLUnion)
 					members: Dict[str, Token] = {}
 					for member in v.members:
+						self.createDocString(member)
 						if member.t == NodeType.VALUE:
 							assert isinstance(member, Value)
 							if member.type.type != TokenType.IDENTIFIER or self.value(member.type) not in self.tabels:
@@ -314,6 +334,7 @@ class Annotater:
 		self.tabels = {}
 		ids: Set[str] = set()
 		for node in ast:
+			self.createDocString(node)
 			if node.t == NodeType.STRUCT:
 				assert isinstance(node, Struct)
 				name = self.value(node.identifier)
