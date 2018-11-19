@@ -97,7 +97,45 @@ def testInDefault(path:str) -> bool:
 	return False
 
 def testOutComplex(path:str) -> bool:
-	return False
+	w = scalgoproto.Writer()
+
+	m = w.constructTable(base.MemberOut)
+	m.addId(42)
+
+	l = w.constructInt32List(31)
+	for i in range(31):
+		l.add(i, 100-2*i)
+
+	l2 = w.constructEnumList(base.MyEnum, 2)
+	l2.add(0, base.MyEnum.a)
+
+	l3 = w.constructStructList(base.MyStruct, 1)
+
+	b = w.constructBytes(b"bytes")
+	t = w.constructText("text")
+
+	l4 = w.constructTextList(2)
+	l4.add(0, t)
+	l5 = w.constructBytesList(1)
+	l5.add(0, b)
+
+	l6 = w.constructTableList(base.MemberOut, 3)
+	l6.add(0, m)
+	l6.add(2, m)
+
+	s = w.constructTable(base.ComplexOut)
+	s.addMember(m)
+	s.addText(t)
+	s.addBytes(b)
+	s.addList(l)
+	s.addStructList(l3)
+	s.addEnumList(l2)
+	s.addTextList(l4)
+	s.addBytesList(l5)
+	s.addMemberList(l6)
+
+	data = w.finalize(s)
+	return validateOut(data, path)
 
 def testInComplex(path:str) -> bool:
 	return False

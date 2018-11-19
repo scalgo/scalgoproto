@@ -28,6 +28,28 @@ typeMap: Dict[TokenType, TypeInfo] = {
 
 class Generator:
 	out: TextIO = None
+
+	def outListType(self, node:Union[Value,VLList]) -> str:
+		if node.type.type == TokenType.BOOL:
+			assert False # TODO bool list
+		elif node.type.type in typeMap:
+			return "scalgoproto.BasicListOut[%s]"%(typeMap[node.type.type].p)
+		elif node.type.type == TokenType.IDENTIFIER:
+			if node.struct:
+				return "scalgoproto.StructListOut[%s]"%(self.value(node.type))
+			elif node.enum:
+				return "scalgoproto.EnumListOut[%s]"%(self.value(node.type))
+			elif node.table:
+				return "scalgoproto.ObjectListOut[%sOut]"%(self.value(node.type))
+			else:
+				assert False
+		elif node.type.type == TokenType.TEXT:
+			return "scalgoproto.ObjectListOut[scalgoproto.TextOut]"
+		elif node.type.type == TokenType.BYTES:
+			return "scalgoproto.ObjectListOut[scalgoproto.BytesOut]"
+		else:
+			assert False
+
 	def o(self, text=""):
 		print(text, file=self.out)
 	
@@ -59,7 +81,10 @@ class Generator:
 		n = self.value(node.identifier)
 		uname = n[0].upper() + n[1:]
 		if node.list:
-			pass
+			self.o("\tdef add%s(self, value: %s):"%(uname, self.outListType(node)))
+			self.outputDoc(node, "\t\t")
+			self.o("\t\tself._setList(%d, value)"%(node.offset))
+			self.o("\t")
 		elif node.type.type == TokenType.BOOL:
 			self.o("\tdef add%s(self, value:bool) -> None:"%(uname))
 			self.outputDoc(node, "\t\t")
@@ -91,13 +116,22 @@ class Generator:
 				self.o("\t\t%s._write(self._writer, self._offset + %d, value)"%(typeName, node.offset))
 				self.o("\t")
 			elif node.table:
-				pass
+				self.o("\tdef add%s(self, value: %sOut) -> None:"%(uname, typeName))
+				self.outputDoc(node, "\t\t")
+				self.o("\t\tself._setTable(%d, value)"%(node.offset))
+				self.o("\t")
 			else:
 				assert False
 		elif node.type.type == TokenType.TEXT:
-			pass
+			self.o("\tdef add%s(self, t: scalgoproto.TextOut) -> None:"%(uname))
+			self.outputDoc(node, "\t\t")
+			self.o("\t\tself._setText(%d, t)"%(node.offset))
+			self.o("\t")
 		elif node.type.type == TokenType.BYTES:
-			pass
+			self.o("\tdef add%s(self, b: scalgoproto.BytesOut) -> None:"%(uname))
+			self.outputDoc(node, "\t\t")
+			self.o("\t\tself._setBytes(%d, b)"%(node.offset))
+			self.o("\t")
 		else:
 			assert False
 
@@ -127,7 +161,7 @@ class Generator:
 		#Generate Table writer
 		self.o("class %sOut(scalgoproto.TableOut):"%table.name)
 		self.outputDoc(table, "\t")
-		self.o("\t_MAGIC:typing.ClassVar[int]=0x%08x"%table.magic)
+		self.o("\t_MAGIC:typing.ClassVar[int]=0x%08x"%table.magic)				
 		self.o("\tdef __init__(self, writer: scalgoproto.Writer, withHeader: bool) -> None:")
 		self.o('\t\t"""Private constructor. Call factory methods on scalgoproto.Reader to construct instances"""')
 		self.o("\t\tsuper().__init__(writer, withHeader, b\"%s\")"%(cescape(table.default)))
