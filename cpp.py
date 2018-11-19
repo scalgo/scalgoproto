@@ -438,7 +438,7 @@ class Generator:
 					elif v.type.type == TokenType.FLOAT32: typeName = "float"
 					elif v.type.type == TokenType.FLOAT64: typeName = "double"
 					elif v.type.type == TokenType.BOOL: typeName = "bool"
-					elif v.type.type == TokenType.IDENTIFIER: typeName = self.value(v.identifier)
+					elif v.type.type == TokenType.IDENTIFIER: typeName = self.value(v.type)
 					else: assert(False)
 					self.o("\t%s %s;"%(typeName, self.value(v.identifier)))
 				self.o("};")
