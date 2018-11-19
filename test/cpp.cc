@@ -82,6 +82,8 @@ int main(int, char ** argv) {
 		auto o = readIn(argv[2]);
 		scalgoproto::Reader r(o.data(), o.size());
 		auto s = r.root<SimpleIn>();
+		REQUIRE(s.hasE(), true);
+		REQUIREQ(s.getE(), MyEnum::c);
 		REQUIRE(s.getS().x, 42);
 		REQUIRE(s.getS().y, 27.0);
 		REQUIRE(s.getS().z, true);
@@ -122,6 +124,7 @@ int main(int, char ** argv) {
 		REQUIRE(s.getOi64(), 5465729);
 		REQUIRE(s.getOf(), 5.0);
 		REQUIRE(s.getOd(), 6.4);
+		REQUIRE(s.hasNe(), false);
 		REQUIRE(s.hasNs(), false);
 		REQUIRE(s.hasNb(), false);
 		REQUIRE(s.hasNu8(), false);

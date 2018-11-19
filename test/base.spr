@@ -47,6 +47,7 @@ table Simple @F0606B0B {
     of: Optional Float32;
     od: Optional Float64;
 
+    ne: MyEnum;
     ns: Optional MyStruct;
     nb: Optional Bool; 
     nu8: Optional UInt8;

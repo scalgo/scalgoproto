@@ -165,7 +165,7 @@ class Generator:
 					typeName = self.value(node.type)
 					if node.enum:
 						self.o("\tbool has%s() const noexcept {"%(uname))
-						self.o("\t\treturn getInner_<std::uint8_t, %d>(255) == 255;"%(node.offset))
+						self.o("\t\treturn getInner_<std::uint8_t, %d>(%d) != 255;"%(node.offset, node.parsedValue))
 						self.o("\t}")
 						self.o("\t")
 						self.outputDoc(node, "\t")
