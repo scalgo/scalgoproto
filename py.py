@@ -76,6 +76,61 @@ class Generator:
 			self.o("%s%s"%(indent, line))
 		self.o('%s"""'%indent)
 	
+	def generateValueIn(self, node: Value):
+		n = self.value(node.identifier)
+		uname = getuname(n)
+		if node.list:
+			pass
+		elif node.type.type == TokenType.BOOL:
+			if node.optional:
+				self.o("\tdef has%s(self) -> bool: return self._getBit(%d, %s, 0)"%(uname, node.hasOffset, node.hasBit))
+			self.o("\tdef get%s(self) -> bool:"%(uname))
+			self.outputDoc(node, "\t\t")
+			if node.optional:
+				self.o("\t\tassert self.has%s()"%uname)
+			self.o("\t\treturn self._getBit(%d, %s, 0)"%(node.offset, node.bit))
+			self.o("\t")
+		elif node.type.type in typeMap:
+			ti = typeMap[node.type.type]
+			if node.optional:
+				if node.type.type in (TokenType.FLOAT32, TokenType.FLOAT64):
+					self.o("\tdef has%s(self) -> bool: return not math.isnan(self._get%s(%d, math.nan))"%(uname, ti.n, node.offset))
+				else:
+					self.o("\tdef has%s(self) -> bool: return self._getBit(%d, %s, 0)"%(uname, node.hasOffset, node.hasBit))
+			self.o("\tdef get%s(self) -> %s:"%(uname, ti.p))
+			self.outputDoc(node, "\t\t")
+			if node.optional:
+				self.o("\t\tassert self.has%s()"%uname)
+			self.o("\t\treturn self._get%s(%d, %s)"%(ti.n, node.offset, node.parsedValue if not math.isnan(node.parsedValue) else "math.nan"))
+			self.o("\t")
+		elif node.type.type == TokenType.IDENTIFIER:
+			typeName = self.value(node.type)
+			if node.enum:
+				self.o("\tdef has%s(self) -> bool: return self._getUInt8(%d, %d) != 255"%(uname, node.offset, node.parsedValue))
+				self.o("\tdef get%s(self) -> %s:"%(uname, typeName))
+				self.outputDoc(node, "\t\t")
+				self.o("\t\tassert self.has%s()"%uname)
+				self.o("\t\treturn %s(self._getUInt8(%d, %s))"%(typeName, node.offset, node.parsedValue))
+				self.o("\t")
+			elif node.struct:
+				if node.optional:
+					self.o("\tdef has%s(self) -> bool: return self._getBit(%d, %s, 0)"%(uname, node.hasOffset, node.hasBit))
+				self.o("\tdef get%s(self) -> %s:"%(uname, typeName))
+				self.outputDoc(node, "\t\t")
+				if node.optional:
+					self.o("\t\tassert self.has%s()"%uname)
+				self.o("\t\treturn %s._read(self._reader, self._offset+%d) if self._offset < self._size else %s()"%(typeName, node.offset, typeName))
+				self.o("\t")
+			elif node.table:
+				pass
+			else:
+				assert False
+		elif node.type.type == TokenType.TEXT:
+			pass
+		elif node.type.type == TokenType.BYTES:
+			pass
+		else:
+			assert False
 
 	def generateValueOut(self, node:Value):
 		n = self.value(node.identifier)
@@ -135,6 +190,9 @@ class Generator:
 		else:
 			assert False
 
+	def generateVLUnionIn(self, node: VLUnion, tableName:str):
+		pass
+
 	def generateVLUnionOut(self, node:VLUnion):
 		self.outputDoc(node, "\t")
 		self.o("\tdef hasType(self) -> bool: return self._getUInt16(%d) != 0"%node.offset)
@@ -161,11 +219,17 @@ class Generator:
 				self.o("\t")
 			idx += 1
 
+	def generateVLBytesIn(self, node:VLBytes):
+		pass
+
 	def generateVLBytesOut(self, node:VLBytes):
 		self.o("\tdef addBytes(self, value: bytes) -> None:")
 		self.outputDoc(node, "\t\t")
 		self.o("\t\tself._addVLBytes(%d, value)"%(node.offset))
 		self.o("\t")
+
+	def generateVLListIn(self, node:VLList):
+		pass
 
 	def generateVLListOut(self, node:VLList):
 		self.o("\tdef addList(self, size: int) -> %s:"%(self.outListType(node)))
@@ -189,6 +253,9 @@ class Generator:
 		self.o("\t\treturn l")
 		self.o("\t")
 
+	def generateVLTextIn(self, node:VLText):
+		pass
+
 	def generateVLTextOut(self, node:VLText):
 		self.o("\tdef addText(self, text:str) -> None:")
 		self.outputDoc(node, "\t\t")
@@ -205,6 +272,33 @@ class Generator:
 						assert isinstance(member, Table)
 						if member.values:
 							self.generateTable(member)
+
+		# Generate table reader
+		self.o("class %sIn(scalgoproto.TableIn):"%table.name)
+		self.outputDoc(table, "\t")
+		self.o("\t_MAGIC:typing.ClassVar[int]=0x%08x"%table.magic)
+		self.o("\tdef __init__(self, reader: scalgoproto.Reader, offset:int, size:int):")
+		self.o('\t\t"""Private constructor. Call factory methods on scalgoproto.Reader to construct instances"""')
+		self.o("\t\tsuper().__init__(reader, offset, size)")
+		for node in table.values:
+			if node.t == NodeType.VALUE:
+				assert isinstance(node, Value)
+				self.generateValueIn(node)
+			elif node.t == NodeType.VLUNION:
+				assert isinstance(node, VLUnion)
+				self.generateVLUnionIn(node, table.name)
+			elif node.t == NodeType.VLBYTES:
+				assert isinstance(node, VLBytes)
+				self.generateVLBytesIn(node)
+			elif node.t == NodeType.VLLIST:
+				assert isinstance(node, VLList)
+				self.generateVLListIn(node)
+			elif node.t == NodeType.VLTEXT:
+				assert isinstance(node,VLText)
+				self.generateVLTextIn(node)
+			else:
+				assert(False)
+		self.o("")
 
 		#Generate Table writer
 		self.o("class %sOut(scalgoproto.TableOut):"%table.name)
@@ -264,6 +358,15 @@ class Generator:
 				self.o("\t\twriter._data[offset+%d:offset+%d] = struct.pack('<%s', ins.%s)"%(o, o+s, q, n))
 			else:
 				self.o("\t\t%s._write(writer, offset+%d, ins.%s)"%(p, o, n))
+		self.o("\t@staticmethod")
+		self.o("\tdef _read(reader: scalgoproto.Reader, offset:int) -> '%s':"%name)
+		self.o("\t\treturn %s("%name)
+		for (n,p,q,s,o,d) in things:
+			if q:
+				self.o("\t\t\tstruct.unpack('<%s', reader._data[offset+%d:offset+%d])[0],"%(q, o, o+s))
+			else:
+				self.o("\t\t\t%s._read(reader, offset+%d)"%(p, o))
+		self.o("\t\t)")
 		self.o()
 
 	def generateEnum(self, node:Enum) -> None:

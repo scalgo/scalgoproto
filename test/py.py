@@ -91,10 +91,107 @@ def testOut(path:str) -> bool:
 	return validateOut(data, path)
 
 def testIn(path:str) -> bool:
-	return False
+	r = scalgoproto.Reader(readIn(path))
+	s = r.root(base.SimpleIn)
+	if require(s.hasE(), True): return False
+	if require(s.getE(), base.MyEnum.c): return False
+	if require(s.getS().x, 42): return False
+	if require(s.getS().y, 27.0): return False
+	if require(s.getS().z, True): return False
+	if require(s.getB(), True): return False
+	if require(s.getU8(), 242): return False
+	if require(s.getU16(), 4024): return False
+	if require(s.getU32(), 124474): return False
+	if require(s.getU64(), 5465778): return False
+	if require(s.getI8(), -40): return False
+	if require(s.getI16(), 4025): return False
+	if require(s.getI32(), 124475): return False
+	if require(s.getI64(), 5465779): return False
+	if require(s.getF(), 2.0): return False
+	if require(s.getD(), 3.0): return False
+	if require(s.hasOs(), True): return False
+	if require(s.hasOb(), True): return False
+	if require(s.hasOu8(), True): return False
+	if require(s.hasOu16(), True): return False
+	if require(s.hasOu32(), True): return False
+	if require(s.hasOu64(), True): return False
+	if require(s.hasOi8(), True): return False
+	if require(s.hasOi16(), True): return False
+	if require(s.hasOi32(), True): return False
+	if require(s.hasOi64(), True): return False
+	if require(s.hasOf(), True): return False
+	if require(s.hasOd(), True): return False
+	if require(s.getOs().x, 43): return False
+	if require(s.getOs().y, 28.0): return False
+	if require(s.getOs().z, False): return False
+	if require(s.getOb(), False): return False
+	if require(s.getOu8(), 252): return False
+	if require(s.getOu16(), 4034): return False
+	if require(s.getOu32(), 124464): return False
+	if require(s.getOu64(), 5465768): return False
+	if require(s.getOi8(), -60): return False
+	if require(s.getOi16(), 4055): return False
+	if require(s.getOi32(), 124465): return False
+	if require(s.getOi64(), 5465729): return False
+	if require(s.getOf(), 5.0): return False
+	if require(s.getOd(), 6.4): return False
+	if require(s.hasNe(), False): return False
+	if require(s.hasNs(), False): return False
+	if require(s.hasNb(), False): return False
+	if require(s.hasNu8(), False): return False
+	if require(s.hasNu16(), False): return False
+	if require(s.hasNu32(), False): return False
+	if require(s.hasNu64(), False): return False
+	if require(s.hasNi8(), False): return False
+	if require(s.hasNi16(), False): return False
+	if require(s.hasNi32(), False): return False
+	if require(s.hasNi64(), False): return False
+	if require(s.hasNf(), False): return False
+	if require(s.hasNd(), False): return False
+	return True
 
 def testInDefault(path:str) -> bool:
-	return False
+	r = scalgoproto.Reader(readIn(path))
+	s = r.root(base.SimpleIn)
+	if require(s.getS().x, 0): return False
+	if require(s.getS().y, 0): return False
+	if require(s.getS().z, False): return False
+	if require(s.getB(), False): return False
+	if require(s.getU8(), 2): return False
+	if require(s.getU16(), 3): return False
+	if require(s.getU32(), 4): return False
+	if require(s.getU64(), 5): return False
+	if require(s.getI8(), 6): return False
+	if require(s.getI16(), 7): return False
+	if require(s.getI32(), 8): return False
+	if require(s.getI64(), 9): return False
+	if require(s.getF(), 10.0): return False
+	if require(s.getD(), 11.0): return False
+	if require(s.hasOs(), False): return False
+	if require(s.hasOb(), False): return False
+	if require(s.hasOu8(), False): return False
+	if require(s.hasOu16(), False): return False
+	if require(s.hasOu32(), False): return False
+	if require(s.hasOu64(), False): return False
+	if require(s.hasOi8(), False): return False
+	if require(s.hasOi16(), False): return False
+	if require(s.hasOi32(), False): return False
+	if require(s.hasOi64(), False): return False
+	if require(s.hasOf(), False): return False
+	if require(s.hasOd(), False): return False
+	if require(s.hasNs(), False): return False
+	if require(s.hasNb(), False): return False
+	if require(s.hasNu8(), False): return False
+	if require(s.hasNu16(), False): return False
+	if require(s.hasNu32(), False): return False
+	if require(s.hasNu64(), False): return False
+	if require(s.hasNi8(), False): return False
+	if require(s.hasNi16(), False): return False
+	if require(s.hasNi32(), False): return False
+	if require(s.hasNi64(), False): return False
+	if require(s.hasNf(), False): return False
+	if require(s.hasNd(), False): return False
+	return True
 
 def testOutComplex(path:str) -> bool:
 	w = scalgoproto.Writer()

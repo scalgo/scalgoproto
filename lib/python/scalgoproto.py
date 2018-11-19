@@ -16,9 +16,54 @@ class StructType(Generic[B]):
 	def _write(writer: 'Writer', offset: int, value: B) -> B:
 		...
 
+TI = TypeVar('TI', bound='TableIn')
 TO = TypeVar('TO', bound='TableOut')
 E = TypeVar('E', bound=enum.IntEnum)
 S = TypeVar('S', bound=StructType)
+
+class TableIn:
+	"""Base class for reading a table"""
+	_MAGIC: int = 0
+	_offset: int = 0
+
+	def __init__(self, reader, offset:int, size:int) -> None:
+		"""Private constructor. Use the accessor methods on tables or the root method on Reader to get an instance"""
+		self._reader = reader
+		self._offset = offset
+		self._size = size
+
+	def _getUInt32F(self, o:int) -> int: return struct.unpack("<I", self._reader._data[self._offset+o:self._offset+o+4])[0]
+	def _getInt8(self, o:int, d:int) -> int: return struct.unpack("<b", self._reader._data[self._offset+o:self._offset+o+1])[0] if o < self._size else d
+	def _getUInt8(self, o:int, d:int) -> int: return struct.unpack("<B", self._reader._data[self._offset+o:self._offset+o+1])[0] if o < self._size else d
+	def _getInt16(self, o:int, d:int) -> int: return struct.unpack("<h", self._reader._data[self._offset+o:self._offset+o+2])[0] if o < self._size else d
+	def _getUInt16(self, o:int, d:int) -> int: return struct.unpack("<H", self._reader._data[self._offset+o:self._offset+o+2])[0] if o < self._size else d
+	def _getInt32(self, o:int, d:int) -> int: return struct.unpack("<i", self._reader._data[self._offset+o:self._offset+o+4])[0] if o < self._size else d
+	def _getUInt32(self, o:int, d:int) -> int: return struct.unpack("<I", self._reader._data[self._offset+o:self._offset+o+4])[0] if o < self._size else d
+	def _getInt64(self, o:int, d:int) -> int: return struct.unpack("<q", self._reader._data[self._offset+o:self._offset+o+8])[0] if o < self._size else d
+	def _getUInt64(self, o:int, d:int) -> int: return struct.unpack("<Q", self._reader._data[self._offset+o:self._offset+o+8])[0] if o < self._size else d
+	def _getFloat32(self, o:int, d:float) -> float: return struct.unpack("<f", self._reader._data[self._offset+o:self._offset+o+4])[0] if o < self._size else d
+	def _getFloat64(self, o:int, d:float) -> float: return struct.unpack("<d", self._reader._data[self._offset+o:self._offset+o+8])[0] if o < self._size else d
+	def _getBit(self, o:int, b:int, d:bool) -> bool: return self._reader._data[self._offset+o] & (1 << b) != 0 if o < self._size else d
+
+class Reader:
+	"""Responsible for reading a message"""
+
+	def __init__(self, data:bytes) -> None:
+		"""data is the message to read from"""
+		self._data = data
+
+	def _readSize(self, offset:int, magic:int):
+		m, size = struct.unpack("<II", self._data[offset:offset+8])
+		if m != magic: raise Exception("Bad magic")
+		return size
+
+	def root(self, type: Type[TI]) -> TI:
+		"""Return root node of message, of type type"""
+		magic, offset = struct.unpack("<II", self._data[0:8])
+		if magic != _MESSAGE_MAGIC: raise Exception("Bad magic")
+		size = self._readSize(offset, type._MAGIC)
+		return type(self, offset+8, size)
+
 
 class TextOut:
 	def __init__(self, offset:int) -> None:
