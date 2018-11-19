@@ -141,19 +141,59 @@ def testInComplex(path:str) -> bool:
 	return False
 
 def testOutVL(path:str) -> bool:
-    return False
+	w = scalgoproto.Writer()
+	name = w.constructText("nilson")
+	u = w.constructTable(base.VLUnionOut)
+	u.addMonkey().addName(name)
+
+	u2 = w.constructTable(base.VLUnionOut)
+	u2.addText().addText("foobar")
+
+	t = w.constructTable(base.VLTextOut)
+	t.addId(45)
+	t.addText("cake")
+
+	b = w.constructTable(base.VLBytesOut)
+	b.addId(46)
+	b.addBytes(b"hi")
+
+	l = w.constructTable(base.VLListOut)
+	l.addId(47)
+	ll = l.addList(2)
+	ll.add(0, 24)
+	ll.add(1, 99)
+
+	root = w.constructTable(base.VLRootOut)
+	root.addU(u)
+	root.addU2(u2)
+	root.addT(t)
+	root.addB(b)
+	root.addL(l)
+	data = w.finalize(root)
+	return validateOut(data, path)
 
 def testInVL(path:str) -> bool:
 	return False
 
 def testOutExtend1(path:str)->bool:
-	return False
+	w = scalgoproto.Writer()
+	root = w.constructTable(base.Gen1Out)
+	root.addAa(77)
+	data = w.finalize(root)
+	return validateOut(data, path)
 
 def testInExtend1(path:str) -> bool:
 	return False
 
 def testOutExtend2(path:str) -> bool:
-	return False
+	w = scalgoproto.Writer()
+	root = w.constructTable(base.Gen2Out)
+	root.addAa(80)
+	root.addBb(81)
+	cake = root.addCake()
+	cake.addV(45)
+	data = w.finalize(root)
+	return validateOut(data, path)
 
 def testInExtend2(path:str) -> bool:
 	return False

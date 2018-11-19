@@ -136,16 +136,64 @@ class Generator:
 			assert False
 
 	def generateVLUnionOut(self, node:VLUnion):
-		pass
+		self.outputDoc(node, "\t")
+		self.o("\tdef hasType(self) -> bool: return self._getUInt16(%d) != 0"%node.offset)
+		idx = 1
+		for member in node.members:
+			assert isinstance(member, (Table, Value))
+			n = self.value(member.identifier)
+			uname = n[0].upper() + n[1:]
+			tbl = member.table if isinstance(member, Value) else member
+			if tbl.values:
+				self.o("\tdef add%s(self) -> %sOut:"%(uname, tbl.name))
+				self.outputDoc(member, "\t\t")
+				self.o("\t\tassert not self.hasType()")
+				self.o("\t\tself._setUInt16(%d, %d)"%(node.offset, idx))
+				self.o("\t\tself._setUInt32(%d, %d)"%(node.offset+2, len(tbl.default)))
+				self.o("\t\treturn self._constructUnionMember(%sOut)"%tbl.name)
+				self.o("\t")
+			else:
+				self.o("\tdef add%s(self) -> None:"%(uname))
+				self.outputDoc(member, "\t\t")
+				self.o("\t\tassert not self.hasType()")
+				self.o("\t\tself._setUInt16(%d, %d)"%(node.offset, idx))
+				self.o("\t\tself._setUInt32(%d, %d)"%(node.offset+2, 0))
+				self.o("\t")
+			idx += 1
 
 	def generateVLBytesOut(self, node:VLBytes):
-		pass
+		self.o("\tdef addBytes(self, value: bytes) -> None:")
+		self.outputDoc(node, "\t\t")
+		self.o("\t\tself._addVLBytes(%d, value)"%(node.offset))
+		self.o("\t")
 
 	def generateVLListOut(self, node:VLList):
-		pass
+		self.o("\tdef addList(self, size: int) -> %s:"%(self.outListType(node)))
+		self.outputDoc(node, "\t\t")
+		cons = None
+		tname = self.value(node.type)
+		if node.type.type in typeMap:
+			ti = typeMap[node.type.type]
+			self.o("\t\tl = scalgoproto.BasicListOut[%s](self._writer, '%s', %d, size, False)"%(ti.p, ti.s, ti.w))
+		elif node.enum:
+			self.o("\t\tl = scalgoproto.EnumListOut[%s](self._writer, %s, size, False)"%(tname, tname))
+		elif node.struct:
+			self.o("\t\tl = scalgoproto.StructListOut[%s](self._writer, %s, size, False)"%(tname, tname))
+		elif node.table:
+			self.o("\t\tl = scalgoproto.ObjectListOut[%sOut](self._writer, size, False)"%(tname))
+		elif node.type.type == TokenType.TEXT:
+			self.o("\t\tl = scalgoproto.ObjectListOut[TextOut](self._writer, size, False)")
+		elif node.type.type == TokenType.BYTES:
+			self.o("\t\tl = scalgoproto.ObjectListOut[TextOut](self._writer, size, False)")
+		self.o("\t\tself._setVLList(%d, size)"%(node.offset))
+		self.o("\t\treturn l")
+		self.o("\t")
 
 	def generateVLTextOut(self, node:VLText):
-		pass
+		self.o("\tdef addText(self, text:str) -> None:")
+		self.outputDoc(node, "\t\t")
+		self.o("\t\tself._addVLText(%d, text)"%(node.offset))
+		self.o("\t")
 
 	def generateTable(self, table:Table):
 		# Recursivly generate contained VL tabels

@@ -58,7 +58,18 @@ class TableOut:
 	def _getUInt16(self, o:int) -> int: return struct.unpack("<H", self._writer._data[self._offset+o:self._offset+o+2])[0]
 	def _constructUnionMember(self, t:Type[TO])->TO:
 		return t(self._writer, False)
-
+	def _addVLText(self, o:int, t:str) -> None:
+		tt = t.encode('utf-8')
+		self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", len(tt))
+		self._writer._reserve(len(tt)+1)
+		self._writer._write(tt)
+		self._writer._write(b"\0")
+	def _addVLBytes(self, o:int, t:bytes) -> None:
+		self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", len(t))
+		self._writer._reserve(len(t))
+		self._writer._write(t)
+	def _setVLList(self, o:int, size:int) -> None:
+		self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", size)
 class OutList:
 	_offset: int = 0
 	def __init__(self, writer: 'Writer', d:bytes, size:int, withHeader:bool) -> None:
