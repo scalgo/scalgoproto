@@ -9,6 +9,7 @@ from parser import TokenType, NodeType, Token, Struct, AstNode, Value, Enum, Tab
 from typing import Set, Dict, List, TextIO, Tuple, Union
 from types import SimpleNamespace
 import math
+from util import getuname, cescape
 
 class Generator:
 	out: TextIO = None
@@ -294,29 +295,13 @@ class Generator:
 		self.o("\tfriend class scalgoproto::Out;")
 		self.o("\tfriend class scalgoproto::Writer;")
 		self.o("protected:")
-		default = []
-		cmap = {
-			0: "\\0",
-			34: "\"",
-			9: "\\t",
-			10: "\\n",
-			13: "\\r"
-		}
-		for c in table.default:
-			if c in cmap:
-				default.append(cmap[c])
-			elif 32 <= c <= 125:
-				default.append(chr(c))
-			else:
-				default.append("\\x%02x"%c)
-				
-		self.o("\t%sOut(scalgoproto::Writer & writer, bool withHeader): scalgoproto::Out(writer, withHeader, 0x%08X, \"%s\", %d) {}"%(table.name, table.magic, "".join(default), len(table.default)))
+		self.o("\t%sOut(scalgoproto::Writer & writer, bool withHeader): scalgoproto::Out(writer, withHeader, 0x%08X, \"%s\", %d) {}"%(table.name, table.magic, cescape(table.default), len(table.default)))
 		self.o("public:")
 		for node in table.values:
 			if node.t == NodeType.VALUE:
 				assert isinstance(node, Value)
 				n = self.value(node.identifier)
-				uname = n[0].upper() + n[1:]
+				uname = getuname(n)
 				self.outputDoc(node, "\t")
 				if node.list:
 					typeName = self.outListType(node)
