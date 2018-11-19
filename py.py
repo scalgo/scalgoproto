@@ -50,6 +50,32 @@ class Generator:
 		else:
 			assert False
 
+	def inListHelp(self, node:Union[Value,VLList], os:str) -> Tuple[str, str]:
+		tn = self.value(node.type)
+		if node.type.type == TokenType.BOOL:
+			assert False # TODO bool list
+		elif node.type.type in (TokenType.FLOAT32, TokenType.FLOAT64):
+			ti = typeMap[node.type.type]
+			return (ti.p, "\t\treturn self._reader._getFloatList('%s', %d, %s)"%(ti.s, ti.w, os))
+		elif node.type.type in typeMap:
+			ti = typeMap[node.type.type]
+			return (ti.p, "\t\treturn self._reader._getIntList('%s', %d, %s)"%(ti.s, ti.w, os))
+		elif node.type.type == TokenType.IDENTIFIER:
+			if node.struct:
+				return (tn, "\t\treturn self._reader._getStructList(%s, %s,)"%(tn, os))
+			elif node.enum:
+				return (tn, "\t\treturn self._reader._getEnumList(%s, %s)"%(tn, os))
+			elif node.table:
+				return (tn+"In", "\t\treturn self._reader._getTableList(%sIn, %s)"%(tn, os))
+			else:
+				assert False
+		elif node.type.type == TokenType.TEXT:
+			return ("str", "\t\treturn self._reader._getTextList(%s)"%(os))
+		elif node.type.type == TokenType.BYTES:
+			return ("bytes", "\t\treturn self._reader._getBytesList(%s)"%(os))
+		else:
+			assert False
+
 	def o(self, text=""):
 		print(text, file=self.out)
 	
@@ -80,7 +106,13 @@ class Generator:
 		n = self.value(node.identifier)
 		uname = getuname(n)
 		if node.list:
-			pass
+			self.o("\tdef has%s(self) -> bool: return self._getUInt32(%d, 0) != 0"%(uname, node.offset))
+			(tn, acc) = self.inListHelp(node, "*self._getList(%d)"%node.offset)
+			self.o("\tdef get%s(self) -> scalgoproto.ListIn[%s]:"%(uname, tn))
+			self.outputDoc(node, "\t\t")
+			self.o("\t\tassert self.has%s()"%uname)
+			self.o(acc)
+			self.o("")
 		elif node.type.type == TokenType.BOOL:
 			if node.optional:
 				self.o("\tdef has%s(self) -> bool: return self._getBit(%d, %s, 0)"%(uname, node.hasOffset, node.hasBit))
@@ -122,13 +154,28 @@ class Generator:
 				self.o("\t\treturn %s._read(self._reader, self._offset+%d) if self._offset < self._size else %s()"%(typeName, node.offset, typeName))
 				self.o("\t")
 			elif node.table:
-				pass
+				self.o("\tdef has%s(self) -> bool: return self._getUInt32(%d, 0) != 0"%(uname, node.offset))
+				self.o("\tdef get%s(self) -> %sIn:"%(uname, typeName))
+				self.outputDoc(node, "\t\t")
+				self.o("\t\tassert self.has%s()"%uname)
+				self.o("\t\treturn self._getTable(%sIn, %d)"%(typeName, node.offset))
+				self.o("\t")
 			else:
 				assert False
 		elif node.type.type == TokenType.TEXT:
-			pass
+			self.o("\tdef has%s(self) -> bool: return self._getUInt32(%d, 0) != 0"%(uname, node.offset))
+			self.o("\tdef get%s(self) -> str:"%(uname))
+			self.outputDoc(node, "\t\t")
+			self.o("\t\tassert self.has%s()"%(uname))
+			self.o("\t\treturn self._getText(%d)"%(node.offset))
+			self.o("\t")
 		elif node.type.type == TokenType.BYTES:
-			pass
+			self.o("\tdef has%s(self) -> bool: return self._getUInt32(%d, 0) != 0"%(uname, node.offset))
+			self.o("\tdef get%s(self) -> bytes:"%(uname))
+			self.outputDoc(node, "\t\t")
+			self.o("\t\tassert self.has%s()"%(uname))
+			self.o("\t\treturn self._getBytes(%d)"%(node.offset))
+			self.o("\t")
 		else:
 			assert False
 

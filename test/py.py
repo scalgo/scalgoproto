@@ -235,7 +235,64 @@ def testOutComplex(path:str) -> bool:
 	return validateOut(data, path)
 
 def testInComplex(path:str) -> bool:
-	return False
+	r = scalgoproto.Reader(readIn(path))
+
+	s = r.root(base.ComplexIn)
+	if require(s.hasNmember(), False): return False
+	if require(s.hasNtext(), False): return False
+	if require(s.hasNbytes(), False): return False
+	if require(s.hasText(), True): return False
+	if require(s.hasBytes(), True): return False
+	if require(s.getText(), "text"): return False
+	if require(s.getBytes(), b"bytes"): return False
+	if require(s.hasMember(), True): return False
+	m = s.getMember()
+	if require(m.getId(), 42): return False
+
+	if require(s.hasList(), True): return False
+	if require(s.hasNlist(), False): return False
+	l = s.getList()
+
+	if require(len(l), 31): return False
+
+	for i in range(31):
+		if require(l[i], 100-2*i): return False
+
+	if require(s.hasEnumList(), True): return False
+
+	l2 = s.getEnumList()
+
+	if require(l2.has(0), True): return False
+	if require(l2.has(1), False): return False
+	if require(l2[0], base.MyEnum.a): return False
+	if require(len(l2), 2): return False
+
+	if require(s.hasStructList(), True): return False
+	l3 = s.getStructList()
+	if require(len(l3), 1): return False
+
+	if require(s.hasTextList(), True): return False
+	l4 = s.getTextList()
+	if require(len(l4), 2): return False
+	if require(l4.has(0), True): return False
+	if require(l4.has(1), False): return False
+	if require(l4[0], "text"): return False
+
+	if require(s.hasBytesList(), True): return False
+	l5 = s.getBytesList()
+	if require(len(l5), 1): return False
+	if require(l5.has(0), True): return False
+	if require(l5[0], b"bytes"): return False
+
+	if require(s.hasMemberList(), True): return False
+	l6 = s.getMemberList()
+	if require(len(l6), 3): return False
+	if require(l6.has(0), True): return False
+	if require(l6.has(1), False): return False
+	if require(l6.has(2), True): return False
+	if require(l6[0].getId(), 42): return False
+	if require(l6[2].getId(), 42): return False
+	return True
 
 def testOutVL(path:str) -> bool:
 	w = scalgoproto.Writer()

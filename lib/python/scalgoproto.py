@@ -21,6 +21,27 @@ TO = TypeVar('TO', bound='TableOut')
 E = TypeVar('E', bound=enum.IntEnum)
 S = TypeVar('S', bound=StructType)
 
+class ListIn(Sequence[B]):
+	"""Class for reading a list of B"""
+	def __init__(self, reader: 'Reader', w:int, size:int, offset:int, getter:Callable[['Reader', int], B], haser:Callable[['Reader', int], bool]) -> None:
+		"""Private constructor. Use the accessor methods on tables to get an instance"""
+		self._reader = reader
+		self._offset = offset
+		self._size = size
+		self._w = w
+		self._getter = getter
+		self._haser = haser
+
+	def has(self, idx:int) -> bool:
+		"""Return True if there is an element on possision idx. Note that idx must be less than size"""
+		return self._haser(self._reader, self._offset+idx*self._w)
+
+	def __len__(self) -> int:
+		return self._size
+
+	def __getitem__(self, idx) -> B:
+		return self._getter(self._reader, self._offset+idx*self._w)
+
 class TableIn:
 	"""Base class for reading a table"""
 	_MAGIC: int = 0
@@ -44,6 +65,22 @@ class TableIn:
 	def _getFloat32(self, o:int, d:float) -> float: return struct.unpack("<f", self._reader._data[self._offset+o:self._offset+o+4])[0] if o < self._size else d
 	def _getFloat64(self, o:int, d:float) -> float: return struct.unpack("<d", self._reader._data[self._offset+o:self._offset+o+8])[0] if o < self._size else d
 	def _getBit(self, o:int, b:int, d:bool) -> bool: return self._reader._data[self._offset+o] & (1 << b) != 0 if o < self._size else d
+	def _getText(self, o:int) -> str:
+		off = self._getUInt32F(o)
+		size = self._reader._readSize(off, _TEXT_MAGIC)
+		return self._reader._data[off+8: off+8+size].decode('utf-8')
+	def _getBytes(self, o:int) -> bytes:
+		off = self._getUInt32F(o)
+		size = self._reader._readSize(off, _BYTES_MAGIC)
+		return self._reader._data[off+8: off+8+size]
+	def _getTable(self, t:Type[TI], o:int) -> TI:
+		off = self._getUInt32F(o)
+		size = self._reader._readSize(off, t._MAGIC)
+		return t(self._reader, off+8, size)
+	def _getList(self, o:int) -> Tuple[int, int]:
+		off = self._getUInt32F(o)
+		size = self._reader._readSize(off, _LIST_MAGIC)
+		return (off+8, size)
 
 class Reader:
 	"""Responsible for reading a message"""
@@ -56,6 +93,39 @@ class Reader:
 		m, size = struct.unpack("<II", self._data[offset:offset+8])
 		if m != magic: raise Exception("Bad magic")
 		return size
+
+	def _getTableList(self, t:Type[TI], off:int, size:int) -> ListIn[TI]:
+		def getter(r:'Reader', oo:int) -> TI:
+			ooo = struct.unpack("<I", r._data[oo:oo+4])[0]
+			sss = r._readSize(ooo, t._MAGIC)
+			return t(r, ooo+8, sss)
+		return ListIn[TI](self, 4, size, off, getter, lambda r, oo: struct.unpack("<I", r._data[oo:oo+4])[0] != 0)
+
+	def _getIntList(self, f:str, w:int, off:int, size:int) -> ListIn[int]:
+		return ListIn[int](self, w, size, off, lambda r, oo: struct.unpack("<"+f, r._data[oo:oo+4])[0], lambda r, oo: True)
+
+	def _getFloatList(self, f:str, w:int, off:int, size:int) -> ListIn[float]:
+		return ListIn[float](self, w, size, off, lambda r, oo: struct.unpack("<"+f, r._data[oo:oo+4])[0], lambda r, oo: not math.isnan(struct.unpack("<"+f, r._data[oo:oo+4])[0]))
+
+	def _getStructList(self, t:Type[S], off:int, size:int) -> ListIn[S]:
+		return ListIn[S](self, t._WIDTH, size, off, lambda r, oo: t._read(r, oo), lambda r, oo: True)
+
+	def _getEnumList(self, t:Type[E], off:int, size:int) -> ListIn[E]:
+		return ListIn[E](self, 1, size, off, lambda r, oo: t(r._data[oo]), lambda r, oo: r._data[oo] != 255)
+
+	def _getTextList(self, off:int, size:int) -> ListIn[str]:
+		def getter(r:'Reader', oo:int) -> str:
+			ooo = struct.unpack("<I", r._data[oo:oo+4])[0]
+			sss = r._readSize(ooo, _TEXT_MAGIC)
+			return r._data[ooo+8:ooo+8+sss].decode('utf-8')
+		return ListIn[str](self, 4, size, off, getter, lambda r, oo: struct.unpack("<I", r._data[oo:oo+4])[0] != 0)
+
+	def _getBytesList(self, off:int, size:int) -> ListIn[bytes]:
+		def getter(r:'Reader', oo:int) -> bytes:
+			ooo = struct.unpack("<I", r._data[oo:oo+4])[0]
+			sss = r._readSize(ooo, _BYTES_MAGIC)
+			return r._data[ooo+8:ooo+8+sss]
+		return ListIn[bytes](self, 4, size, off, getter, lambda r, oo: struct.unpack("<I", r._data[oo:oo+4])[0] != 0)
 
 	def root(self, type: Type[TI]) -> TI:
 		"""Return root node of message, of type type"""
