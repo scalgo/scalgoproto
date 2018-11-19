@@ -54,10 +54,41 @@ def require(v, e) -> bool:
 	return True
 
 def testOutDefault(path:str) -> bool:
-	return False
+	w = scalgoproto.Writer()
+	s = w.constructTable(base.SimpleOut)
+	data = w.finalize(s)
+	return validateOut(data, path)
 
 def testOut(path:str) -> bool:
-	return False
+	w = scalgoproto.Writer()
+	s = w.constructTable(base.SimpleOut)
+	s.addE(base.MyEnum.c)
+	s.addS(base.MyStruct(42, 27.0, True))
+	s.addB(True)
+	s.addU8(242)
+	s.addU16(4024)
+	s.addU32(124474)
+	s.addU64(5465778)
+	s.addI8(-40)
+	s.addI16(4025)
+	s.addI32(124475)
+	s.addI64(5465779)
+	s.addF(2.0)
+	s.addD(3.0)
+	s.addOs(base.MyStruct(43, 28.0, False))
+	s.addOb(False)
+	s.addOu8(252)
+	s.addOu16(4034)
+	s.addOu32(124464)
+	s.addOu64(5465768)
+	s.addOi8(-60)
+	s.addOi16(4055)
+	s.addOi32(124465)
+	s.addOi64(5465729)
+	s.addOf(5.0)
+	s.addOd(6.4)
+	data = w.finalize(s)
+	return validateOut(data, path)
 
 def testIn(path:str) -> bool:
 	return False
