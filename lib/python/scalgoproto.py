@@ -81,6 +81,15 @@ class TableIn:
 		off = self._getUInt32F(o)
 		size = self._reader._readSize(off, _LIST_MAGIC)
 		return (off+8, size)
+	def _getVLTable(self, t:Type[TI], o:int) -> TI:
+		size = self._getUInt32F(o)
+		return t(self._reader, self._offset+self._size, size)
+	def _getVLText(self, o:int) -> str:
+		size = self._getUInt32F(o)
+		return self._reader._data[self._offset+self._size:self._offset+self._size+size].decode("utf-8")
+	def _getVLBytes(self, o:int) -> str:
+		size = self._getUInt32F(o)
+		return self._reader._data[self._offset+self._size:self._offset+self._size+size]
 
 class Reader:
 	"""Responsible for reading a message"""

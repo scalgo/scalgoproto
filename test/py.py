@@ -327,7 +327,45 @@ def testOutVL(path:str) -> bool:
 	return validateOut(data, path)
 
 def testInVL(path:str) -> bool:
-	return False
+	o = readIn(path)
+	r = scalgoproto.Reader(o)
+	s = r.root(base.VLRootIn)
+
+	if require(s.hasU(), True): return False
+	u = s.getU()
+	if require(u.isMonkey(), True): return False
+	monkey = u.getMonkey()
+	if require(monkey.hasName(), True): return False
+	if require(monkey.getName(), "nilson"): return False
+
+	if require(s.hasU2(), True): return False
+	u2 = s.getU2()
+	if require(u2.isText(), True): return False
+	u2t = u2.getText()
+	if require(u2t.hasText(), True): return False
+	if require(u2t.getText(), "foobar"): return False
+	
+	if require(s.hasT(), True): return False
+	t = s.getT()
+	if require(t.getId(), 45): return False
+	if require(t.hasText(), True): return False
+	if require(t.getText(), "cake"): return False
+
+	if require(s.hasB(), True): return False
+	b = s.getB()
+	if require(b.getId(), 46): return False
+	if require(b.hasBytes(), True): return False
+	if require(b.getBytes(),  b"hi"): return False
+
+	if require(s.hasL(), True): return False
+	l = s.getL()
+	if require(l.getId(), 47): return False
+	if require(l.hasList(), True): return False
+	ll = l.getList()
+	if require(len(ll), 2): return False
+	if require(ll[0], 24): return False
+	if require(ll[1], 99): return False
+	return True
 
 def testOutExtend1(path:str)->bool:
 	w = scalgoproto.Writer()
@@ -337,7 +375,13 @@ def testOutExtend1(path:str)->bool:
 	return validateOut(data, path)
 
 def testInExtend1(path:str) -> bool:
-	return False
+	data = readIn(path)
+	r = scalgoproto.Reader(data)
+	s = r.root(base.Gen2In)
+	if require(s.getAa(), 77): return False
+	if require(s.getBb(), 42): return False
+	if require(s.hasType(), False): return False
+	return True
 
 def testOutExtend2(path:str) -> bool:
 	w = scalgoproto.Writer()
@@ -350,7 +394,50 @@ def testOutExtend2(path:str) -> bool:
 	return validateOut(data, path)
 
 def testInExtend2(path:str) -> bool:
-	return False
+	o = readIn(path)
+	r = scalgoproto.Reader(o)
+	s = r.root(base.Gen3In)
+	if require(s.getAa(), 80): return False
+	if require(s.getBb(), 81): return False
+	if require(s.isCake(), True): return False
+	if require(s.getCake().getV(), 45): return False
+	if require(s.getE(), base.MyEnum.c): return False
+	if require(s.getS().x, 0): return False
+	if require(s.getS().y, 0): return False
+	if require(s.getS().z, 0): return False
+	if require(s.getB(), False): return False
+	if require(s.getU8(), 2): return False
+	if require(s.getU16(), 3): return False
+	if require(s.getU32(), 4): return False
+	if require(s.getU64(), 5): return False
+	if require(s.getI8(), 6): return False
+	if require(s.getI16(), 7): return False
+	if require(s.getI32(), 8): return False
+	if require(s.getI64(), 9): return False
+	if require(s.getF(), 10): return False
+	if require(s.getD(), 11): return False
+	if require(s.hasOs(), False): return False
+	if require(s.hasOb(), False): return False
+	if require(s.hasOu8(), False): return False
+	if require(s.hasOu16(), False): return False
+	if require(s.hasOu32(), False): return False
+	if require(s.hasOu64(), False): return False
+	if require(s.hasOi8(), False): return False
+	if require(s.hasOi16(), False): return False
+	if require(s.hasOi32(), False): return False
+	if require(s.hasOi64(), False): return False
+	if require(s.hasOf(), False): return False
+	if require(s.hasOd(), False): return False
+	if require(s.hasMember(), False): return False
+	if require(s.hasText(), False): return False
+	if require(s.hasBytes(), False): return False
+	if require(s.hasList(), False): return False
+	if require(s.hasEnumList(), False): return False
+	if require(s.hasStructList(), False): return False
+	if require(s.hasTextList(), False): return False
+	if require(s.hasBytesList(), False): return False
+	if require(s.hasMemberList(), False): return False
+	return True
 
 def main() -> None:
 	ans = False

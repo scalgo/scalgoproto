@@ -238,7 +238,32 @@ class Generator:
 			assert False
 
 	def generateVLUnionIn(self, node: VLUnion, tableName:str):
-		pass
+		self.o("\tclass Type(enum.IntEnum):")
+		self.o("\t\tNONE = 0")
+		idx = 1
+		for member in node.members:
+			assert isinstance(member, (Table, Value))
+			self.o("\t\t%s = %d"%(self.value(member.identifier).upper(), idx))
+			idx += 1
+		self.o("\t")
+		self.o("\tdef getType(self) -> Type:")
+		self.outputDoc(node, "\t")
+		self.o("\t\treturn %sIn.Type(self._getUInt16(%d, 0))"%(tableName, node.offset))
+		self.o("\t")
+		self.o("\tdef hasType(self) -> bool: return self.getType() != %sIn.Type.NONE"%(tableName))
+		for member in node.members:
+			assert isinstance(member, (Table, Value))
+			n = self.value(member.identifier)
+			uname = n[0].upper() + n[1:]
+			table = member.table if isinstance(member, Value) else member
+			self.o("\tdef is%s(self) -> bool: return self.getType() == %sIn.Type.%s"%(uname, tableName, n.upper()))
+			if table.values:
+				self.o("\t")
+				self.o("\tdef get%s(self) -> %sIn:"%(uname, table.name))
+				self.outputDoc(node, "\t\t")
+				self.o("\t\tassert self.is%s()"%(uname))
+				self.o("\t\treturn self._getVLTable(%sIn, %d)"%(table.name, node.offset+2))
+				self.o("\t")
 
 	def generateVLUnionOut(self, node:VLUnion):
 		self.outputDoc(node, "\t")
@@ -267,7 +292,12 @@ class Generator:
 			idx += 1
 
 	def generateVLBytesIn(self, node:VLBytes):
-		pass
+		self.o("\tdef hasBytes(self) -> bool: return self._getUInt32(%d, 0) != 0"%(node.offset))
+		self.o("\tdef getBytes(self) -> bytes:")
+		self.outputDoc(node, "\t\t")
+		self.o("\t\tassert self.hasBytes()")
+		self.o("\t\treturn self._getVLBytes(%d)"%(node.offset))
+		self.o("\t")
 
 	def generateVLBytesOut(self, node:VLBytes):
 		self.o("\tdef addBytes(self, value: bytes) -> None:")
@@ -276,7 +306,13 @@ class Generator:
 		self.o("\t")
 
 	def generateVLListIn(self, node:VLList):
-		pass
+		self.o("\tdef hasList(self) -> bool: return self._getUInt32(%d, 0) != 0"%(node.offset))
+		(tn, acc) = self.inListHelp(node, "self._offset + self._size, self._getUInt32(%d, 0)"%node.offset)
+		self.o("\tdef getList(self) -> scalgoproto.ListIn[%s]:"%(tn))
+		self.outputDoc(node, "\t\t")
+		self.o("\t\tassert self.hasList()")
+		self.o(acc)
+		self.o("")
 
 	def generateVLListOut(self, node:VLList):
 		self.o("\tdef addList(self, size: int) -> %s:"%(self.outListType(node)))
@@ -301,7 +337,12 @@ class Generator:
 		self.o("\t")
 
 	def generateVLTextIn(self, node:VLText):
-		pass
+		self.o("\tdef hasText(self) -> bool: return self._getUInt32(%d, 0) != 0"%(node.offset))
+		self.outputDoc(node, "\t")
+		self.o("\tdef getText(self) -> str:")
+		self.o("\t\tassert self.hasText()")
+		self.o("\t\treturn self._getVLText(%d)"%(node.offset))
+		self.o("\t")
 
 	def generateVLTextOut(self, node:VLText):
 		self.o("\tdef addText(self, text:str) -> None:")
