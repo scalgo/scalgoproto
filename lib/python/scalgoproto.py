@@ -23,24 +23,23 @@ S = TypeVar('S', bound=StructType)
 
 class ListIn(Sequence[B]):
 	"""Class for reading a list of B"""
-	def __init__(self, reader: 'Reader', w:int, size:int, offset:int, getter:Callable[['Reader', int], B], haser:Callable[['Reader', int], bool]) -> None:
+	def __init__(self, reader: 'Reader', size:int, offset:int, getter:Callable[['Reader', int, int], B], haser:Callable[['Reader', int, int], bool]) -> None:
 		"""Private constructor. Use the accessor methods on tables to get an instance"""
 		self._reader = reader
 		self._offset = offset
 		self._size = size
-		self._w = w
 		self._getter = getter
 		self._haser = haser
 
 	def has(self, idx:int) -> bool:
 		"""Return True if there is an element on possision idx. Note that idx must be less than size"""
-		return self._haser(self._reader, self._offset+idx*self._w)
+		return self._haser(self._reader, self._offset, idx)
 
 	def __len__(self) -> int:
 		return self._size
 
 	def __getitem__(self, idx) -> B:
-		return self._getter(self._reader, self._offset+idx*self._w)
+		return self._getter(self._reader, self._offset, idx)
 
 class TableIn:
 	"""Base class for reading a table"""
@@ -104,37 +103,40 @@ class Reader:
 		return size
 
 	def _getTableList(self, t:Type[TI], off:int, size:int) -> ListIn[TI]:
-		def getter(r:'Reader', oo:int) -> TI:
-			ooo = struct.unpack("<I", r._data[oo:oo+4])[0]
+		def getter(r:'Reader', s:int, i:int) -> TI:
+			ooo = struct.unpack("<I", r._data[s+4*i:s+4*i+4])[0]
 			sss = r._readSize(ooo, t._MAGIC)
 			return t(r, ooo+8, sss)
-		return ListIn[TI](self, 4, size, off, getter, lambda r, oo: struct.unpack("<I", r._data[oo:oo+4])[0] != 0)
+		return ListIn[TI](self, size, off, getter, lambda r, s, i: struct.unpack("<I", r._data[s+4*i:s+4*i+4])[0] != 0)
+
+	def _getBoolList(self, off:int, size:int) -> ListIn[bool]:
+		return ListIn[int](self, size, off, lambda r, s, i: (r._data[s+(i>>3)] >> (i & 7)) & 1 != 0, lambda r, s, i: True)
 
 	def _getIntList(self, f:str, w:int, off:int, size:int) -> ListIn[int]:
-		return ListIn[int](self, w, size, off, lambda r, oo: struct.unpack("<"+f, r._data[oo:oo+4])[0], lambda r, oo: True)
+		return ListIn[int](self, size, off, lambda r, s, i: struct.unpack("<"+f, r._data[s+i*w:s+i*w+w])[0], lambda r, s, i: True)
 
 	def _getFloatList(self, f:str, w:int, off:int, size:int) -> ListIn[float]:
-		return ListIn[float](self, w, size, off, lambda r, oo: struct.unpack("<"+f, r._data[oo:oo+4])[0], lambda r, oo: not math.isnan(struct.unpack("<"+f, r._data[oo:oo+4])[0]))
+		return ListIn[float](self, size, off, lambda r, s, i: struct.unpack("<"+f, r._data[s+i*w:s+i*w+w])[0], lambda r, s, i: not math.isnan(struct.unpack("<"+f, r._data[s+i*w:s+i*w+w])[0]))
 
 	def _getStructList(self, t:Type[S], off:int, size:int) -> ListIn[S]:
-		return ListIn[S](self, t._WIDTH, size, off, lambda r, oo: t._read(r, oo), lambda r, oo: True)
+		return ListIn[S](self, size, off, lambda r, s, i: t._read(r, s + i * t._WIDTH), lambda r, s, i: True)
 
 	def _getEnumList(self, t:Type[E], off:int, size:int) -> ListIn[E]:
-		return ListIn[E](self, 1, size, off, lambda r, oo: t(r._data[oo]), lambda r, oo: r._data[oo] != 255)
+		return ListIn[E](self, size, off, lambda r, s, i: t(r._data[s+i]), lambda r, s, i: r._data[s+i] != 255)
 
 	def _getTextList(self, off:int, size:int) -> ListIn[str]:
-		def getter(r:'Reader', oo:int) -> str:
-			ooo = struct.unpack("<I", r._data[oo:oo+4])[0]
+		def getter(r:'Reader', s:int, i:int) -> str:
+			ooo = struct.unpack("<I", r._data[s+4*i:s+4*i+4])[0]
 			sss = r._readSize(ooo, _TEXT_MAGIC)
 			return r._data[ooo+8:ooo+8+sss].decode('utf-8')
-		return ListIn[str](self, 4, size, off, getter, lambda r, oo: struct.unpack("<I", r._data[oo:oo+4])[0] != 0)
+		return ListIn[str](self, size, off, getter, lambda r, s, i: struct.unpack("<I", r._data[s+4*i:s+4*i+4])[0] != 0)
 
 	def _getBytesList(self, off:int, size:int) -> ListIn[bytes]:
-		def getter(r:'Reader', oo:int) -> bytes:
-			ooo = struct.unpack("<I", r._data[oo:oo+4])[0]
+		def getter(r:'Reader', s:int, i:int) -> bytes:
+			ooo = struct.unpack("<I", r._data[s+4*i:s+4*i+4])[0]
 			sss = r._readSize(ooo, _BYTES_MAGIC)
 			return r._data[ooo+8:ooo+8+sss]
-		return ListIn[bytes](self, 4, size, off, getter, lambda r, oo: struct.unpack("<I", r._data[oo:oo+4])[0] != 0)
+		return ListIn[bytes](self, size, off, getter, lambda r, s, i: struct.unpack("<I", r._data[s+4*i:s+4*i+4])[0] != 0)
 
 	def root(self, type: Type[TI]) -> TI:
 		"""Return root node of message, of type type"""
@@ -194,31 +196,44 @@ class TableOut:
 		self._writer._write(t)
 	def _setVLList(self, o:int, size:int) -> None:
 		self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", size)
+
 class OutList:
 	_offset: int = 0
 	def __init__(self, writer: 'Writer', d:bytes, size:int, withHeader:bool) -> None:
 		"""Private constructor. Use factory methods on writer"""
 		self._writer = writer
-		self._w = len(d)
-		writer._reserve(size*self._w + 8)
+		writer._reserve(len(d) + 8)
 		if withHeader: writer._write(struct.pack("<II", _LIST_MAGIC, size))
 		self._offset = writer._used
-		writer._write(d*size)
+		writer._write(d)
 
 class BasicListOut(OutList, Generic[B]):
 	def __init__(self, writer: 'Writer', e:str, w:int, size:int, withHeader:bool = True) -> None:
 		"""Private constructor. Use factory methods on writer"""
-		super().__init__(writer, b'\0'*w, size, withHeader)
+		super().__init__(writer, b'\0'*w*size, size, withHeader)
 		self._e = "<"+e
+		self._w = w
 
 	def add(self, index: int, value: B) -> None:
 		"""Add value to list at index"""
 		self._writer._data[self._offset + index*self._w: self._offset + (1+index)*self._w] = struct.pack(self._e, value)
 
+class BoolListOut(OutList):
+	def __init__(self, writer: 'Writer', size:int, withHeader:bool = True) -> None:
+		"""Private constructor. Use factory methods on writer"""
+		super().__init__(writer, b'\0'*((size+7)>>3), size, withHeader)
+
+	def add(self, index: int, value: bool) -> None:
+		"""Add value to list at index"""
+		if value:
+			self._writer._data[self._offset + (index >> 3)] |= 1 << (index & 7)
+		else:
+			self._writer._data[self._offset + (index >> 3)] &= ~(1 << (index & 7))
+
 class EnumListOut(OutList, Generic[E]):
 	def __init__(self, writer: 'Writer', e:Type[E], size:int, withHeader:bool = True) -> None:
 		"""Private constructor. Use factory methods on writer"""
-		super().__init__(writer, b'\xff', size, withHeader)
+		super().__init__(writer, b'\xff'*size, size, withHeader)
 
 	def add(self, index: int, value: E) -> None:
 		"""Add value to list at index"""
@@ -227,7 +242,7 @@ class EnumListOut(OutList, Generic[E]):
 class StructListOut(OutList, Generic[S]):
 	def __init__(self, writer: 'Writer', s:Type[S], size:int, withHeader:bool = True) -> None:
 		"""Private constructor. Use factory methods on writer"""
-		super().__init__(writer, b'\0'*s._WIDTH, size, withHeader)
+		super().__init__(writer, b'\0'*s._WIDTH*size, size, withHeader)
 		self._s = s
 
 	def add(self, index: int, value: S) -> None:
@@ -237,7 +252,7 @@ class StructListOut(OutList, Generic[S]):
 class ObjectListOut(OutList, Generic[B]):
 	def __init__(self, writer: 'Writer', size:int, withHeader:bool = True) -> None:
 		"""Private constructor. Use factory methods on writer"""
-		super().__init__(writer, b'\0\0\0\0', size, withHeader)
+		super().__init__(writer, b'\0\0\0\0'*size, size, withHeader)
 
 	def add(self, index:int, value: B) -> None:
 		"""Add value to list at index"""
@@ -273,6 +288,7 @@ class Writer:
 	def constructUInt64List(self, size:int) -> BasicListOut[int]: return BasicListOut[int](self, "Q", 8, size)
 	def constructFloat32List(self, size:int) -> BasicListOut[float]: return BasicListOut[float](self, "f", 4, size)
 	def constructFloat64List(self, size:int) -> BasicListOut[float]: return BasicListOut[float](self, "d", 8, size)
+	def constructBoolList(self, size:int) -> BoolListOut: return BoolListOut(self, size)
 	def constructEnumList(self, e:Type[E], size:int) -> EnumListOut[E]: return EnumListOut[E](self, e, size)
 	def constructStructList(self, s:Type[S], size:int) -> StructListOut[S]: return StructListOut[S](self, s, size)
 	def constructTableList(self, s:Type[TO], size:int) -> ObjectListOut[TO]: return ObjectListOut[S](self, size)

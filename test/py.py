@@ -245,6 +245,20 @@ def testOutComplex(path:str) -> bool:
 	l6.add(0, m)
 	l6.add(2, m)
 
+	l7 = w.constructFloat32List(2)
+	l7.add(1, 98.0)
+
+	l8 = w.constructFloat64List(3)
+	l8.add(2, 78.0)
+
+	l9 = w.constructUInt8List(2)
+	l9.add(0, 4)
+
+	l10 = w.constructBoolList(10)
+	l10.add(0, True)
+	l10.add(2, True)
+	l10.add(8, True)
+
 	s = w.constructTable(base.ComplexOut)
 	s.addMember(m)
 	s.addText(t)
@@ -255,6 +269,10 @@ def testOutComplex(path:str) -> bool:
 	s.addTextList(l4)
 	s.addBytesList(l5)
 	s.addMemberList(l6)
+	s.addF32list(l7)
+	s.addF64list(l8)
+	s.addU8list(l9)
+	s.addBlist(l10)
 
 	data = w.finalize(s)
 	return validateOut(data, path)
@@ -317,6 +335,40 @@ def testInComplex(path:str) -> bool:
 	if require(l6.has(2), True): return False
 	if require(l6[0].getId(), 42): return False
 	if require(l6[2].getId(), 42): return False
+
+	if require(s.hasF32list(), True): return False
+	l7 = s.getF32list()
+	if require(len(l7), 2): return False
+	if require(l7[0], 0.0): return False
+	if require(l7[1], 98.0): return False
+
+	if require(s.hasF64list(), True): return False
+	l8 = s.getF64list()
+	if require(len(l8), 3): return False
+	if require(l8[0], 0.0): return False
+	if require(l8[1], 0.0): return False
+	if require(l8[2], 78.0): return False
+
+	if require(s.hasU8list(), True): return False
+	l9 = s.getU8list()
+	if require(len(l9), 2): return False
+	if require(l9[0], 4): return False
+	if require(l9[1], 0): return False
+
+	if require(s.hasBlist(), True): return False
+	l10 = s.getBlist()
+	if require(len(l10), 10): return False
+	if require(l10[0], True): return False
+	if require(l10[1], False): return False
+	if require(l10[2], True): return False
+	if require(l10[3], False): return False
+	if require(l10[4], False): return False
+	if require(l10[5], False): return False
+	if require(l10[6], False): return False
+	if require(l10[7], False): return False
+	if require(l10[8], True): return False
+	if require(l10[9], False): return False
+
 	return True
 
 def testOutVL(path:str) -> bool:

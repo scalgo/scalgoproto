@@ -31,7 +31,7 @@ class Generator:
 
 	def outListType(self, node:Union[Value,VLList]) -> str:
 		if node.type.type == TokenType.BOOL:
-			assert False # TODO bool list
+			return "scalgoproto.BoolListOut"
 		elif node.type.type in typeMap:
 			return "scalgoproto.BasicListOut[%s]"%(typeMap[node.type.type].p)
 		elif node.type.type == TokenType.IDENTIFIER:
@@ -53,7 +53,7 @@ class Generator:
 	def inListHelp(self, node:Union[Value,VLList], os:str) -> Tuple[str, str]:
 		tn = self.value(node.type)
 		if node.type.type == TokenType.BOOL:
-			assert False # TODO bool list
+			return ("bool", "\t\treturn self._reader._getBoolList(%s)"%(os))
 		elif node.type.type in (TokenType.FLOAT32, TokenType.FLOAT64):
 			ti = typeMap[node.type.type]
 			return (ti.p, "\t\treturn self._reader._getFloatList('%s', %d, %s)"%(ti.s, ti.w, os))

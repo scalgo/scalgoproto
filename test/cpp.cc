@@ -225,6 +225,20 @@ int main(int, char ** argv) {
 		l6.add(0, m);
 		l6.add(2, m);
 
+		auto l7 = w.constructList<float>(2);
+		l7.add(1, 98.0);
+
+		auto l8 = w.constructList<double>(3);
+		l8.add(2, 78.0);
+
+		auto l9 = w.constructList<uint8_t>(2);
+		l9.add(0, 4);
+
+		auto l10 = w.constructList<bool>(10);
+		l10.add(0, true);
+		l10.add(2, true);
+		l10.add(8, true);
+
 		auto s = w.construct<ComplexOut>();
 		s.addMember(m);
 		s.addText(t);
@@ -235,6 +249,11 @@ int main(int, char ** argv) {
 		s.addTextList(l4);
 		s.addBytesList(l5);
 		s.addMemberList(l6);
+		s.addF32list(l7);
+		s.addF64list(l8);
+		s.addU8list(l9);
+		s.addBlist(l10);
+
 		auto [data, size] = w.finalize(s);
 		return !validateOut(data, size, argv[2]);
 	} else if (!strcmp(argv[1], "in_complex")) {
@@ -299,6 +318,40 @@ int main(int, char ** argv) {
 		REQUIRE(l6.has(2), true);
 		REQUIRE(l6[0].getId(), 42);
 		REQUIRE(l6[2].getId(), 42);
+
+		REQUIRE(s.hasF32list(), true);
+		auto l7 = s.getF32list();
+		REQUIRE(l7.size(), 2);
+		REQUIRE(l7[0], 0.0);
+		REQUIRE(l7[1], 98.0);
+
+		REQUIRE(s.hasF64list(), true);
+		auto l8 = s.getF64list();
+		REQUIRE(l8.size(), 3);
+		REQUIRE(l8[0], 0.0);
+		REQUIRE(l8[1], 0.0);
+		REQUIRE(l8[2], 78.0);
+
+		REQUIRE(s.hasU8list(), true);
+		auto l9 = s.getU8list();
+		REQUIRE(l9.size(), 2);
+		REQUIRE(l9[0], 4);
+		REQUIRE(l9[1], 0);
+
+		REQUIRE(s.hasBlist(), true);
+		auto l10 = s.getBlist();
+		REQUIRE(l10.size(), 10);
+		REQUIRE(l10[0], true);
+		REQUIRE(l10[1], false);
+		REQUIRE(l10[2], true);
+		REQUIRE(l10[3], false);
+		REQUIRE(l10[4], false);
+		REQUIRE(l10[5], false);
+		REQUIRE(l10[6], false);
+		REQUIRE(l10[7], false);
+		REQUIRE(l10[8], true);
+		REQUIRE(l10[9], false);
+
 		return 0;
 	} else if (!strcmp(argv[1], "out_vl")) {
 		scalgoproto::Writer w;

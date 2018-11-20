@@ -15,6 +15,7 @@ class Writer;
 class In;
 class Reader;
 struct EnumTag;
+struct BoolTag;
 struct PodTag;
 struct TableTag;
 struct ListTag;
@@ -48,7 +49,7 @@ protected:
 
 
 template <typename T> struct MetaMagic {using t=UnknownTag;};
-template <> struct MetaMagic<bool> {using t=PodTag;};
+template <> struct MetaMagic<bool> {using t=BoolTag;};
 template <> struct MetaMagic<std::uint8_t> {using t=PodTag;};
 template <> struct MetaMagic<std::uint16_t> {using t=PodTag;};
 template <> struct MetaMagic<std::uint32_t> {using t=PodTag;};
@@ -62,6 +63,13 @@ template <> struct MetaMagic<double> {using t=PodTag;};
 
 template <typename Tag, typename T>
 struct ListAccessHelp {};
+
+template <uint32_t mult>
+uint64_t computeSize(uint64_t v) {
+	if constexpr (mult == 0) return (v+7)>>3;
+	return v * mult;
+};
+
 
 class Reader {
 private:
@@ -82,7 +90,7 @@ private:
 		if (word != magic) throw Error();
 		// Read size and check that the object is within the reader boundary
 		memcpy(&word, data+offset+4, 4);
-		if ((uint64_t)word*mult + offset + 8 + add> size) throw Error();
+		if (computeSize<mult>(word) + offset + 8 + add> size) throw Error();
 		return word;
 	}
 public:
@@ -101,9 +109,31 @@ public:
 
 
 template <typename T>
+struct ListAccessHelp<BoolTag, T> {
+	static constexpr bool optional = false;
+	static constexpr size_t mult = 0;
+	static constexpr int def = 0;
+	static bool get(const Reader &, const char * start, std::uint32_t index) noexcept {
+		const size_t bit = index & 7;
+		const size_t byte = index >> 3;
+		std::uint8_t v;
+		memcpy(&v, start + byte, 1);
+		return (v >> bit) & 1;
+	}
+	static void set(char * data, std::uint32_t offset, std::uint32_t index, const bool & value) noexcept {
+		const size_t bit = index & 7;
+		const size_t byte = index >> 3;
+		std::uint8_t v;
+		memcpy(&v, data + offset + byte, 1);
+		v = value ? v | (1 << bit) : (v & ~(1<<bit));
+		memcpy(data + offset + byte, &v, 1);
+	}
+};
+
+template <typename T>
 struct ListAccessHelp<PodTag, T> {
 	static constexpr bool optional = false;
-	static constexpr size_t size = sizeof(T);
+	static constexpr size_t mult = sizeof(T);
 	static constexpr int def = 0;
 	static T get(const Reader &, const char * start, std::uint32_t index) noexcept {
 		T ans;
@@ -118,7 +148,7 @@ struct ListAccessHelp<PodTag, T> {
 template <typename T>
 struct ListAccessHelp<EnumTag, T> {
 	static constexpr bool optional = true;
-	static constexpr size_t size = sizeof(T);
+	static constexpr size_t mult = 1;
 	static constexpr int def = 255;
 	static bool has(const char * start, std::uint32_t index) noexcept {
 		return ((const unsigned char *)(start))[index] != 255;
@@ -136,7 +166,7 @@ struct ListAccessHelp<EnumTag, T> {
 template <typename T>
 struct ListAccessHelp<TextTag, T> {
 	static constexpr bool optional = true;
-	static constexpr size_t size = 4;
+	static constexpr size_t mult = 4;
 	static constexpr int def = 0;
 	static bool has(const char * start, std::uint32_t index) noexcept {
 		std::uint32_t off;
@@ -159,7 +189,7 @@ struct ListAccessHelp<TextTag, T> {
 template <typename T>
 struct ListAccessHelp<BytesTag, T> {
 	static constexpr bool optional = true;
-	static constexpr size_t size = 4;
+	static constexpr size_t mult = 4;
 	static constexpr int def = 0;
 	static bool has(const char * start, std::uint32_t index) noexcept {
 		std::uint32_t off;
@@ -182,7 +212,7 @@ struct ListAccessHelp<BytesTag, T> {
 template <typename T>
 struct ListAccessHelp<TableTag, T> {
 	static constexpr bool optional = true;
-	static constexpr size_t size = 4;
+	static constexpr size_t mult = 4;
 	static constexpr int def = 0;
 	static bool has(const char * start, std::uint32_t index) noexcept {
 		std::uint32_t off;
@@ -346,7 +376,7 @@ protected:
 	template <typename T, uint32_t o>
 	ListIn<T> getList_() const {
 		const uint32_t off = getInnerUnchecked_<std::uint32_t, o>();
-		uint32_t size = reader.readObjectSize_<0x3400BB46, ListAccess<T>::size>(off);
+		uint32_t size = reader.readObjectSize_<0x3400BB46, ListAccess<T>::mult>(off);
 		return ListIn<T>(reader, reader.data+off+8, size);
 	}
 
@@ -389,7 +419,7 @@ protected:
 
 	template <typename T, uint32_t o>
 	ListIn<T> getVLList_() const {
-		return ListIn<T>(reader, start+size, getVLSize_<o, ListAccess<T>::size>());
+		return ListIn<T>(reader, start+size, getVLSize_<o, ListAccess<T>::mult>());
 	}
 
 	template <typename T, uint32_t o>
@@ -517,11 +547,11 @@ public:
 	ListOut<T> constructList(size_t size) {
 		using A = ListAccess<T>;
 		ListOut<T> o(*this, this->size, size);
-		expand(size*A::size+8);
+		expand(computeSize<A::mult>(size)+8);
 		write((uint32_t)0x3400BB46, o.offset);
 		write((uint32_t)size, o.offset+4);
 		o.offset += 8;
-		memset(data+o.offset, A::def, size*A::size);
+		memset(data+o.offset, A::def, computeSize<A::mult>(size));
 		return o;
 	}
 
@@ -623,7 +653,7 @@ protected:
 		setInner_<uint32_t, offset>(size);
 		using A = ListAccess<T>;
 		ListOut<T> o(writer, writer.size, size);
-		size_t bsize = size * A::size;
+		size_t bsize = computeSize<A::mult>(size);
 		writer.expand(bsize);
 		memset(writer.data+o.offset, A::def, bsize);
 		return o;
