@@ -13,6 +13,22 @@ struct MyStruct {
     z: Bool;
 }
 
+struct FullStruct {
+    e: MyEnum;
+    s: MyStruct;
+    b: Bool;
+    u8: UInt8;
+    u16: UInt16;
+    u32: UInt32;
+    u64: UInt64;
+    i8: Int8;
+    i16: Int16;
+    i32: Int32;
+    i64: Int64;
+    f: Float32;
+    d: Float64;
+}
+
 /**
  * Simple table used for testing
  *
@@ -21,7 +37,7 @@ struct MyStruct {
 table Simple @F0606B0B {
     /** My enum */
     e: MyEnum;
-    s: MyStruct;
+    s: FullStruct;
     b: Bool;
     u8: UInt8 = 2;
     u16: UInt16 = 3;

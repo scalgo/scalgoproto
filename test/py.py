@@ -63,7 +63,7 @@ def testOut(path:str) -> bool:
 	w = scalgoproto.Writer()
 	s = w.constructTable(base.SimpleOut)
 	s.addE(base.MyEnum.c)
-	s.addS(base.MyStruct(42, 27.0, True))
+	s.addS(base.FullStruct(base.MyEnum.d, base.MyStruct(42, 27.0, True), False, 8, 9, 10, 11, -8, -9, -10, -11, 27.0, 22.0))
 	s.addB(True)
 	s.addU8(242)
 	s.addU16(4024)
@@ -95,9 +95,21 @@ def testIn(path:str) -> bool:
 	s = r.root(base.SimpleIn)
 	if require(s.hasE(), True): return False
 	if require(s.getE(), base.MyEnum.c): return False
-	if require(s.getS().x, 42): return False
-	if require(s.getS().y, 27.0): return False
-	if require(s.getS().z, True): return False
+	if require(s.getS().e, base.MyEnum.d): return False
+	if require(s.getS().s.x, 42): return False
+	if require(s.getS().s.y, 27.0): return False
+	if require(s.getS().s.z, True): return False
+	if require(s.getS().b, False): return False
+	if require(s.getS().u8, 8): return False
+	if require(s.getS().u16, 9): return False
+	if require(s.getS().u32, 10): return False
+	if require(s.getS().u64, 11): return False
+	if require(s.getS().i8, -8): return False
+	if require(s.getS().i16, -9): return False
+	if require(s.getS().i32, -10): return False
+	if require(s.getS().i64, -11): return False
+	if require(s.getS().f, 27.0): return False
+	if require(s.getS().d, 22.0): return False
 	if require(s.getB(), True): return False
 	if require(s.getU8(), 242): return False
 	if require(s.getU16(), 4024): return False
@@ -153,9 +165,22 @@ def testIn(path:str) -> bool:
 def testInDefault(path:str) -> bool:
 	r = scalgoproto.Reader(readIn(path))
 	s = r.root(base.SimpleIn)
-	if require(s.getS().x, 0): return False
-	if require(s.getS().y, 0): return False
-	if require(s.getS().z, False): return False
+	if require(s.hasE(), False): return False
+	if require(s.getS().e, base.MyEnum.a): return False
+	if require(s.getS().s.x, 0): return False
+	if require(s.getS().s.y, 0.0): return False
+	if require(s.getS().s.z, False): return False
+	if require(s.getS().b, False): return False
+	if require(s.getS().u8, 0): return False
+	if require(s.getS().u16, 0): return False
+	if require(s.getS().u32, 0): return False
+	if require(s.getS().u64, 0): return False
+	if require(s.getS().i8, 0): return False
+	if require(s.getS().i16, 0): return False
+	if require(s.getS().i32, 0): return False
+	if require(s.getS().i64, 0): return False
+	if require(s.getS().f, 0): return False
+	if require(s.getS().d, 0): return False
 	if require(s.getB(), False): return False
 	if require(s.getU8(), 2): return False
 	if require(s.getU16(), 3): return False
