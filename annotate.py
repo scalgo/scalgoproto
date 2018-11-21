@@ -5,6 +5,7 @@ Perform validation of the ast, and assign offsets and such
 from parser import TokenType, NodeType, Token, Struct, AstNode, Value, Enum, Table, VLUnion, VLList
 from typing import Set, Dict, List
 import sys, struct
+from keywords import keywords
 
 class Annotater:
 	enums: Dict[str, Enum]
@@ -39,6 +40,37 @@ class Annotater:
 		print(self.data[start:end])
 		print("%s%s%s"%('\t'*t, ' '*(token.index - start -t), '^'*(token.length)))
 	
+	def validateUname(self, t:Token) -> str:
+		name = self.value(t)
+		if not name[0].isupper() or name.count("_") or not name.isidentifier():
+			self.error(t, "Name must be CamelCase")
+		if name in self.enums or name in self.structs or name in self.tabels:
+			self.error(t, "Duplicate name")
+		if name in keywords:
+			self.error(t, "Illegal name")
+		if name in self.enums:
+			self.error(self.enums[name].identifier, "Previously defined here")
+		if name in self.structs:
+			self.error(self.structs[name].identifier, "Previously defined here")
+		if name in self.tabels:
+			self.error(self.tabels[name].identifier, "Previously defined here")
+		return name
+
+	def validateMemberName(self, t:Token, name:str, seen: Dict[str, Token], has:bool=False, is_:bool=False, add:bool=False, get:bool=False, allow_keywords=False) -> None:
+		if name[0].isupper() or name.count("_") or not name.isidentifier():
+			self.error(t, "Name must be CamelCase")
+		if not allow_keywords and name in keywords:
+			self.error(t, "Illegal name '%s'"%name)
+		hasName = "has%s%s"%(name[0].upper(), name[1:]) if has else None
+		isName = "is%s%s"%(name[0].upper(), name[1:]) if is_ else None
+		getName = "get%s%s"%(name[0].upper(), name[1:]) if has else None
+		addName = "add%s%s"%(name[0].upper(), name[1:]) if is_ else None
+
+		for n in [name, hasName, isName, getName, addName]:
+			if n and n in seen:
+				self.error(t, "Name conflict")
+				self.error(seen[name], "Conflicts with this")
+			seen[n] = t
 
 	def getInt(self, value:Token, min:int, max:int, d:int) -> int:
 		if not value:
@@ -80,12 +112,11 @@ class Annotater:
 			node.docstring.pop()
 
 	def visitContent(self, tableName: str, values: List[AstNode], isStruct: bool) -> bytes:
-		content: Set[str] = set()
+		content: Dict[str, Token] = {}
 		bytes = 0
 		default = []
 		boolBit = 8
 		boolOffset = 0
-		tableValues: Set[str] = set()
 		vl:AstNode = None
 		for v in values:
 			self.createDocString(v)
@@ -113,10 +144,8 @@ class Annotater:
 						self.error(v.value, "Unhandled value")
 
 				val = self.value(v.identifier)
+				self.validateMemberName(v.identifier, val, content, get=False, has=v.optional, add=v.list != None)
 				typeName = self.value(v.type)
-				if val in content:
-					self.error(v.identifier, "Duplicate name")
-					continue
 
 				if isStruct and v.optional:
 					self.error(v.optional, "Not allowed in structs")
@@ -275,7 +304,7 @@ class Annotater:
 					v.bytes = 6
 					default.append(b"\0\0\0\0\0\0")									
 					assert isinstance(v, VLUnion)
-					members: Dict[str, Token] = {}
+					self.validateMemberName(v.token, "type", content, get=True, has=True, is_=True, allow_keywords=True)
 					for member in v.members:
 						self.createDocString(member)
 						if member.t == NodeType.VALUE:
@@ -285,25 +314,17 @@ class Annotater:
 							else:
 								member.table = self.tabels[self.value(member.type)]
 							name = self.value(member.identifier)
-							if name in members:
-								self.error(member.identifier, "Duplicate union member")
-								self.error(members[name], "Allready declare here")
-							else:
-								members[name] = member.identifier
+							self.validateMemberName(member.identifier, name, content, get=True, has=True, add=True, is_=True)
 						elif member.t == NodeType.TABLE:
 							assert isinstance(member, Table)
 							name = self.value(member.identifier)
-							if name in members:
-								self.error(member.identifier, "Duplicate union member")
-								self.error(members[name], "Allready declare here")
-							else:
-								members[name] = member.identifier
+							self.validateMemberName(member.identifier, name, content, get=True, has=True, add=True, is_=True)
 							member.name = "%s_%s"%(tableName, name)
 							member.default = self.visitContent(member.name, member.values, False)
-							
 						else:
 							self.error(member.token, "Unknown member type")
 				elif v.t == NodeType.VLLIST:
+					self.validateMemberName(v.token, "list", content, get=True, has=True, add=True, allow_keywords=True)
 					v.bytes = 4
 					default.append(b"\0\0\0\0")
 					assert isinstance(v, VLList)
@@ -317,7 +338,12 @@ class Annotater:
 							v.struct = self.structs[typeName]
 						else:
 							self.error(v.type, "Unknown type")
-				else:
+				elif v.t == NodeType.VLBYTES:
+					self.validateMemberName(v.token, "bytes", content, get=True, has=True, add=True, allow_keywords=True)
+					v.bytes = 4
+					default.append(b"\0\0\0\0")
+				elif v.t == NodeType.VLTEXT:
+					self.validateMemberName(v.token, "text", content, get=True, has=True, add=True, allow_keywords=True)
 					v.bytes = 4
 					default.append(b"\0\0\0\0")
 			else:
@@ -337,11 +363,8 @@ class Annotater:
 			self.createDocString(node)
 			if node.t == NodeType.STRUCT:
 				assert isinstance(node, Struct)
-				name = self.value(node.identifier)
-				self.context = "struct %s"%name
-				if name in self.enums or name in self.structs or name in self.tabels:
-					self.error(node.identifier, "Duplicate name")
-					continue
+				self.context = "struct %s"%self.value(node.identifier)
+				name = self.validateUname(node.identifier)
 				structValues: Set[str] = set()
 				bytes = len(self.visitContent(name, node.values, True))
 				self.structs[name] = node
@@ -349,11 +372,8 @@ class Annotater:
 				print("struct %s of size %d"%(name, bytes), file=sys.stderr)
 			elif node.t == NodeType.ENUM:
 				assert isinstance(node, Enum)
-				name = self.value(node.identifier)
-				self.context = "enum %s"%name
-				if name in self.enums or name in self.structs or name in self.tabels:
-					self.error(node.identifier, "Duplicate name")
-					continue
+				self.context = "enum %s"%self.value(node.identifier)
+				name = self.validateUname(node.identifier)
 				enumValues: Dict[str, int] = {}
 				index = 0
 				for ev in node.values:
@@ -370,13 +390,10 @@ class Annotater:
 				print("enum %s with %s members"%(name, len(enumValues)), file=sys.stderr)
 			elif node.t == NodeType.TABLE:
 				assert isinstance(node, Table)
-				name = self.value(node.identifier)
+				self.context = "tabel %s"%self.value(node.identifier)
+				name = self.validateUname(node.identifier)
 				node.name = name
 				node.magic = int(self.value(node.id)[1:], 16)
-				self.context = "tabel %s"%name
-				if name in self.enums or name in self.structs or name in self.tabels:
-					self.error(node.identifier, "Duplicate name")
-					continue
 				node.default = self.visitContent(name, node.values, False)
 				self.tabels[name] = node
 				print("table %s of size >= %d"%(name, len(node.default)+8), file=sys.stderr)
