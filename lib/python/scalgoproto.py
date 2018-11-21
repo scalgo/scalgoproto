@@ -21,6 +21,15 @@ TO = TypeVar('TO', bound='TableOut')
 E = TypeVar('E', bound=enum.IntEnum)
 S = TypeVar('S', bound=StructType)
 
+TT = TypeVar('TT')
+class Adder(Generic[B]):
+	def __init__(self, fset: Callable[[TT, B], None]) -> None:
+		self.fset = fset
+		self.__doc__ = fset.__doc__
+	
+	def __set__(self, obj:TT, value:B) -> None:
+		self.fset(obj, value)
+
 class ListIn(Sequence[B]):
 	"""Class for reading a list of B"""
 	def __init__(self, reader: 'Reader', size:int, offset:int, getter:Callable[['Reader', int, int], B], haser:Callable[['Reader', int, int], bool]) -> None:
@@ -52,42 +61,42 @@ class TableIn:
 		self._offset = offset
 		self._size = size
 
-	def _getUInt32F(self, o:int) -> int: return struct.unpack("<I", self._reader._data[self._offset+o:self._offset+o+4])[0]
-	def _getInt8(self, o:int, d:int) -> int: return struct.unpack("<b", self._reader._data[self._offset+o:self._offset+o+1])[0] if o < self._size else d
-	def _getUInt8(self, o:int, d:int) -> int: return struct.unpack("<B", self._reader._data[self._offset+o:self._offset+o+1])[0] if o < self._size else d
-	def _getInt16(self, o:int, d:int) -> int: return struct.unpack("<h", self._reader._data[self._offset+o:self._offset+o+2])[0] if o < self._size else d
-	def _getUInt16(self, o:int, d:int) -> int: return struct.unpack("<H", self._reader._data[self._offset+o:self._offset+o+2])[0] if o < self._size else d
-	def _getInt32(self, o:int, d:int) -> int: return struct.unpack("<i", self._reader._data[self._offset+o:self._offset+o+4])[0] if o < self._size else d
-	def _getUInt32(self, o:int, d:int) -> int: return struct.unpack("<I", self._reader._data[self._offset+o:self._offset+o+4])[0] if o < self._size else d
-	def _getInt64(self, o:int, d:int) -> int: return struct.unpack("<q", self._reader._data[self._offset+o:self._offset+o+8])[0] if o < self._size else d
-	def _getUInt64(self, o:int, d:int) -> int: return struct.unpack("<Q", self._reader._data[self._offset+o:self._offset+o+8])[0] if o < self._size else d
-	def _getFloat32(self, o:int, d:float) -> float: return struct.unpack("<f", self._reader._data[self._offset+o:self._offset+o+4])[0] if o < self._size else d
-	def _getFloat64(self, o:int, d:float) -> float: return struct.unpack("<d", self._reader._data[self._offset+o:self._offset+o+8])[0] if o < self._size else d
-	def _getBit(self, o:int, b:int, d:bool) -> bool: return self._reader._data[self._offset+o] & (1 << b) != 0 if o < self._size else d
-	def _getText(self, o:int) -> str:
-		off = self._getUInt32F(o)
-		size = self._reader._readSize(off, _TEXT_MAGIC)
+	def _get_uint32_f(self, o:int) -> int: return struct.unpack("<I", self._reader._data[self._offset+o:self._offset+o+4])[0]
+	def _get_int8(self, o:int, d:int) -> int: return struct.unpack("<b", self._reader._data[self._offset+o:self._offset+o+1])[0] if o < self._size else d
+	def _get_uint8(self, o:int, d:int) -> int: return struct.unpack("<B", self._reader._data[self._offset+o:self._offset+o+1])[0] if o < self._size else d
+	def _get_int16(self, o:int, d:int) -> int: return struct.unpack("<h", self._reader._data[self._offset+o:self._offset+o+2])[0] if o < self._size else d
+	def _get_uint16(self, o:int, d:int) -> int: return struct.unpack("<H", self._reader._data[self._offset+o:self._offset+o+2])[0] if o < self._size else d
+	def _get_int32(self, o:int, d:int) -> int: return struct.unpack("<i", self._reader._data[self._offset+o:self._offset+o+4])[0] if o < self._size else d
+	def _get_uint32(self, o:int, d:int) -> int: return struct.unpack("<I", self._reader._data[self._offset+o:self._offset+o+4])[0] if o < self._size else d
+	def _get_int64(self, o:int, d:int) -> int: return struct.unpack("<q", self._reader._data[self._offset+o:self._offset+o+8])[0] if o < self._size else d
+	def _get_uint64(self, o:int, d:int) -> int: return struct.unpack("<Q", self._reader._data[self._offset+o:self._offset+o+8])[0] if o < self._size else d
+	def _get_float32(self, o:int, d:float) -> float: return struct.unpack("<f", self._reader._data[self._offset+o:self._offset+o+4])[0] if o < self._size else d
+	def _get_float64(self, o:int, d:float) -> float: return struct.unpack("<d", self._reader._data[self._offset+o:self._offset+o+8])[0] if o < self._size else d
+	def _get_bit(self, o:int, b:int, d:bool) -> bool: return self._reader._data[self._offset+o] & (1 << b) != 0 if o < self._size else d
+	def _get_text(self, o:int) -> str:
+		off = self._get_uint32_f(o)
+		size = self._reader._read_size(off, _TEXT_MAGIC)
 		return self._reader._data[off+8: off+8+size].decode('utf-8')
-	def _getBytes(self, o:int) -> bytes:
-		off = self._getUInt32F(o)
-		size = self._reader._readSize(off, _BYTES_MAGIC)
+	def _get_bytes(self, o:int) -> bytes:
+		off = self._get_uint32_f(o)
+		size = self._reader._read_size(off, _BYTES_MAGIC)
 		return self._reader._data[off+8: off+8+size]
-	def _getTable(self, t:Type[TI], o:int) -> TI:
-		off = self._getUInt32F(o)
-		size = self._reader._readSize(off, t._MAGIC)
+	def _get_table(self, t:Type[TI], o:int) -> TI:
+		off = self._get_uint32_f(o)
+		size = self._reader._read_size(off, t._MAGIC)
 		return t(self._reader, off+8, size)
-	def _getList(self, o:int) -> Tuple[int, int]:
-		off = self._getUInt32F(o)
-		size = self._reader._readSize(off, _LIST_MAGIC)
+	def _get_list(self, o:int) -> Tuple[int, int]:
+		off = self._get_uint32_f(o)
+		size = self._reader._read_size(off, _LIST_MAGIC)
 		return (off+8, size)
-	def _getVLTable(self, t:Type[TI], o:int) -> TI:
-		size = self._getUInt32F(o)
+	def _get_vl_table(self, t:Type[TI], o:int) -> TI:
+		size = self._get_uint32_f(o)
 		return t(self._reader, self._offset+self._size, size)
-	def _getVLText(self, o:int) -> str:
-		size = self._getUInt32F(o)
+	def _get_vl_text(self, o:int) -> str:
+		size = self._get_uint32_f(o)
 		return self._reader._data[self._offset+self._size:self._offset+self._size+size].decode("utf-8")
-	def _getVLBytes(self, o:int) -> str:
-		size = self._getUInt32F(o)
+	def _get_vl_bytes(self, o:int) -> str:
+		size = self._get_uint32_f(o)
 		return self._reader._data[self._offset+self._size:self._offset+self._size+size]
 
 class Reader:
@@ -97,44 +106,44 @@ class Reader:
 		"""data is the message to read from"""
 		self._data = data
 
-	def _readSize(self, offset:int, magic:int):
+	def _read_size(self, offset:int, magic:int):
 		m, size = struct.unpack("<II", self._data[offset:offset+8])
 		if m != magic: raise Exception("Bad magic")
 		return size
 
-	def _getTableList(self, t:Type[TI], off:int, size:int) -> ListIn[TI]:
+	def _get_table_list(self, t:Type[TI], off:int, size:int) -> ListIn[TI]:
 		def getter(r:'Reader', s:int, i:int) -> TI:
 			ooo = struct.unpack("<I", r._data[s+4*i:s+4*i+4])[0]
-			sss = r._readSize(ooo, t._MAGIC)
+			sss = r._read_size(ooo, t._MAGIC)
 			return t(r, ooo+8, sss)
 		return ListIn[TI](self, size, off, getter, lambda r, s, i: struct.unpack("<I", r._data[s+4*i:s+4*i+4])[0] != 0)
 
-	def _getBoolList(self, off:int, size:int) -> ListIn[bool]:
-		return ListIn[int](self, size, off, lambda r, s, i: (r._data[s+(i>>3)] >> (i & 7)) & 1 != 0, lambda r, s, i: True)
+	def _get_bool_list(self, off:int, size:int) -> ListIn[bool]:
+		return ListIn[bool](self, size, off, lambda r, s, i: (r._data[s+(i>>3)] >> (i & 7)) & 1 != 0, lambda r, s, i: True)
 
-	def _getIntList(self, f:str, w:int, off:int, size:int) -> ListIn[int]:
+	def _get_int_list(self, f:str, w:int, off:int, size:int) -> ListIn[int]:
 		return ListIn[int](self, size, off, lambda r, s, i: struct.unpack("<"+f, r._data[s+i*w:s+i*w+w])[0], lambda r, s, i: True)
 
-	def _getFloatList(self, f:str, w:int, off:int, size:int) -> ListIn[float]:
+	def _get_float_list(self, f:str, w:int, off:int, size:int) -> ListIn[float]:
 		return ListIn[float](self, size, off, lambda r, s, i: struct.unpack("<"+f, r._data[s+i*w:s+i*w+w])[0], lambda r, s, i: not math.isnan(struct.unpack("<"+f, r._data[s+i*w:s+i*w+w])[0]))
 
-	def _getStructList(self, t:Type[S], off:int, size:int) -> ListIn[S]:
+	def _get_struct_list(self, t:Type[S], off:int, size:int) -> ListIn[S]:
 		return ListIn[S](self, size, off, lambda r, s, i: t._read(r, s + i * t._WIDTH), lambda r, s, i: True)
 
-	def _getEnumList(self, t:Type[E], off:int, size:int) -> ListIn[E]:
+	def _get_enum_list(self, t:Type[E], off:int, size:int) -> ListIn[E]:
 		return ListIn[E](self, size, off, lambda r, s, i: t(r._data[s+i]), lambda r, s, i: r._data[s+i] != 255)
 
-	def _getTextList(self, off:int, size:int) -> ListIn[str]:
+	def _get_text_list(self, off:int, size:int) -> ListIn[str]:
 		def getter(r:'Reader', s:int, i:int) -> str:
 			ooo = struct.unpack("<I", r._data[s+4*i:s+4*i+4])[0]
-			sss = r._readSize(ooo, _TEXT_MAGIC)
+			sss = r._read_size(ooo, _TEXT_MAGIC)
 			return r._data[ooo+8:ooo+8+sss].decode('utf-8')
 		return ListIn[str](self, size, off, getter, lambda r, s, i: struct.unpack("<I", r._data[s+4*i:s+4*i+4])[0] != 0)
 
-	def _getBytesList(self, off:int, size:int) -> ListIn[bytes]:
+	def _get_bytes_list(self, off:int, size:int) -> ListIn[bytes]:
 		def getter(r:'Reader', s:int, i:int) -> bytes:
 			ooo = struct.unpack("<I", r._data[s+4*i:s+4*i+4])[0]
-			sss = r._readSize(ooo, _BYTES_MAGIC)
+			sss = r._read_size(ooo, _BYTES_MAGIC)
 			return r._data[ooo+8:ooo+8+sss]
 		return ListIn[bytes](self, size, off, getter, lambda r, s, i: struct.unpack("<I", r._data[s+4*i:s+4*i+4])[0] != 0)
 
@@ -142,7 +151,7 @@ class Reader:
 		"""Return root node of message, of type type"""
 		magic, offset = struct.unpack("<II", self._data[0:8])
 		if magic != _MESSAGE_MAGIC: raise Exception("Bad magic")
-		size = self._readSize(offset, type._MAGIC)
+		size = self._read_size(offset, type._MAGIC)
 		return type(self, offset+8, size)
 
 
@@ -157,74 +166,81 @@ class BytesOut:
 class TableOut:
 	_MAGIC: ClassVar[int] = 0
 
-	def __init__(self, writer: 'Writer', withHeader: bool, default: bytes) -> None:
+	def __init__(self, writer: 'Writer', with_weader: bool, default: bytes) -> None:
 		"""Private constructor. Use factory methods on writer"""
 		self._writer = writer
 		self._writer._reserve(len(default) + 8)
-		if withHeader: writer._write(struct.pack("<II", self._MAGIC, len(default)))
+		if with_weader: writer._write(struct.pack("<II", self._MAGIC, len(default)))
 		self._offset = writer._used
 		writer._write(default)
 
-	def _setInt8(self, o:int, v:int) -> None: self._writer._data[self._offset+o:self._offset+o+1] = struct.pack("<b", v)
-	def _setUInt8(self, o:int, v:int) -> None: self._writer._data[self._offset+o:self._offset+o+1] = struct.pack("<B", v)
-	def _setInt16(self, o:int, v:int) -> None: self._writer._data[self._offset+o:self._offset+o+2] = struct.pack("<h", v)
-	def _setUInt16(self, o:int, v:int) -> None: self._writer._data[self._offset+o:self._offset+o+2] = struct.pack("<H", v)
-	def _setInt32(self, o:int, v:int) -> None: self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<i", v)
-	def _setUInt32(self, o:int, v:int) -> None: self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", v)
-	def _setInt64(self, o:int, v:int) -> None: self._writer._data[self._offset+o:self._offset+o+8] = struct.pack("<q", v)
-	def _setUInt64(self, o:int, v:int) -> None: self._writer._data[self._offset+o:self._offset+o+8] = struct.pack("<Q", v)
-	def _setFloat32(self, o:int, v:float) -> None: self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<f", v)
-	def _setFloat64(self, o:int, v:float) -> None: self._writer._data[self._offset+o:self._offset+o+8] = struct.pack("<d", v)
-	def _setBit(self, o:int, b:int) -> None: self._writer._data[self._offset+o] ^= (1 << b)
-	def _unsetBit(self, o:int, b:int) -> None: self._writer._data[self._offset+o] &= ~(1 << b)
-	def _setTable(self, o:int, v:TO) -> None: self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", v._offset-8)
-	def _setText(self, o:int, v:TextOut) -> None: self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", v._offset-8)
-	def _setBytes(self, o:int, v:BytesOut) -> None: self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", v._offset-8)
-	def _setList(self, o:int, v:"OutList") -> None: self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", v._offset-8)
-	def _getUInt16(self, o:int) -> int: return struct.unpack("<H", self._writer._data[self._offset+o:self._offset+o+2])[0]
-	def _constructUnionMember(self, t:Type[TO])->TO:
+	def _set_int8(self, o:int, v:int) -> None: self._writer._data[self._offset+o:self._offset+o+1] = struct.pack("<b", v)
+	def _set_uint8(self, o:int, v:int) -> None: self._writer._data[self._offset+o:self._offset+o+1] = struct.pack("<B", v)
+	def _set_int16(self, o:int, v:int) -> None: self._writer._data[self._offset+o:self._offset+o+2] = struct.pack("<h", v)
+	def _set_uint16(self, o:int, v:int) -> None: self._writer._data[self._offset+o:self._offset+o+2] = struct.pack("<H", v)
+	def _set_int32(self, o:int, v:int) -> None: self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<i", v)
+	def _set_uint32(self, o:int, v:int) -> None: self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", v)
+	def _set_int64(self, o:int, v:int) -> None: self._writer._data[self._offset+o:self._offset+o+8] = struct.pack("<q", v)
+	def _set_uint64(self, o:int, v:int) -> None: self._writer._data[self._offset+o:self._offset+o+8] = struct.pack("<Q", v)
+	def _set_float32(self, o:int, v:float) -> None: self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<f", v)
+	def _set_float64(self, o:int, v:float) -> None: self._writer._data[self._offset+o:self._offset+o+8] = struct.pack("<d", v)
+	def _set_bit(self, o:int, b:int) -> None: self._writer._data[self._offset+o] ^= (1 << b)
+	def _unset_bit(self, o:int, b:int) -> None: self._writer._data[self._offset+o] &= ~(1 << b)
+	def _set_table(self, o:int, v:TO) -> None: self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", v._offset-8)
+	def _set_text(self, o:int, v:TextOut) -> None: self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", v._offset-8)
+	def _set_bytes(self, o:int, v:BytesOut) -> None: self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", v._offset-8)
+	def _set_list(self, o:int, v:"OutList") -> None: self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", v._offset-8)
+	def _get_uint16(self, o:int) -> int: return struct.unpack("<H", self._writer._data[self._offset+o:self._offset+o+2])[0]
+	def _construct_union_member(self, t:Type[TO])->TO:
 		return t(self._writer, False)
-	def _addVLText(self, o:int, t:str) -> None:
+	def _add_vl_text(self, o:int, t:str) -> None:
 		tt = t.encode('utf-8')
 		self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", len(tt))
 		self._writer._reserve(len(tt)+1)
 		self._writer._write(tt)
 		self._writer._write(b"\0")
-	def _addVLBytes(self, o:int, t:bytes) -> None:
+	def _add_vl_bytes(self, o:int, t:bytes) -> None:
 		self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", len(t))
 		self._writer._reserve(len(t))
 		self._writer._write(t)
-	def _setVLList(self, o:int, size:int) -> None:
+	def _set_vl_list(self, o:int, size:int) -> None:
 		self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", size)
 
 class OutList:
 	_offset: int = 0
-	def __init__(self, writer: 'Writer', d:bytes, size:int, withHeader:bool) -> None:
+	_size: int = 0
+	def __init__(self, writer: 'Writer', d:bytes, size:int, with_weader:bool) -> None:
 		"""Private constructor. Use factory methods on writer"""
 		self._writer = writer
 		writer._reserve(len(d) + 8)
-		if withHeader: writer._write(struct.pack("<II", _LIST_MAGIC, size))
+		if with_weader: writer._write(struct.pack("<II", _LIST_MAGIC, size))
 		self._offset = writer._used
+		self._size = size
 		writer._write(d)
 
+	def __len__(self):
+		return self._size
+
 class BasicListOut(OutList, Generic[B]):
-	def __init__(self, writer: 'Writer', e:str, w:int, size:int, withHeader:bool = True) -> None:
+	def __init__(self, writer: 'Writer', e:str, w:int, size:int, with_header:bool = True) -> None:
 		"""Private constructor. Use factory methods on writer"""
-		super().__init__(writer, b'\0'*w*size, size, withHeader)
+		super().__init__(writer, b'\0'*w*size, size, with_header)
 		self._e = "<"+e
 		self._w = w
-
-	def add(self, index: int, value: B) -> None:
+	
+	def __setitem__(self, index:int, value: B) -> None:
 		"""Add value to list at index"""
+		assert 0 <= index < self._size
 		self._writer._data[self._offset + index*self._w: self._offset + (1+index)*self._w] = struct.pack(self._e, value)
 
 class BoolListOut(OutList):
-	def __init__(self, writer: 'Writer', size:int, withHeader:bool = True) -> None:
+	def __init__(self, writer: 'Writer', size:int, with_header:bool = True) -> None:
 		"""Private constructor. Use factory methods on writer"""
-		super().__init__(writer, b'\0'*((size+7)>>3), size, withHeader)
+		super().__init__(writer, b'\0'*((size+7)>>3), size, with_header)
 
-	def add(self, index: int, value: bool) -> None:
+	def __setitem__(self, index: int, value: bool) -> None:
 		"""Add value to list at index"""
+		assert 0 <= index < self._size
 		if value:
 			self._writer._data[self._offset + (index >> 3)] |= 1 << (index & 7)
 		else:
@@ -235,27 +251,29 @@ class EnumListOut(OutList, Generic[E]):
 		"""Private constructor. Use factory methods on writer"""
 		super().__init__(writer, b'\xff'*size, size, withHeader)
 
-	def add(self, index: int, value: E) -> None:
+	def __setitem__(self, index: int, value: E) -> None:
 		"""Add value to list at index"""
 		self._writer._data[self._offset + index: self._offset + index + 1] = struct.pack("B", int(value))
 
 class StructListOut(OutList, Generic[S]):
-	def __init__(self, writer: 'Writer', s:Type[S], size:int, withHeader:bool = True) -> None:
+	def __init__(self, writer: 'Writer', s:Type[S], size:int, with_header:bool = True) -> None:
 		"""Private constructor. Use factory methods on writer"""
-		super().__init__(writer, b'\0'*s._WIDTH*size, size, withHeader)
+		super().__init__(writer, b'\0'*s._WIDTH*size, size, with_header)
 		self._s = s
 
-	def add(self, index: int, value: S) -> None:
+	def __setitem__(self, index: int, value: S) -> None:
 		"""Add value to list at index"""
+		assert 0 <= index < self._size
 		self._s._write(self._writer, self._offset + index*self._s._WIDTH, value)
 
 class ObjectListOut(OutList, Generic[B]):
-	def __init__(self, writer: 'Writer', size:int, withHeader:bool = True) -> None:
+	def __init__(self, writer: 'Writer', size:int, with_header:bool = True) -> None:
 		"""Private constructor. Use factory methods on writer"""
-		super().__init__(writer, b'\0\0\0\0'*size, size, withHeader)
+		super().__init__(writer, b'\0\0\0\0'*size, size, with_header)
 
-	def add(self, index:int, value: B) -> None:
+	def __setitem__(self, index:int, value: B) -> None:
 		"""Add value to list at index"""
+		assert 0 <= index < self._size
 		self._writer._data[self._offset + index*4: self._offset + index*4 + 1] = struct.pack("I", value._offset-8)
 
 class Writer:
@@ -274,35 +292,35 @@ class Writer:
 		self._data = bytearray(b"\0"*256)
 		self._used = 8
 
-	def constructTable(self, t: Type[TO]) -> TO:
+	def construct_table(self, t: Type[TO]) -> TO:
 		"""Construct a table of the given type"""
 		return t(self, True)
 
-	def constructInt8List(self, size:int) -> BasicListOut[int]: return BasicListOut[int](self, "b", 1, size)
-	def constructUInt8List(self, size:int) -> BasicListOut[int]: return BasicListOut[int](self, "B", 1, size)
-	def constructInt16List(self, size:int) -> BasicListOut[int]: return BasicListOut[int](self, "h", 2, size)
-	def constructUInt16List(self, size:int) -> BasicListOut[int]: return BasicListOut[int](self, "H", 2, size)
-	def constructInt32List(self, size:int) -> BasicListOut[int]: return BasicListOut[int](self, "i", 4, size)
-	def constructUInt32List(self, size:int) -> BasicListOut[int]: return BasicListOut[int](self, "I", 4, size)
-	def constructInt64List(self, size:int) -> BasicListOut[int]: return BasicListOut[int](self, "q", 8, size)
-	def constructUInt64List(self, size:int) -> BasicListOut[int]: return BasicListOut[int](self, "Q", 8, size)
-	def constructFloat32List(self, size:int) -> BasicListOut[float]: return BasicListOut[float](self, "f", 4, size)
-	def constructFloat64List(self, size:int) -> BasicListOut[float]: return BasicListOut[float](self, "d", 8, size)
-	def constructBoolList(self, size:int) -> BoolListOut: return BoolListOut(self, size)
-	def constructEnumList(self, e:Type[E], size:int) -> EnumListOut[E]: return EnumListOut[E](self, e, size)
-	def constructStructList(self, s:Type[S], size:int) -> StructListOut[S]: return StructListOut[S](self, s, size)
-	def constructTableList(self, s:Type[TO], size:int) -> ObjectListOut[TO]: return ObjectListOut[S](self, size)
-	def constructTextList(self, size:int) -> ObjectListOut[TextOut]: return ObjectListOut[TextOut](self, size)
-	def constructBytesList(self, size:int) -> ObjectListOut[BytesOut]: return ObjectListOut[BytesOut](self, size)
-
-	def constructBytes(self, b:bytes) -> BytesOut:
+	def construct_int8_list(self, size:int) -> BasicListOut[int]: return BasicListOut[int](self, "b", 1, size)
+	def construct_uint8_list(self, size:int) -> BasicListOut[int]: return BasicListOut[int](self, "B", 1, size)
+	def construct_int16_list(self, size:int) -> BasicListOut[int]: return BasicListOut[int](self, "h", 2, size)
+	def construct_uint16_list(self, size:int) -> BasicListOut[int]: return BasicListOut[int](self, "H", 2, size)
+	def construct_int32_list(self, size:int) -> BasicListOut[int]: return BasicListOut[int](self, "i", 4, size)
+	def construct_uint32_list(self, size:int) -> BasicListOut[int]: return BasicListOut[int](self, "I", 4, size)
+	def construct_int64_list(self, size:int) -> BasicListOut[int]: return BasicListOut[int](self, "q", 8, size)
+	def construct_uint64_list(self, size:int) -> BasicListOut[int]: return BasicListOut[int](self, "Q", 8, size)
+	def construct_float32_list(self, size:int) -> BasicListOut[float]: return BasicListOut[float](self, "f", 4, size)
+	def construct_float64_list(self, size:int) -> BasicListOut[float]: return BasicListOut[float](self, "d", 8, size)
+	def construct_enum_list(self, e:Type[E], size:int) -> EnumListOut[E]: return EnumListOut[E](self, e, size)
+	def construct_struct_list(self, s:Type[S], size:int) -> StructListOut[S]: return StructListOut[S](self, s, size)
+	def construct_table_list(self, s:Type[TO], size:int) -> ObjectListOut[TO]: return ObjectListOut[S](self, size)
+	def construct_text_list(self, size:int) -> ObjectListOut[TextOut]: return ObjectListOut[TextOut](self, size)
+	def construct_bytes_list(self, size:int) -> ObjectListOut[BytesOut]: return ObjectListOut[BytesOut](self, size)
+	def construct_bool_list(self, size:int) -> BoolListOut: return BoolListOut(self, size)
+		
+	def construct_bytes(self, b:bytes) -> BytesOut:
 		self._reserve(len(b) + 8)
 		self._write(struct.pack("<II", _BYTES_MAGIC, len(b)))
 		o = self._used
 		self._write(b)
 		return BytesOut(o)
 
-	def constructText(self, t:str) -> TextOut:
+	def construct_text(self, t:str) -> TextOut:
 		tt = t.encode('utf-8')
 		self._reserve(len(tt) + 9)
 		self._write(struct.pack("<II", _TEXT_MAGIC, len(tt)))

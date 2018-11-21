@@ -1,25 +1,25 @@
 # -*- mode: python; tab-width: 4; indent-tabs-mode: t; python-indent-offset: 4; coding: utf-8 -*-
 import sys, scalgoproto, base
 
-def getV(data: bytes, i:int) -> int:
+def get_v(data: bytes, i:int) -> int:
 	if i < len(data): return data[i]
 	return -1
 
-def validateOut(data: bytes, path:str) -> bool:
+def validate_out(data: bytes, path:str) -> bool:
 	exp = open(path, "rb").read()
 	if data == exp: return True
 	print("Wrong output")
 	for i in range(0, max(len(data), len(exp)), 16):
 		print("%08X | "%i, end="")
 		for j in range(i, i+16):
-			if getV(exp,j) == getV(data, j): print("\033[0m", end="")
+			if get_v(exp,j) == get_v(data, j): print("\033[0m", end="")
 			else: print("\033[92m", end="")
 			if j < len(exp): print("%02X"%exp[j], end="")
 			else: print("  ", end="")
 			if j % 4 == 3: print(" ", end="")
 		print("| ", end="")
 		for j in range(i, i+16):
-			if getV(exp,j) == getV(data, j): print("\033[0m", end="")
+			if get_v(exp,j) == get_v(data, j): print("\033[0m", end="")
 			else: print("\033[91m", end="")
 			if j < len(data): print("%02X"%data[j], end="")
 			else: print("  ", end="")
@@ -27,7 +27,7 @@ def validateOut(data: bytes, path:str) -> bool:
 		print("\033[0m", end="")
 		print("| ", end="")
 		for j in range(i, i+16):
-			if getV(exp,j) == getV(data, j): print("\033[0m", end="")
+			if get_v(exp,j) == get_v(data, j): print("\033[0m", end="")
 			else: print("\033[92m", end="")
 			if j < len(exp) and 32 <= exp[j] <= 126: print(chr(exp[j]), end="")
 			elif j < len(exp): print('.', end="")
@@ -35,7 +35,7 @@ def validateOut(data: bytes, path:str) -> bool:
 			if j % 4 == 3: print(" ", end="")
 		print("| ", end="")
 		for j in range(i, i+16):
-			if getV(exp,j) == getV(data, j): print("\033[0m", end="")
+			if get_v(exp,j) == get_v(data, j): print("\033[0m", end="")
 			else: print("\033[91m", end="")
 			if j < len(data) and 32 <= data[j] <= 126: print(chr(data[j]), end="")
 			elif j < len(data): print('.', end="")
@@ -45,7 +45,7 @@ def validateOut(data: bytes, path:str) -> bool:
 		print()
 	return False
 
-def readIn(path:str) -> bytes:
+def read_in(path:str) -> bytes:
 	return open(path, "rb").read()
 
 def require(v, e) -> bool:
@@ -53,310 +53,308 @@ def require(v, e) -> bool:
 	print("Error expected '%s' found '%s'"%(e,v), file=sys.stderr)
 	return True
 
-def testOutDefault(path:str) -> bool:
+def test_out_default(path:str) -> bool:
 	w = scalgoproto.Writer()
-	s = w.constructTable(base.SimpleOut)
+	s = w.construct_table(base.SimpleOut)
 	data = w.finalize(s)
-	return validateOut(data, path)
+	return validate_out(data, path)
 
-def testOut(path:str) -> bool:
+def test_out(path:str) -> bool:
 	w = scalgoproto.Writer()
-	s = w.constructTable(base.SimpleOut)
-	s.addE(base.MyEnum.c)
-	s.addS(base.FullStruct(base.MyEnum.d, base.MyStruct(42, 27.0, True), False, 8, 9, 10, 11, -8, -9, -10, -11, 27.0, 22.0))
-	s.addB(True)
-	s.addU8(242)
-	s.addU16(4024)
-	s.addU32(124474)
-	s.addU64(5465778)
-	s.addI8(-40)
-	s.addI16(4025)
-	s.addI32(124475)
-	s.addI64(5465779)
-	s.addF(2.0)
-	s.addD(3.0)
-	s.addOs(base.MyStruct(43, 28.0, False))
-	s.addOb(False)
-	s.addOu8(252)
-	s.addOu16(4034)
-	s.addOu32(124464)
-	s.addOu64(5465768)
-	s.addOi8(-60)
-	s.addOi16(4055)
-	s.addOi32(124465)
-	s.addOi64(5465729)
-	s.addOf(5.0)
-	s.addOd(6.4)
+	s = w.construct_table(base.SimpleOut)
+	s.e = base.MyEnum.c
+	s.s = base.FullStruct(base.MyEnum.d, base.MyStruct(42, 27.0, True), False, 8, 9, 10, 11, -8, -9, -10, -11, 27.0, 22.0)
+	s.b = True
+	s.u8 = 242
+	s.u16 = 4024
+	s.u32 = 124474
+	s.u64 = 5465778
+	s.i8 = -40
+	s.i16 = 4025
+	s.i32 = 124475
+	s.i64 = 5465779
+	s.f = 2.0
+	s.d = 3.0
+	s.os = base.MyStruct(43, 28.0, False)
+	s.ob = False
+	s.ou8 = 252
+	s.ou16 = 4034
+	s.ou32 = 124464
+	s.ou64 = 5465768
+	s.oi8 = -60
+	s.oi16 = 4055
+	s.oi32 = 124465
+	s.oi64 = 5465729
+	s.of = 5.0
+	s.od = 6.4
 	data = w.finalize(s)
-	return validateOut(data, path)
+	return validate_out(data, path)
 
-def testIn(path:str) -> bool:
-	r = scalgoproto.Reader(readIn(path))
+def test_in(path:str) -> bool:
+	r = scalgoproto.Reader(read_in(path))
 	s = r.root(base.SimpleIn)
-	if require(s.hasE(), True): return False
-	if require(s.getE(), base.MyEnum.c): return False
-	if require(s.getS().e, base.MyEnum.d): return False
-	if require(s.getS().s.x, 42): return False
-	if require(s.getS().s.y, 27.0): return False
-	if require(s.getS().s.z, True): return False
-	if require(s.getS().b, False): return False
-	if require(s.getS().u8, 8): return False
-	if require(s.getS().u16, 9): return False
-	if require(s.getS().u32, 10): return False
-	if require(s.getS().u64, 11): return False
-	if require(s.getS().i8, -8): return False
-	if require(s.getS().i16, -9): return False
-	if require(s.getS().i32, -10): return False
-	if require(s.getS().i64, -11): return False
-	if require(s.getS().f, 27.0): return False
-	if require(s.getS().d, 22.0): return False
-	if require(s.getB(), True): return False
-	if require(s.getU8(), 242): return False
-	if require(s.getU16(), 4024): return False
-	if require(s.getU32(), 124474): return False
-	if require(s.getU64(), 5465778): return False
-	if require(s.getI8(), -40): return False
-	if require(s.getI16(), 4025): return False
-	if require(s.getI32(), 124475): return False
-	if require(s.getI64(), 5465779): return False
-	if require(s.getF(), 2.0): return False
-	if require(s.getD(), 3.0): return False
-	if require(s.hasOs(), True): return False
-	if require(s.hasOb(), True): return False
-	if require(s.hasOu8(), True): return False
-	if require(s.hasOu16(), True): return False
-	if require(s.hasOu32(), True): return False
-	if require(s.hasOu64(), True): return False
-	if require(s.hasOi8(), True): return False
-	if require(s.hasOi16(), True): return False
-	if require(s.hasOi32(), True): return False
-	if require(s.hasOi64(), True): return False
-	if require(s.hasOf(), True): return False
-	if require(s.hasOd(), True): return False
-	if require(s.getOs().x, 43): return False
-	if require(s.getOs().y, 28.0): return False
-	if require(s.getOs().z, False): return False
-	if require(s.getOb(), False): return False
-	if require(s.getOu8(), 252): return False
-	if require(s.getOu16(), 4034): return False
-	if require(s.getOu32(), 124464): return False
-	if require(s.getOu64(), 5465768): return False
-	if require(s.getOi8(), -60): return False
-	if require(s.getOi16(), 4055): return False
-	if require(s.getOi32(), 124465): return False
-	if require(s.getOi64(), 5465729): return False
-	if require(s.getOf(), 5.0): return False
-	if require(s.getOd(), 6.4): return False
-	if require(s.hasNe(), False): return False
-	if require(s.hasNs(), False): return False
-	if require(s.hasNb(), False): return False
-	if require(s.hasNu8(), False): return False
-	if require(s.hasNu16(), False): return False
-	if require(s.hasNu32(), False): return False
-	if require(s.hasNu64(), False): return False
-	if require(s.hasNi8(), False): return False
-	if require(s.hasNi16(), False): return False
-	if require(s.hasNi32(), False): return False
-	if require(s.hasNi64(), False): return False
-	if require(s.hasNf(), False): return False
-	if require(s.hasNd(), False): return False
+	if require(s.has_e, True): return False
+	if require(s.e, base.MyEnum.c): return False
+	if require(s.s.e, base.MyEnum.d): return False
+	if require(s.s.s.x, 42): return False
+	if require(s.s.s.y, 27.0): return False
+	if require(s.s.s.z, True): return False
+	if require(s.s.b, False): return False
+	if require(s.s.u8, 8): return False
+	if require(s.s.u16, 9): return False
+	if require(s.s.u32, 10): return False
+	if require(s.s.u64, 11): return False
+	if require(s.s.i8, -8): return False
+	if require(s.s.i16, -9): return False
+	if require(s.s.i32, -10): return False
+	if require(s.s.i64, -11): return False
+	if require(s.s.f, 27.0): return False
+	if require(s.s.d, 22.0): return False
+	if require(s.b, True): return False
+	if require(s.u8, 242): return False
+	if require(s.u16, 4024): return False
+	if require(s.u32, 124474): return False
+	if require(s.u64, 5465778): return False
+	if require(s.i8, -40): return False
+	if require(s.i16, 4025): return False
+	if require(s.i32, 124475): return False
+	if require(s.i64, 5465779): return False
+	if require(s.f, 2.0): return False
+	if require(s.d, 3.0): return False
+	if require(s.has_os, True): return False
+	if require(s.has_ob, True): return False
+	if require(s.has_ou8, True): return False
+	if require(s.has_ou16, True): return False
+	if require(s.has_ou32, True): return False
+	if require(s.has_ou64, True): return False
+	if require(s.has_oi8, True): return False
+	if require(s.has_oi16, True): return False
+	if require(s.has_oi32, True): return False
+	if require(s.has_oi64, True): return False
+	if require(s.has_of, True): return False
+	if require(s.has_od, True): return False
+	if require(s.os.x, 43): return False
+	if require(s.os.y, 28.0): return False
+	if require(s.os.z, False): return False
+	if require(s.ob, False): return False
+	if require(s.ou8, 252): return False
+	if require(s.ou16, 4034): return False
+	if require(s.ou32, 124464): return False
+	if require(s.ou64, 5465768): return False
+	if require(s.oi8, -60): return False
+	if require(s.oi16, 4055): return False
+	if require(s.oi32, 124465): return False
+	if require(s.oi64, 5465729): return False
+	if require(s.of, 5.0): return False
+	if require(s.od, 6.4): return False
+	if require(s.has_ne, False): return False
+	if require(s.has_ns, False): return False
+	if require(s.has_nb, False): return False
+	if require(s.has_nu8, False): return False
+	if require(s.has_nu16, False): return False
+	if require(s.has_nu32, False): return False
+	if require(s.has_nu64, False): return False
+	if require(s.has_ni8, False): return False
+	if require(s.has_ni16, False): return False
+	if require(s.has_ni32, False): return False
+	if require(s.has_ni64, False): return False
+	if require(s.has_nf, False): return False
+	if require(s.has_nd, False): return False
 	return True
 
-def testInDefault(path:str) -> bool:
-	r = scalgoproto.Reader(readIn(path))
+def test_in_default(path:str) -> bool:
+	r = scalgoproto.Reader(read_in(path))
 	s = r.root(base.SimpleIn)
-	if require(s.hasE(), False): return False
-	if require(s.getS().e, base.MyEnum.a): return False
-	if require(s.getS().s.x, 0): return False
-	if require(s.getS().s.y, 0.0): return False
-	if require(s.getS().s.z, False): return False
-	if require(s.getS().b, False): return False
-	if require(s.getS().u8, 0): return False
-	if require(s.getS().u16, 0): return False
-	if require(s.getS().u32, 0): return False
-	if require(s.getS().u64, 0): return False
-	if require(s.getS().i8, 0): return False
-	if require(s.getS().i16, 0): return False
-	if require(s.getS().i32, 0): return False
-	if require(s.getS().i64, 0): return False
-	if require(s.getS().f, 0): return False
-	if require(s.getS().d, 0): return False
-	if require(s.getB(), False): return False
-	if require(s.getU8(), 2): return False
-	if require(s.getU16(), 3): return False
-	if require(s.getU32(), 4): return False
-	if require(s.getU64(), 5): return False
-	if require(s.getI8(), 6): return False
-	if require(s.getI16(), 7): return False
-	if require(s.getI32(), 8): return False
-	if require(s.getI64(), 9): return False
-	if require(s.getF(), 10.0): return False
-	if require(s.getD(), 11.0): return False
-	if require(s.hasOs(), False): return False
-	if require(s.hasOb(), False): return False
-	if require(s.hasOu8(), False): return False
-	if require(s.hasOu16(), False): return False
-	if require(s.hasOu32(), False): return False
-	if require(s.hasOu64(), False): return False
-	if require(s.hasOi8(), False): return False
-	if require(s.hasOi16(), False): return False
-	if require(s.hasOi32(), False): return False
-	if require(s.hasOi64(), False): return False
-	if require(s.hasOf(), False): return False
-	if require(s.hasOd(), False): return False
-	if require(s.hasNs(), False): return False
-	if require(s.hasNb(), False): return False
-	if require(s.hasNu8(), False): return False
-	if require(s.hasNu16(), False): return False
-	if require(s.hasNu32(), False): return False
-	if require(s.hasNu64(), False): return False
-	if require(s.hasNi8(), False): return False
-	if require(s.hasNi16(), False): return False
-	if require(s.hasNi32(), False): return False
-	if require(s.hasNi64(), False): return False
-	if require(s.hasNf(), False): return False
-	if require(s.hasNd(), False): return False
+	if require(s.has_e, False): return False
+	if require(s.s.e, base.MyEnum.a): return False
+	if require(s.s.s.x, 0): return False
+	if require(s.s.s.y, 0.0): return False
+	if require(s.s.s.z, False): return False
+	if require(s.s.b, False): return False
+	if require(s.s.u8, 0): return False
+	if require(s.s.u16, 0): return False
+	if require(s.s.u32, 0): return False
+	if require(s.s.u64, 0): return False
+	if require(s.s.i8, 0): return False
+	if require(s.s.i16, 0): return False
+	if require(s.s.i32, 0): return False
+	if require(s.s.i64, 0): return False
+	if require(s.s.f, 0): return False
+	if require(s.s.d, 0): return False
+	if require(s.b, False): return False
+	if require(s.u8, 2): return False
+	if require(s.u16, 3): return False
+	if require(s.u32, 4): return False
+	if require(s.u64, 5): return False
+	if require(s.i8, 6): return False
+	if require(s.i16, 7): return False
+	if require(s.i32, 8): return False
+	if require(s.i64, 9): return False
+	if require(s.f, 10.0): return False
+	if require(s.d, 11.0): return False
+	if require(s.has_os, False): return False
+	if require(s.has_ob, False): return False
+	if require(s.has_ou8, False): return False
+	if require(s.has_ou16, False): return False
+	if require(s.has_ou32, False): return False
+	if require(s.has_ou64, False): return False
+	if require(s.has_oi8, False): return False
+	if require(s.has_oi16, False): return False
+	if require(s.has_oi32, False): return False
+	if require(s.has_oi64, False): return False
+	if require(s.has_of, False): return False
+	if require(s.has_od, False): return False
+	if require(s.has_ns, False): return False
+	if require(s.has_nb, False): return False
+	if require(s.has_nu8, False): return False
+	if require(s.has_nu16, False): return False
+	if require(s.has_nu32, False): return False
+	if require(s.has_nu64, False): return False
+	if require(s.has_ni8, False): return False
+	if require(s.has_ni16, False): return False
+	if require(s.has_ni32, False): return False
+	if require(s.has_ni64, False): return False
+	if require(s.has_nf, False): return False
+	if require(s.has_nd, False): return False
 	return True
 
-def testOutComplex(path:str) -> bool:
+def test_out_complex(path:str) -> bool:
 	w = scalgoproto.Writer()
 
-	m = w.constructTable(base.MemberOut)
-	m.addId(42)
+	m = w.construct_table(base.MemberOut)
+	m.id = 42
 
-	l = w.constructInt32List(31)
+	l = w.construct_int32_list(31)
 	for i in range(31):
-		l.add(i, 100-2*i)
+		l[i] = 100-2*i
 
-	l2 = w.constructEnumList(base.MyEnum, 2)
-	l2.add(0, base.MyEnum.a)
+	l2 = w.construct_enum_list(base.MyEnum, 2)
+	l2[0] = base.MyEnum.a
 
-	l3 = w.constructStructList(base.MyStruct, 1)
+	l3 = w.construct_struct_list(base.MyStruct, 1)
 
-	b = w.constructBytes(b"bytes")
-	t = w.constructText("text")
+	b = w.construct_bytes(b"bytes")
+	t = w.construct_text("text")
 
-	l4 = w.constructTextList(2)
-	l4.add(0, t)
-	l5 = w.constructBytesList(1)
-	l5.add(0, b)
+	l4 = w.construct_text_list(2)
+	l4[0] = t
+	l5 = w.construct_bytes_list(1)
+	l5[0] = b
 
-	l6 = w.constructTableList(base.MemberOut, 3)
-	l6.add(0, m)
-	l6.add(2, m)
+	l6 = w.construct_table_list(base.MemberOut, 3)
+	l6[0] = m
+	l6[2] = m
 
-	l7 = w.constructFloat32List(2)
-	l7.add(1, 98.0)
+	l7 = w.construct_float32_list(2)
+	l7[1] = 98.0
 
-	l8 = w.constructFloat64List(3)
-	l8.add(2, 78.0)
+	l8 = w.construct_float64_list(3)
+	l8[2] = 78.0
 
-	l9 = w.constructUInt8List(2)
-	l9.add(0, 4)
+	l9 = w.construct_uint8_list(2)
+	l9[0] = 4
 
-	l10 = w.constructBoolList(10)
-	l10.add(0, True)
-	l10.add(2, True)
-	l10.add(8, True)
+	l10 = w.construct_bool_list(10)
+	l10[0] = True
+	l10[2] = True
+	l10[8] = True
 
-	s = w.constructTable(base.ComplexOut)
-	s.addMember(m)
-	s.addText(t)
-	s.addBytes(b)
-	s.addList(l)
-	s.addStructList(l3)
-	s.addEnumList(l2)
-	s.addTextList(l4)
-	s.addBytesList(l5)
-	s.addMemberList(l6)
-	s.addF32list(l7)
-	s.addF64list(l8)
-	s.addU8list(l9)
-	s.addBlist(l10)
+	s = w.construct_table(base.ComplexOut)
+	s.member = m
+	s.text = t
+	s.bytes_ = b
+	s.list_ = l
+	s.struct_list = l3
+	s.enum_list = l2
+	s.text_list = l4
+	s.bytes_list = l5
+	s.member_list = l6
+	s.f32list = l7
+	s.f64list = l8
+	s.u8list = l9
+	s.blist = l10
 
 	data = w.finalize(s)
-	return validateOut(data, path)
+	return validate_out(data, path)
 
-def testInComplex(path:str) -> bool:
-	r = scalgoproto.Reader(readIn(path))
+def test_in_complex(path:str) -> bool:
+	r = scalgoproto.Reader(read_in(path))
 
 	s = r.root(base.ComplexIn)
-	if require(s.hasNmember(), False): return False
-	if require(s.hasNtext(), False): return False
-	if require(s.hasNbytes(), False): return False
-	if require(s.hasText(), True): return False
-	if require(s.hasBytes(), True): return False
-	if require(s.getText(), "text"): return False
-	if require(s.getBytes(), b"bytes"): return False
-	if require(s.hasMember(), True): return False
-	m = s.getMember()
-	if require(m.getId(), 42): return False
+	if require(s.has_nmember, False): return False
+	if require(s.has_ntext, False): return False
+	if require(s.has_nbytes, False): return False
+	if require(s.has_text, True): return False
+	if require(s.has_bytes_, True): return False
+	if require(s.text, "text"): return False
+	if require(s.bytes_, b"bytes"): return False
+	if require(s.has_member, True): return False
+	m = s.member
+	if require(m.id, 42): return False
 
-	if require(s.hasList(), True): return False
-	if require(s.hasNlist(), False): return False
-	l = s.getList()
+	if require(s.has_list_, True): return False
+	if require(s.has_nlist, False): return False
+	l = s.list_
 
 	if require(len(l), 31): return False
 
 	for i in range(31):
 		if require(l[i], 100-2*i): return False
 
-	if require(s.hasEnumList(), True): return False
-
-	l2 = s.getEnumList()
-
+	if require(s.has_enum_list, True): return False
+	l2 = s.enum_list
 	if require(l2.has(0), True): return False
 	if require(l2.has(1), False): return False
 	if require(l2[0], base.MyEnum.a): return False
 	if require(len(l2), 2): return False
 
-	if require(s.hasStructList(), True): return False
-	l3 = s.getStructList()
+	if require(s.has_struct_list, True): return False
+	l3 = s.struct_list
 	if require(len(l3), 1): return False
 
-	if require(s.hasTextList(), True): return False
-	l4 = s.getTextList()
+	if require(s.has_text_list, True): return False
+	l4 = s.text_list
 	if require(len(l4), 2): return False
 	if require(l4.has(0), True): return False
 	if require(l4.has(1), False): return False
 	if require(l4[0], "text"): return False
 
-	if require(s.hasBytesList(), True): return False
-	l5 = s.getBytesList()
+	if require(s.has_bytes_list, True): return False
+	l5 = s.bytes_list
 	if require(len(l5), 1): return False
 	if require(l5.has(0), True): return False
 	if require(l5[0], b"bytes"): return False
 
-	if require(s.hasMemberList(), True): return False
-	l6 = s.getMemberList()
+	if require(s.has_member_list, True): return False
+	l6 = s.member_list
 	if require(len(l6), 3): return False
 	if require(l6.has(0), True): return False
 	if require(l6.has(1), False): return False
 	if require(l6.has(2), True): return False
-	if require(l6[0].getId(), 42): return False
-	if require(l6[2].getId(), 42): return False
+	if require(l6[0].id, 42): return False
+	if require(l6[2].id, 42): return False
 
-	if require(s.hasF32list(), True): return False
-	l7 = s.getF32list()
+	if require(s.has_f32list, True): return False
+	l7 = s.f32list
 	if require(len(l7), 2): return False
 	if require(l7[0], 0.0): return False
 	if require(l7[1], 98.0): return False
 
-	if require(s.hasF64list(), True): return False
-	l8 = s.getF64list()
+	if require(s.has_f64list, True): return False
+	l8 = s.f64list
 	if require(len(l8), 3): return False
 	if require(l8[0], 0.0): return False
 	if require(l8[1], 0.0): return False
 	if require(l8[2], 78.0): return False
 
-	if require(s.hasU8list(), True): return False
-	l9 = s.getU8list()
+	if require(s.has_u8list, True): return False
+	l9 = s.u8list
 	if require(len(l9), 2): return False
 	if require(l9[0], 4): return False
 	if require(l9[1], 0): return False
 
-	if require(s.hasBlist(), True): return False
-	l10 = s.getBlist()
+	if require(s.has_blist, True): return False
+	l10 = s.blist
 	if require(len(l10), 10): return False
 	if require(l10[0], True): return False
 	if require(l10[1], False): return False
@@ -371,149 +369,149 @@ def testInComplex(path:str) -> bool:
 
 	return True
 
-def testOutVL(path:str) -> bool:
+def test_out_vl(path:str) -> bool:
 	w = scalgoproto.Writer()
-	name = w.constructText("nilson")
-	u = w.constructTable(base.VLUnionOut)
-	u.addMonkey().addName(name)
+	name = w.construct_text("nilson")
+	u = w.construct_table(base.VLUnionOut)
+	u.add_monkey().name = name
 
-	u2 = w.constructTable(base.VLUnionOut)
-	u2.addText().addText("foobar")
+	u2 = w.construct_table(base.VLUnionOut)
+	u2.add_text().text = "foobar"
 
-	t = w.constructTable(base.VLTextOut)
-	t.addId(45)
-	t.addText("cake")
+	t = w.construct_table(base.VLTextOut)
+	t.id = 45
+	t.text = "cake"
 
-	b = w.constructTable(base.VLBytesOut)
-	b.addId(46)
-	b.addBytes(b"hi")
+	b = w.construct_table(base.VLBytesOut)
+	b.id = 46
+	b.bytes_ = b"hi"
 
-	l = w.constructTable(base.VLListOut)
-	l.addId(47)
-	ll = l.addList(2)
-	ll.add(0, 24)
-	ll.add(1, 99)
+	l = w.construct_table(base.VLListOut)
+	l.id = 47
+	ll = l.add_list_(2)
+	ll[0] = 24
+	ll[1] = 99
 
-	root = w.constructTable(base.VLRootOut)
-	root.addU(u)
-	root.addU2(u2)
-	root.addT(t)
-	root.addB(b)
-	root.addL(l)
+	root = w.construct_table(base.VLRootOut)
+	root.u = u
+	root.u2 = u2
+	root.t = t
+	root.b = b
+	root.l = l
 	data = w.finalize(root)
-	return validateOut(data, path)
+	return validate_out(data, path)
 
-def testInVL(path:str) -> bool:
-	o = readIn(path)
+def test_in_vl(path:str) -> bool:
+	o = read_in(path)
 	r = scalgoproto.Reader(o)
 	s = r.root(base.VLRootIn)
 
-	if require(s.hasU(), True): return False
-	u = s.getU()
-	if require(u.isMonkey(), True): return False
-	monkey = u.getMonkey()
-	if require(monkey.hasName(), True): return False
-	if require(monkey.getName(), "nilson"): return False
+	if require(s.has_u, True): return False
+	u = s.u
+	if require(u.is_monkey, True): return False
+	monkey = u.monkey
+	if require(monkey.has_name, True): return False
+	if require(monkey.name, "nilson"): return False
 
-	if require(s.hasU2(), True): return False
-	u2 = s.getU2()
-	if require(u2.isText(), True): return False
-	u2t = u2.getText()
-	if require(u2t.hasText(), True): return False
-	if require(u2t.getText(), "foobar"): return False
+	if require(s.has_u2, True): return False
+	u2 = s.u2
+	if require(u2.is_text, True): return False
+	u2t = u2.text
+	if require(u2t.has_text, True): return False
+	if require(u2t.text, "foobar"): return False
 	
-	if require(s.hasT(), True): return False
-	t = s.getT()
-	if require(t.getId(), 45): return False
-	if require(t.hasText(), True): return False
-	if require(t.getText(), "cake"): return False
+	if require(s.has_t, True): return False
+	t = s.t
+	if require(t.id, 45): return False
+	if require(t.has_text, True): return False
+	if require(t.text, "cake"): return False
 
-	if require(s.hasB(), True): return False
-	b = s.getB()
-	if require(b.getId(), 46): return False
-	if require(b.hasBytes(), True): return False
-	if require(b.getBytes(),  b"hi"): return False
+	if require(s.has_b, True): return False
+	b = s.b
+	if require(b.id, 46): return False
+	if require(b.has_bytes_, True): return False
+	if require(b.bytes_,  b"hi"): return False
 
-	if require(s.hasL(), True): return False
-	l = s.getL()
-	if require(l.getId(), 47): return False
-	if require(l.hasList(), True): return False
-	ll = l.getList()
+	if require(s.has_l, True): return False
+	l = s.l
+	if require(l.id, 47): return False
+	if require(l.has_list_, True): return False
+	ll = l.list_
 	if require(len(ll), 2): return False
 	if require(ll[0], 24): return False
 	if require(ll[1], 99): return False
 	return True
 
-def testOutExtend1(path:str)->bool:
+def test_out_extend1(path:str)->bool:
 	w = scalgoproto.Writer()
-	root = w.constructTable(base.Gen1Out)
-	root.addAa(77)
+	root = w.construct_table(base.Gen1Out)
+	root.aa = 77
 	data = w.finalize(root)
-	return validateOut(data, path)
+	return validate_out(data, path)
 
-def testInExtend1(path:str) -> bool:
-	data = readIn(path)
+def test_in_extend1(path:str) -> bool:
+	data = read_in(path)
 	r = scalgoproto.Reader(data)
 	s = r.root(base.Gen2In)
-	if require(s.getAa(), 77): return False
-	if require(s.getBb(), 42): return False
-	if require(s.hasType(), False): return False
+	if require(s.aa, 77): return False
+	if require(s.bb, 42): return False
+	if require(s.has_type, False): return False
 	return True
 
-def testOutExtend2(path:str) -> bool:
+def test_out_extend2(path:str) -> bool:
 	w = scalgoproto.Writer()
-	root = w.constructTable(base.Gen2Out)
-	root.addAa(80)
-	root.addBb(81)
-	cake = root.addCake()
-	cake.addV(45)
+	root = w.construct_table(base.Gen2Out)
+	root.aa = 80
+	root.bb = 81
+	cake = root.add_cake()
+	cake.v = 45
 	data = w.finalize(root)
-	return validateOut(data, path)
+	return validate_out(data, path)
 
-def testInExtend2(path:str) -> bool:
-	o = readIn(path)
+def test_in_extend2(path:str) -> bool:
+	o = read_in(path)
 	r = scalgoproto.Reader(o)
 	s = r.root(base.Gen3In)
-	if require(s.getAa(), 80): return False
-	if require(s.getBb(), 81): return False
-	if require(s.isCake(), True): return False
-	if require(s.getCake().getV(), 45): return False
-	if require(s.getE(), base.MyEnum.c): return False
-	if require(s.getS().x, 0): return False
-	if require(s.getS().y, 0): return False
-	if require(s.getS().z, 0): return False
-	if require(s.getB(), False): return False
-	if require(s.getU8(), 2): return False
-	if require(s.getU16(), 3): return False
-	if require(s.getU32(), 4): return False
-	if require(s.getU64(), 5): return False
-	if require(s.getI8(), 6): return False
-	if require(s.getI16(), 7): return False
-	if require(s.getI32(), 8): return False
-	if require(s.getI64(), 9): return False
-	if require(s.getF(), 10): return False
-	if require(s.getD(), 11): return False
-	if require(s.hasOs(), False): return False
-	if require(s.hasOb(), False): return False
-	if require(s.hasOu8(), False): return False
-	if require(s.hasOu16(), False): return False
-	if require(s.hasOu32(), False): return False
-	if require(s.hasOu64(), False): return False
-	if require(s.hasOi8(), False): return False
-	if require(s.hasOi16(), False): return False
-	if require(s.hasOi32(), False): return False
-	if require(s.hasOi64(), False): return False
-	if require(s.hasOf(), False): return False
-	if require(s.hasOd(), False): return False
-	if require(s.hasMember(), False): return False
-	if require(s.hasText(), False): return False
-	if require(s.hasBytes(), False): return False
-	if require(s.hasList(), False): return False
-	if require(s.hasEnumList(), False): return False
-	if require(s.hasStructList(), False): return False
-	if require(s.hasTextList(), False): return False
-	if require(s.hasBytesList(), False): return False
-	if require(s.hasMemberList(), False): return False
+	if require(s.aa, 80): return False
+	if require(s.bb, 81): return False
+	if require(s.is_cake, True): return False
+	if require(s.cake.v, 45): return False
+	if require(s.e, base.MyEnum.c): return False
+	if require(s.s.x, 0): return False
+	if require(s.s.y, 0): return False
+	if require(s.s.z, 0): return False
+	if require(s.b, False): return False
+	if require(s.u8, 2): return False
+	if require(s.u16, 3): return False
+	if require(s.u32, 4): return False
+	if require(s.u64, 5): return False
+	if require(s.i8, 6): return False
+	if require(s.i16, 7): return False
+	if require(s.i32, 8): return False
+	if require(s.i64, 9): return False
+	if require(s.f, 10): return False
+	if require(s.d, 11): return False
+	if require(s.has_os, False): return False
+	if require(s.has_ob, False): return False
+	if require(s.has_ou8, False): return False
+	if require(s.has_ou16, False): return False
+	if require(s.has_ou32, False): return False
+	if require(s.has_ou64, False): return False
+	if require(s.has_oi8, False): return False
+	if require(s.has_oi16, False): return False
+	if require(s.has_oi32, False): return False
+	if require(s.has_oi64, False): return False
+	if require(s.has_of, False): return False
+	if require(s.has_od, False): return False
+	if require(s.has_member, False): return False
+	if require(s.has_text, False): return False
+	if require(s.has_bytes_, False): return False
+	if require(s.has_list_, False): return False
+	if require(s.has_enum_list, False): return False
+	if require(s.has_struct_list, False): return False
+	if require(s.has_text_list, False): return False
+	if require(s.has_bytes_list, False): return False
+	if require(s.has_member_list, False): return False
 	return True
 
 def main() -> None:
@@ -521,18 +519,18 @@ def main() -> None:
 	test = sys.argv[1]
 	path = sys.argv[2]
 	ans = False
-	if test == "out_default": ans = testOutDefault(path)
-	elif test == "out": ans = testOut(path)
-	elif test == "in": ans = testIn(path)
-	elif test == "in_default": ans = testInDefault(path)
-	elif test == "out_complex": ans = testOutComplex(path)
-	elif test == "in_complex": ans = testInComplex(path)
-	elif test == "out_vl": ans = testOutVL(path)
-	elif test == "in_vl": ans = testInVL(path)
-	elif test == "out_extend1": ans = testOutExtend1(path)
-	elif test == "in_extend1": ans = testInExtend1(path)
-	elif test == "out_extend2": ans = testOutExtend2(path)
-	elif test == "in_extend2": ans = testInExtend2(path)
+	if test == "out_default": ans = test_out_default(path)
+	elif test == "out": ans = test_out(path)
+	elif test == "in": ans = test_in(path)
+	elif test == "in_default": ans = test_in_default(path)
+	elif test == "out_complex": ans = test_out_complex(path)
+	elif test == "in_complex": ans = test_in_complex(path)
+	elif test == "out_vl": ans = test_out_vl(path)
+	elif test == "in_vl": ans = test_in_vl(path)
+	elif test == "out_extend1": ans = test_out_extend1(path)
+	elif test == "in_extend1": ans = test_in_extend1(path)
+	elif test == "out_extend2": ans = test_out_extend2(path)
+	elif test == "in_extend2": ans = test_in_extend2(path)
 	if not ans: sys.exit(1)
 
 main()

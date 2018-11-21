@@ -8,23 +8,28 @@ from parser import TokenType, NodeType, Token, Struct, AstNode, Value, Enum, Tab
 from typing import Set, Dict, List, TextIO, Tuple, Union, NamedTuple
 from types import SimpleNamespace
 import math
-from util import cescape, getuname
+from util import cescape, ucamel, snake
 
 TypeInfo = NamedTuple("TypeInfo", [("n",str), ("p",str),("s",str),("w",int)])
 
 typeMap: Dict[TokenType, TypeInfo] = {
-	TokenType.INT8: TypeInfo("Int8", "int", "b", 1),
-	TokenType.INT16: TypeInfo("Int16", "int", "h", 2),
-	TokenType.INT32: TypeInfo("Int32", "int", "i", 4),
-	TokenType.INT64: TypeInfo("Int64", "int", "q", 8),
-	TokenType.UINT8: TypeInfo("UInt8", "int", "B", 1),
-	TokenType.UINT16: TypeInfo("UInt16", "int", "H", 2),
-	TokenType.UINT32: TypeInfo("UInt32", "int", "I", 4),
-	TokenType.UINT64: TypeInfo("UInt64", "int", "Q", 8),
-	TokenType.FLOAT32: TypeInfo("Float32", "float", "f", 4),
-	TokenType.FLOAT64: TypeInfo("Float64", "float", "d", 8),
-	TokenType.BOOL: TypeInfo("Bool", "bool", "?", 1),
+	TokenType.INT8: TypeInfo("int8", "int", "b", 1),
+	TokenType.INT16: TypeInfo("int16", "int", "h", 2),
+	TokenType.INT32: TypeInfo("int32", "int", "i", 4),
+	TokenType.INT64: TypeInfo("int64", "int", "q", 8),
+	TokenType.UINT8: TypeInfo("uint8", "int", "B", 1),
+	TokenType.UINT16: TypeInfo("uint16", "int", "H", 2),
+	TokenType.UINT32: TypeInfo("uint32", "int", "I", 4),
+	TokenType.UINT64: TypeInfo("uint64", "int", "Q", 8),
+	TokenType.FLOAT32: TypeInfo("float32", "float", "f", 4),
+	TokenType.FLOAT64: TypeInfo("float64", "float", "d", 8),
+	TokenType.BOOL: TypeInfo("bool", "bool", "?", 1),
 }
+
+def mangle(name:str):
+	if name in ['list', 'int', 'bytes', 'str', 'if', 'else', 'elif', 'assert', 'return', 'raise', 'from', 'import', 'self', 'def', 'bool', 'float']:
+		return "%s_"%name
+	return name
 
 class Generator:
 	out: TextIO = None
@@ -53,26 +58,26 @@ class Generator:
 	def inListHelp(self, node:Union[Value,VLList], os:str) -> Tuple[str, str]:
 		tn = self.value(node.type)
 		if node.type.type == TokenType.BOOL:
-			return ("bool", "\t\treturn self._reader._getBoolList(%s)"%(os))
+			return ("bool", "\t\treturn self._reader._get_bool_list(%s)"%(os))
 		elif node.type.type in (TokenType.FLOAT32, TokenType.FLOAT64):
 			ti = typeMap[node.type.type]
-			return (ti.p, "\t\treturn self._reader._getFloatList('%s', %d, %s)"%(ti.s, ti.w, os))
+			return (ti.p, "\t\treturn self._reader._get_float_list('%s', %d, %s)"%(ti.s, ti.w, os))
 		elif node.type.type in typeMap:
 			ti = typeMap[node.type.type]
-			return (ti.p, "\t\treturn self._reader._getIntList('%s', %d, %s)"%(ti.s, ti.w, os))
+			return (ti.p, "\t\treturn self._reader._get_int_list('%s', %d, %s)"%(ti.s, ti.w, os))
 		elif node.type.type == TokenType.IDENTIFIER:
 			if node.struct:
-				return (tn, "\t\treturn self._reader._getStructList(%s, %s,)"%(tn, os))
+				return (tn, "\t\treturn self._reader._get_struct_list(%s, %s,)"%(tn, os))
 			elif node.enum:
-				return (tn, "\t\treturn self._reader._getEnumList(%s, %s)"%(tn, os))
+				return (tn, "\t\treturn self._reader._get_enum_list(%s, %s)"%(tn, os))
 			elif node.table:
-				return (tn+"In", "\t\treturn self._reader._getTableList(%sIn, %s)"%(tn, os))
+				return (tn+"In", "\t\treturn self._reader._get_table_list(%sIn, %s)"%(tn, os))
 			else:
 				assert False
 		elif node.type.type == TokenType.TEXT:
-			return ("str", "\t\treturn self._reader._getTextList(%s)"%(os))
+			return ("str", "\t\treturn self._reader._get_text_list(%s)"%(os))
 		elif node.type.type == TokenType.BYTES:
-			return ("bytes", "\t\treturn self._reader._getBytesList(%s)"%(os))
+			return ("bytes", "\t\treturn self._reader._get_bytes_list(%s)"%(os))
 		else:
 			assert False
 
@@ -104,135 +109,159 @@ class Generator:
 	
 	def generateValueIn(self, node: Value):
 		n = self.value(node.identifier)
-		uname = getuname(n)
+		uname = snake(mangle(n))
 		if node.list:
-			self.o("\tdef has%s(self) -> bool: return self._getUInt32(%d, 0) != 0"%(uname, node.offset))
-			(tn, acc) = self.inListHelp(node, "*self._getList(%d)"%node.offset)
-			self.o("\tdef get%s(self) -> scalgoproto.ListIn[%s]:"%(uname, tn))
+			self.o("\t@property")
+			self.o("\tdef has_%s(self) -> bool: return self._get_uint32(%d, 0) != 0"%(uname, node.offset))
+			(tn, acc) = self.inListHelp(node, "*self._get_list(%d)"%node.offset)
+			self.o("\t@property")
+			self.o("\tdef %s(self) -> scalgoproto.ListIn[%s]:"%(uname, tn))
 			self.outputDoc(node, "\t\t")
-			self.o("\t\tassert self.has%s()"%uname)
+			self.o("\t\tassert self.has_%s"%uname)
 			self.o(acc)
 			self.o("")
 		elif node.type.type == TokenType.BOOL:
 			if node.optional:
-				self.o("\tdef has%s(self) -> bool: return self._getBit(%d, %s, 0)"%(uname, node.hasOffset, node.hasBit))
-			self.o("\tdef get%s(self) -> bool:"%(uname))
+				self.o("\t@property")
+				self.o("\tdef has_%s(self) -> bool: return self._get_bit(%d, %s, 0)"%(uname, node.hasOffset, node.hasBit))
+			self.o("\t@property")
+			self.o("\tdef %s(self) -> bool:"%(uname))
 			self.outputDoc(node, "\t\t")
 			if node.optional:
-				self.o("\t\tassert self.has%s()"%uname)
-			self.o("\t\treturn self._getBit(%d, %s, 0)"%(node.offset, node.bit))
+				self.o("\t\tassert self.has_%s"%uname)
+			self.o("\t\treturn self._get_bit(%d, %s, 0)"%(node.offset, node.bit))
 			self.o("\t")
 		elif node.type.type in typeMap:
 			ti = typeMap[node.type.type]
 			if node.optional:
+				self.o("\t@property")
 				if node.type.type in (TokenType.FLOAT32, TokenType.FLOAT64):
-					self.o("\tdef has%s(self) -> bool: return not math.isnan(self._get%s(%d, math.nan))"%(uname, ti.n, node.offset))
+					self.o("\tdef has_%s(self) -> bool: return not math.isnan(self._get_%s(%d, math.nan))"%(uname, ti.n, node.offset))
 				else:
-					self.o("\tdef has%s(self) -> bool: return self._getBit(%d, %s, 0)"%(uname, node.hasOffset, node.hasBit))
-			self.o("\tdef get%s(self) -> %s:"%(uname, ti.p))
+					self.o("\tdef has_%s(self) -> bool: return self._get_bit(%d, %s, 0)"%(uname, node.hasOffset, node.hasBit))
+			self.o("\t@property")
+			self.o("\tdef %s(self) -> %s:"%(uname, ti.p))
 			self.outputDoc(node, "\t\t")
 			if node.optional:
-				self.o("\t\tassert self.has%s()"%uname)
-			self.o("\t\treturn self._get%s(%d, %s)"%(ti.n, node.offset, node.parsedValue if not math.isnan(node.parsedValue) else "math.nan"))
+				self.o("\t\tassert self.has_%s"%uname)
+			self.o("\t\treturn self._get_%s(%d, %s)"%(ti.n, node.offset, node.parsedValue if not math.isnan(node.parsedValue) else "math.nan"))
 			self.o("\t")
 		elif node.type.type == TokenType.IDENTIFIER:
 			typeName = self.value(node.type)
 			if node.enum:
-				self.o("\tdef has%s(self) -> bool: return self._getUInt8(%d, %d) != 255"%(uname, node.offset, node.parsedValue))
-				self.o("\tdef get%s(self) -> %s:"%(uname, typeName))
+				self.o("\t@property")
+				self.o("\tdef has_%s(self) -> bool: return self._get_uint8(%d, %d) != 255"%(uname, node.offset, node.parsedValue))
+				self.o("\t@property")
+				self.o("\tdef %s(self) -> %s:"%(uname, typeName))
 				self.outputDoc(node, "\t\t")
-				self.o("\t\tassert self.has%s()"%uname)
-				self.o("\t\treturn %s(self._getUInt8(%d, %s))"%(typeName, node.offset, node.parsedValue))
+				self.o("\t\tassert self.has_%s"%uname)
+				self.o("\t\treturn %s(self._get_uint8(%d, %s))"%(typeName, node.offset, node.parsedValue))
 				self.o("\t")
 			elif node.struct:
 				if node.optional:
-					self.o("\tdef has%s(self) -> bool: return self._getBit(%d, %s, 0)"%(uname, node.hasOffset, node.hasBit))
-				self.o("\tdef get%s(self) -> %s:"%(uname, typeName))
+					self.o("\t@property")
+					self.o("\tdef has_%s(self) -> bool: return self._get_bit(%d, %s, 0)"%(uname, node.hasOffset, node.hasBit))
+				self.o("\t@property")
+				self.o("\tdef %s(self) -> %s:"%(uname, typeName))
 				self.outputDoc(node, "\t\t")
 				if node.optional:
-					self.o("\t\tassert self.has%s()"%uname)
+					self.o("\t\tassert self.has_%s"%uname)
 				self.o("\t\treturn %s._read(self._reader, self._offset+%d) if self._offset < self._size else %s()"%(typeName, node.offset, typeName))
 				self.o("\t")
 			elif node.table:
-				self.o("\tdef has%s(self) -> bool: return self._getUInt32(%d, 0) != 0"%(uname, node.offset))
-				self.o("\tdef get%s(self) -> %sIn:"%(uname, typeName))
+				self.o("\t@property")
+				self.o("\tdef has_%s(self) -> bool: return self._get_uint32(%d, 0) != 0"%(uname, node.offset))
+				self.o("\t@property")
+				self.o("\tdef %s(self) -> %sIn:"%(uname, typeName))
 				self.outputDoc(node, "\t\t")
-				self.o("\t\tassert self.has%s()"%uname)
-				self.o("\t\treturn self._getTable(%sIn, %d)"%(typeName, node.offset))
+				self.o("\t\tassert self.has_%s"%uname)
+				self.o("\t\treturn self._get_table(%sIn, %d)"%(typeName, node.offset))
 				self.o("\t")
 			else:
 				assert False
 		elif node.type.type == TokenType.TEXT:
-			self.o("\tdef has%s(self) -> bool: return self._getUInt32(%d, 0) != 0"%(uname, node.offset))
-			self.o("\tdef get%s(self) -> str:"%(uname))
+			self.o("\t@property")
+			self.o("\tdef has_%s(self) -> bool: return self._get_uint32(%d, 0) != 0"%(uname, node.offset))
+			self.o("\t@property")
+			self.o("\tdef %s(self) -> str:"%(uname))
 			self.outputDoc(node, "\t\t")
-			self.o("\t\tassert self.has%s()"%(uname))
-			self.o("\t\treturn self._getText(%d)"%(node.offset))
+			self.o("\t\tassert self.has_%s"%(uname))
+			self.o("\t\treturn self._get_text(%d)"%(node.offset))
 			self.o("\t")
 		elif node.type.type == TokenType.BYTES:
-			self.o("\tdef has%s(self) -> bool: return self._getUInt32(%d, 0) != 0"%(uname, node.offset))
-			self.o("\tdef get%s(self) -> bytes:"%(uname))
+			self.o("\t@property")
+			self.o("\tdef has_%s(self) -> bool: return self._get_uint32(%d, 0) != 0"%(uname, node.offset))
+			self.o("\t@property")
+			self.o("\tdef %s(self) -> bytes:"%(uname))
 			self.outputDoc(node, "\t\t")
-			self.o("\t\tassert self.has%s()"%(uname))
-			self.o("\t\treturn self._getBytes(%d)"%(node.offset))
+			self.o("\t\tassert self.has_%s"%(uname))
+			self.o("\t\treturn self._get_bytes(%d)"%(node.offset))
 			self.o("\t")
 		else:
 			assert False
 
 	def generateValueOut(self, node:Value):
 		n = self.value(node.identifier)
-		uname = n[0].upper() + n[1:]
+		uname = snake(mangle(n))
 		if node.list:
-			self.o("\tdef add%s(self, value: %s):"%(uname, self.outListType(node)))
+			self.o("\t@scalgoproto.Adder")
+			self.o("\tdef %s(self, value: %s):"%(uname, self.outListType(node)))
 			self.outputDoc(node, "\t\t")
-			self.o("\t\tself._setList(%d, value)"%(node.offset))
+			self.o("\t\tself._set_list(%d, value)"%(node.offset))
 			self.o("\t")
 		elif node.type.type == TokenType.BOOL:
-			self.o("\tdef add%s(self, value:bool) -> None:"%(uname))
+			self.o("\t@scalgoproto.Adder")
+			self.o("\tdef %s(self, value:bool) -> None:"%(uname))
 			self.outputDoc(node, "\t\t")
 			if node.optional:
-				self.o("\t\tself._setBit(%d, %d)"%(node.hasOffset, node.hasBit))
-			self.o("\t\tif value: self._setBit(%d, %d)"%(node.offset, node.bit))
-			self.o("\t\telse: self._unsetBit(%d, %d)"%(node.offset, node.bit))
+				self.o("\t\tself._set_bit(%d, %d)"%(node.hasOffset, node.hasBit))
+			self.o("\t\tif value: self._set_bit(%d, %d)"%(node.offset, node.bit))
+			self.o("\t\telse: self._unset_bit(%d, %d)"%(node.offset, node.bit))
 			self.o("\t")
 		elif node.type.type in typeMap:
 			ti = typeMap[node.type.type]
-			self.o("\tdef add%s(self, value: %s) -> None:"%(uname, ti.p))
+			self.o("\t@scalgoproto.Adder")
+			self.o("\tdef %s(self, value: %s) -> None:"%(uname, ti.p))
 			self.outputDoc(node, "\t\t")
 			if node.optional and node.type.type not in (TokenType.FLOAT32, TokenType.FLOAT64):
-				self.o("\t\tself._setBit(%d, %d)"%(node.hasOffset, node.hasBit))
-			self.o("\t\tself._set%s(%d, value)"%(ti.n, node.offset))
+				self.o("\t\tself._set_bit(%d, %d)"%(node.hasOffset, node.hasBit))
+			self.o("\t\tself._set_%s(%d, value)"%(ti.n, node.offset))
 			self.o("\t")
 		elif node.type.type == TokenType.IDENTIFIER:
 			typeName = self.value(node.type)
 			if node.enum:
-				self.o("\tdef add%s(self, value: %s) -> None:"%(uname, typeName))
+				self.o("\t@scalgoproto.Adder")
+				self.o("\tdef %s(self, value: %s) -> None:"%(uname, typeName))
 				self.outputDoc(node, "\t\t")
-				self.o("\t\tself._setUInt8(%d, int(value))"%(node.offset))
+				self.o("\t\tself._set_uint8(%d, int(value))"%(node.offset))
 				self.o("\t")
 			elif node.struct:
-				self.o("\tdef add%s(self, value: %s) -> None:"%(uname, typeName))
+				self.o("\t@scalgoproto.Adder")
+				self.o("\tdef %s(self, value: %s) -> None:"%(uname, typeName))
 				self.outputDoc(node, "\t\t")
 				if node.optional:
-					self.o("\t\tself._setBit(%d, %d)"%(node.hasOffset, node.hasBit))
+					self.o("\t\tself._set_bit(%d, %d)"%(node.hasOffset, node.hasBit))
 				self.o("\t\t%s._write(self._writer, self._offset + %d, value)"%(typeName, node.offset))
 				self.o("\t")
 			elif node.table:
-				self.o("\tdef add%s(self, value: %sOut) -> None:"%(uname, typeName))
+				self.o("\t@scalgoproto.Adder")
+				self.o("\tdef %s(self, value: %sOut) -> None:"%(uname, typeName))
 				self.outputDoc(node, "\t\t")
-				self.o("\t\tself._setTable(%d, value)"%(node.offset))
+				self.o("\t\tself._set_table(%d, value)"%(node.offset))
 				self.o("\t")
 			else:
 				assert False
 		elif node.type.type == TokenType.TEXT:
-			self.o("\tdef add%s(self, t: scalgoproto.TextOut) -> None:"%(uname))
+			self.o("\t@scalgoproto.Adder")
+			self.o("\tdef %s(self, t: scalgoproto.TextOut) -> None:"%(uname))
 			self.outputDoc(node, "\t\t")
-			self.o("\t\tself._setText(%d, t)"%(node.offset))
+			self.o("\t\tself._set_text(%d, t)"%(node.offset))
 			self.o("\t")
 		elif node.type.type == TokenType.BYTES:
-			self.o("\tdef add%s(self, b: scalgoproto.BytesOut) -> None:"%(uname))
+			self.o("\t@scalgoproto.Adder")
+			self.o("\tdef %s(self, b: scalgoproto.BytesOut) -> None:"%(uname))
 			self.outputDoc(node, "\t\t")
-			self.o("\t\tself._setBytes(%d, b)"%(node.offset))
+			self.o("\t\tself._set_bytes(%d, b)"%(node.offset))
 			self.o("\t")
 		else:
 			assert False
@@ -246,76 +275,86 @@ class Generator:
 			self.o("\t\t%s = %d"%(self.value(member.identifier).upper(), idx))
 			idx += 1
 		self.o("\t")
-		self.o("\tdef getType(self) -> Type:")
+		self.o("\t@property")
+		self.o("\tdef type(self) -> Type:")
 		self.outputDoc(node, "\t")
-		self.o("\t\treturn %sIn.Type(self._getUInt16(%d, 0))"%(tableName, node.offset))
+		self.o("\t\treturn %sIn.Type(self._get_uint16(%d, 0))"%(tableName, node.offset))
 		self.o("\t")
-		self.o("\tdef hasType(self) -> bool: return self.getType() != %sIn.Type.NONE"%(tableName))
+		self.o("\t@property")
+		self.o("\tdef has_type(self) -> bool: return self.type != %sIn.Type.NONE"%(tableName))
 		for member in node.members:
 			assert isinstance(member, (Table, Value))
 			n = self.value(member.identifier)
-			uname = n[0].upper() + n[1:]
+			uname = snake(n)
 			table = member.table if isinstance(member, Value) else member
-			self.o("\tdef is%s(self) -> bool: return self.getType() == %sIn.Type.%s"%(uname, tableName, n.upper()))
+			self.o("\t@property")
+			self.o("\tdef is_%s(self) -> bool: return self.type == %sIn.Type.%s"%(uname, tableName, n.upper()))
 			if table.values:
 				self.o("\t")
-				self.o("\tdef get%s(self) -> %sIn:"%(uname, table.name))
+				self.o("\t@property")
+				self.o("\tdef %s(self) -> %sIn:"%(uname, table.name))
 				self.outputDoc(node, "\t\t")
-				self.o("\t\tassert self.is%s()"%(uname))
-				self.o("\t\treturn self._getVLTable(%sIn, %d)"%(table.name, node.offset+2))
+				self.o("\t\tassert self.is_%s"%(uname))
+				self.o("\t\treturn self._get_vl_table(%sIn, %d)"%(table.name, node.offset+2))
 				self.o("\t")
 
 	def generateVLUnionOut(self, node:VLUnion):
 		self.outputDoc(node, "\t")
-		self.o("\tdef hasType(self) -> bool: return self._getUInt16(%d) != 0"%node.offset)
+		self.o("\t@property")
+		self.o("\tdef has_type(self) -> bool: return self._get_uint16(%d) != 0"%node.offset)
 		idx = 1
 		for member in node.members:
 			assert isinstance(member, (Table, Value))
 			n = self.value(member.identifier)
-			uname = n[0].upper() + n[1:]
+			uname = mangle(snake(n))
 			tbl = member.table if isinstance(member, Value) else member
 			if tbl.values:
-				self.o("\tdef add%s(self) -> %sOut:"%(uname, tbl.name))
+				self.o("\tdef add_%s(self) -> %sOut:"%(uname, tbl.name))
 				self.outputDoc(member, "\t\t")
-				self.o("\t\tassert not self.hasType()")
-				self.o("\t\tself._setUInt16(%d, %d)"%(node.offset, idx))
-				self.o("\t\tself._setUInt32(%d, %d)"%(node.offset+2, len(tbl.default)))
-				self.o("\t\treturn self._constructUnionMember(%sOut)"%tbl.name)
+				self.o("\t\tassert not self.has_type")
+				self.o("\t\tself._set_uint16(%d, %d)"%(node.offset, idx))
+				self.o("\t\tself._set_uint32(%d, %d)"%(node.offset+2, len(tbl.default)))
+				self.o("\t\treturn self._construct_union_member(%sOut)"%tbl.name)
 				self.o("\t")
 			else:
-				self.o("\tdef add%s(self) -> None:"%(uname))
+				self.o("\tdef add_%s(self) -> None:"%(uname))
 				self.outputDoc(member, "\t\t")
-				self.o("\t\tassert not self.hasType()")
-				self.o("\t\tself._setUInt16(%d, %d)"%(node.offset, idx))
-				self.o("\t\tself._setUInt32(%d, %d)"%(node.offset+2, 0))
+				self.o("\t\tassert not self.has_type")
+				self.o("\t\tself._set_uint16(%d, %d)"%(node.offset, idx))
+				self.o("\t\tself._set_uint32(%d, %d)"%(node.offset+2, 0))
 				self.o("\t")
 			idx += 1
 
 	def generateVLBytesIn(self, node:VLBytes):
-		self.o("\tdef hasBytes(self) -> bool: return self._getUInt32(%d, 0) != 0"%(node.offset))
-		self.o("\tdef getBytes(self) -> bytes:")
+		self.o("\t@property")				
+		self.o("\tdef has_bytes_(self) -> bool: return self._get_uint32(%d, 0) != 0"%(node.offset))
+		self.o("\t@property")
+		self.o("\tdef bytes_(self) -> bytes:")
 		self.outputDoc(node, "\t\t")
-		self.o("\t\tassert self.hasBytes()")
-		self.o("\t\treturn self._getVLBytes(%d)"%(node.offset))
+		self.o("\t\tassert self.has_bytes_")
+		self.o("\t\treturn self._get_vl_bytes(%d)"%(node.offset))
 		self.o("\t")
 
 	def generateVLBytesOut(self, node:VLBytes):
-		self.o("\tdef addBytes(self, value: bytes) -> None:")
+		self.o("\t@scalgoproto.Adder")
+		self.o("\tdef bytes_(self, value: bytes) -> None:")
 		self.outputDoc(node, "\t\t")
-		self.o("\t\tself._addVLBytes(%d, value)"%(node.offset))
+		self.o("\t\tself._add_vl_bytes(%d, value)"%(node.offset))
 		self.o("\t")
 
 	def generateVLListIn(self, node:VLList):
-		self.o("\tdef hasList(self) -> bool: return self._getUInt32(%d, 0) != 0"%(node.offset))
-		(tn, acc) = self.inListHelp(node, "self._offset + self._size, self._getUInt32(%d, 0)"%node.offset)
-		self.o("\tdef getList(self) -> scalgoproto.ListIn[%s]:"%(tn))
+		self.o("\t@property")
+		self.o("\tdef has_list_(self) -> bool: return self._get_uint32(%d, 0) != 0"%(node.offset))
+		(tn, acc) = self.inListHelp(node, "self._offset + self._size, self._get_uint32(%d, 0)"%node.offset)
+		self.o("\t@property")
+		self.o("\tdef list_(self) -> scalgoproto.ListIn[%s]:"%(tn))
 		self.outputDoc(node, "\t\t")
-		self.o("\t\tassert self.hasList()")
+		self.o("\t\tassert self.has_list_")
 		self.o(acc)
 		self.o("")
 
 	def generateVLListOut(self, node:VLList):
-		self.o("\tdef addList(self, size: int) -> %s:"%(self.outListType(node)))
+		self.o("\tdef add_list_(self, size: int) -> %s:"%(self.outListType(node)))
 		self.outputDoc(node, "\t\t")
 		cons = None
 		tname = self.value(node.type)
@@ -332,22 +371,25 @@ class Generator:
 			self.o("\t\tl = scalgoproto.ObjectListOut[TextOut](self._writer, size, False)")
 		elif node.type.type == TokenType.BYTES:
 			self.o("\t\tl = scalgoproto.ObjectListOut[TextOut](self._writer, size, False)")
-		self.o("\t\tself._setVLList(%d, size)"%(node.offset))
+		self.o("\t\tself._set_vl_list(%d, size)"%(node.offset))
 		self.o("\t\treturn l")
 		self.o("\t")
 
 	def generateVLTextIn(self, node:VLText):
-		self.o("\tdef hasText(self) -> bool: return self._getUInt32(%d, 0) != 0"%(node.offset))
+		self.o("\t@property")
+		self.o("\tdef has_text(self) -> bool: return self._get_uint32(%d, 0) != 0"%(node.offset))
 		self.outputDoc(node, "\t")
-		self.o("\tdef getText(self) -> str:")
-		self.o("\t\tassert self.hasText()")
-		self.o("\t\treturn self._getVLText(%d)"%(node.offset))
+		self.o("\t@property")
+		self.o("\tdef text(self) -> str:")
+		self.o("\t\tassert self.has_text")
+		self.o("\t\treturn self._get_vl_text(%d)"%(node.offset))
 		self.o("\t")
 
 	def generateVLTextOut(self, node:VLText):
-		self.o("\tdef addText(self, text:str) -> None:")
+		self.o("\t@scalgoproto.Adder")
+		self.o("\tdef text(self, text:str) -> None:")
 		self.outputDoc(node, "\t\t")
-		self.o("\t\tself._addVLText(%d, text)"%(node.offset))
+		self.o("\t\tself._add_vl_text(%d, text)"%(node.offset))
 		self.o("\t")
 
 	def generateTable(self, table:Table):
