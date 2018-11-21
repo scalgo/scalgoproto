@@ -1,4 +1,5 @@
 # -*- mode: python; tab-width: 4; indent-tabs-mode: t; python-indent-offset: 4; coding: utf-8 -*-
+from typing import List
 
 def cescape(v:bytes) -> str:
 	ans = []
@@ -18,5 +19,21 @@ def cescape(v:bytes) -> str:
 			ans.append("\\x%02x"%c)
 	return "".join(ans)
 
-def getuname(n:str) -> str:
+def ucamel(n:str) -> str:
+	"""Convert a string in upper or lower camel case to upper camel case"""
 	return n[0].upper() + n[1:]
+
+def lcamel(n:str) -> str:
+	"""Convert a string in upper or lower camel case to lower camel case"""
+	return n[0].lower() + n[1:]
+
+def snake(n:str) -> str:
+	"""Convert a string in upper or lower camel case to snake case"""
+	out: List[str] = []
+	for c in n:
+		if c.isupper() and out:
+			out.append('_')
+			out.append(c.lower())
+		else:
+			out.append(c.lower())
+	return "".join(out)

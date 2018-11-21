@@ -9,7 +9,7 @@ from parser import TokenType, NodeType, Token, Struct, AstNode, Value, Enum, Tab
 from typing import Set, Dict, List, TextIO, Tuple, Union
 from types import SimpleNamespace
 import math
-from util import getuname, cescape
+from util import ucamel, cescape
 
 class Generator:
 	out: TextIO = None
@@ -93,6 +93,277 @@ class Generator:
 			self.o("%s * %s"%(indent, line))
 		self.o("%s */"%indent)
 	
+	def generateValueIn(self, node:Value) -> None:
+		n = self.value(node.identifier)
+		uname = ucamel(n)
+		if node.list:
+			typeName, rawType = self.listTypes(node)
+			self.o("\tbool has%s() const noexcept {"%(uname))
+			self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
+			self.o("\t}")
+			self.o("\t")
+			self.outputDoc(node, "\t")
+			self.o("\tscalgoproto::ListIn<%s> get%s() const {"%(typeName, uname))
+			self.o("\t\tassert(has%s());"%uname)
+			self.o("\t\treturn getList_<%s, %d>();"%(typeName, node.offset))
+			self.o("\t}")
+			if rawType:
+				self.o("\t")
+				self.outputDoc(node, "\t", [], ["\\note accessing this is undefined behaivour"])
+				self.o("\tstd::pair<const %s *, size_t> get%sRaw() const {"%(rawType, uname))
+				self.o("\t\tassert(has%s());"%uname)
+				self.o("\t\treturn getListRaw_<%s, %d>();"%(rawType, node.offset))
+				self.o("\t}")
+		elif node.type.type in self.typeMap:
+			typeName = self.typeMap[node.type.type]
+			if node.optional:
+				self.o("\tbool has%s() const noexcept {"%( uname))
+				if node.type.type in (TokenType.FLOAT32, TokenType.FLOAT64):
+					self.o("\t\treturn !std::isnan(getInner_<%s, %s>(std::numeric_limits<%s>::quiet_NaN()));"%(typeName, node.offset, typeName))
+				else:
+					self.o("\t\treturn getBit_<%d, %s, 0>();"%(node.hasOffset, node.hasBit))
+				self.o("\t}")
+			self.o("\t")
+			self.outputDoc(node, "\t")
+			self.o("\t%s get%s() const noexcept {"%(typeName, uname))
+			if node.optional:
+				self.o("\t\tassert(has%s());"%uname)
+			self.o("\t\treturn getInner_<%s, %d>(%s);"%(typeName, node.offset, node.parsedValue if not math.isnan(node.parsedValue) else "NAN"))
+			self.o("\t}")
+		elif node.type.type == TokenType.BOOL:
+			if node.optional:
+				self.o("\tbool has%s() const noexcept {"%( uname))
+				self.o("\t\treturn getBit_<%d, %s, 0>();"%(node.hasOffset, node.hasBit))
+				self.o("\t}")
+			self.o("\t")
+			self.outputDoc(node, "\t")
+			self.o("\tbool get%s() const noexcept {"%(uname))
+			if node.optional:
+				self.o("\t\tassert(has%s());"%uname)
+			self.o("\t\treturn getBit_<%d, %s, 0>();"%(node.offset, node.bit))
+			self.o("\t}")
+		elif node.type.type == TokenType.IDENTIFIER:
+			typeName = self.value(node.type)
+			if node.enum:
+				self.o("\tbool has%s() const noexcept {"%(uname))
+				self.o("\t\treturn getInner_<std::uint8_t, %d>(%d) != 255;"%(node.offset, node.parsedValue))
+				self.o("\t}")
+				self.o("\t")
+				self.outputDoc(node, "\t")
+				self.o("\t%s get%s() const noexcept {"%(typeName, uname))
+				self.o("\t\tassert(has%s());"%uname)
+				self.o("\t\treturn (%s)getInner_<std::uint8_t, %d>(%s);"%(typeName, node.offset, node.parsedValue))
+				self.o("\t}")
+			elif node.struct:
+				if node.optional:
+					self.o("\tbool has%s() const noexcept {"%(uname))
+					self.o("\t\treturn getBit_<%d, %s, 0>();"%(node.hasOffset, node.hasBit))
+					self.o("\t}")
+				self.o("\t")
+				self.outputDoc(node, "\t")
+				self.o("\t%s get%s() const noexcept {"%(typeName, uname))
+				if node.optional:
+					self.o("\t\tassert(has%s());"%uname)
+				self.o("\t\treturn getInner_<%s, %d>();"%( typeName, node.offset))
+				self.o("\t}")
+			elif node.table:
+				self.o("\tbool has%s() const noexcept {"%(uname))
+				self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
+				self.o("\t}")
+				self.o("\t")
+				self.outputDoc(node, "\t")
+				self.o("\t%sIn get%s() const {"%(typeName, uname))
+				self.o("\t\tassert(has%s());"%uname)
+				self.o("\t\treturn getTable_<%sIn, %d>();"%(typeName, node.offset))
+				self.o("\t}")
+			else:
+				assert False
+		elif node.type.type == TokenType.TEXT:
+			self.o("\tbool has%s() const noexcept {"%(uname))
+			self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
+			self.o("\t}")
+			self.o("\t")
+			self.outputDoc(node, "\t")
+			self.o("\tstd::string_view get%s() {"%(uname))
+			self.o("\t\treturn getText_<%d>();"%(node.offset))
+			self.o("\t}")
+		elif node.type.type == TokenType.BYTES:
+			self.o("\tbool has%s() const noexcept {"%(uname))
+			self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
+			self.o("\t}")
+			self.o("\t")
+			self.outputDoc(node, "\t")
+			self.o("\tstd::pair<const void*, size_t> get%s()  {"%(uname))
+			self.o("\t\treturn getBytes_<%d>();"%(node.offset))
+			self.o("\t}")
+		else:
+			assert False
+
+	def generateValueOut(self, node:Value) -> None:
+		n = self.value(node.identifier)
+		uname = ucamel(n)
+		self.outputDoc(node, "\t")
+		if node.list:
+			typeName = self.outListType(node)
+			self.o("\tvoid add%s(scalgoproto::ListOut<%s> value) noexcept {"%(uname, typeName))
+			self.o("\t\tsetList_<%s, %d>(value);"%(typeName, node.offset))
+			self.o("\t}")
+		elif node.type.type in self.typeMap:
+			typeName = self.typeMap[node.type.type]
+			self.o("\tvoid add%s(%s value) noexcept {"%(uname, typeName))
+			if node.optional and node.type.type not in (TokenType.FLOAT32, TokenType.FLOAT64):
+				self.o("\t\tsetBit_<%d, %d>();"%(node.hasOffset, node.hasBit))
+			self.o("\t\tsetInner_<%s, %d>(value);"%(typeName, node.offset))
+			self.o("\t}")
+		elif node.type.type == TokenType.BOOL:
+			self.o("\tvoid add%s(bool value) noexcept {"%(uname))
+			if node.optional:
+				self.o("\t\tsetBit_<%d, %d>();"%(node.hasOffset, node.hasBit))
+			self.o("\t\tif(value) setBit_<%d, %d>(); else unsetBit_<%d, %d>();"%(node.offset, node.bit, node.offset, node.bit))
+			self.o("\t}")
+		elif node.type.type == TokenType.IDENTIFIER:
+			typeName = self.value(node.type)
+			if node.enum:
+				self.o("\tvoid add%s(%s value) noexcept {"%(uname, typeName))
+				self.o("\t\tsetInner_<%s, %d>(value);"%(typeName, node.offset))
+				self.o("\t}")
+			elif node.struct:
+				self.o("\tvoid add%s(const %s & value) noexcept {"%(uname, typeName))
+				if node.optional:
+					self.o("\t\tsetBit_<%d, %d>();"%(node.hasOffset, node.hasBit))
+				self.o("\t\tsetInner_<%s, %d>(value);"%(typeName, node.offset))
+				self.o("\t}")
+			elif node.table:
+				self.o("\tvoid add%s(%sOut value) noexcept {"%(uname, typeName))
+				self.o("\t\tsetTable_<%sOut, %d>(value);"%(typeName, node.offset))
+				self.o("\t}")
+				pass
+			else:
+				assert False
+		elif node.type.type == TokenType.TEXT:
+			self.o("\tvoid add%s(scalgoproto::TextOut t) noexcept {"%(uname))
+			self.o("\tsetText_<%d>(t);"%(node.offset))
+			self.o("\t}")
+		elif node.type.type == TokenType.BYTES:
+			self.o("\tvoid add%s(scalgoproto::BytesOut b) noexcept {"%(uname))
+			self.o("\tsetBytes_<%d>(b);"%(node.offset))
+			self.o("\t}")
+		else:
+			assert False
+
+	def generateVLUnionIn(self, node: VLUnion) -> None:
+		self.o("\tenum Type {")
+		self.o("\t\tNONE,")
+		for member in node.members:
+			assert isinstance(member, (Table, Value))
+			self.o("\t\t%s,"%self.value(member.identifier).upper())
+		self.o("\t};")
+		self.o("\t")
+		self.outputDoc(node, "\t")
+		self.o("\tType getType() const noexcept {")
+		self.o("\t\treturn (Type)getInner_<std::uint16_t, %d>();"%node.offset)
+		self.o("\t}")
+		self.o("\tbool hasType() const noexcept {return getType() != NONE;}")
+		for member in node.members:
+			assert isinstance(member, (Table, Value))
+			n = self.value(member.identifier)
+			uname = n[0].upper() + n[1:]
+			tbl = member.table if isinstance(member, Value) else member
+			self.o("\tbool is%s() const noexcept {return getType() == %s;}"%(uname, n.upper()))
+			if tbl.values:
+				self.o("\t")
+				self.outputDoc(node, "\t")
+				self.o("\t%sIn get%s() const noexcept {"%(tbl.name, uname))
+				self.o("\t\tassert(is%s());"%(uname))
+				self.o("\t\treturn getVLTable_<%sIn, %d>();"%(tbl.name, node.offset+2))
+				self.o("\t}")
+
+	def generateVLUnionOut(self, node:VLUnion) -> None:
+		self.outputDoc(node, "\t")
+		self.o("\tbool hasType() const noexcept {")
+		self.o("\t\treturn getInner_<std::uint16_t, %d>() != 0;"%(node.offset))
+		self.o("\t}")
+		idx = 1
+		for member in node.members:
+			assert isinstance(member, (Table, Value))
+			n = self.value(member.identifier)
+			uname = n[0].upper() + n[1:]
+			tbl = member.table if isinstance(member, Value) else member
+			self.outputDoc(member, "\t")
+			if tbl.values:
+				self.o("\t%sOut add%s() noexcept {"%(tbl.name, uname))
+				self.o("\t\tassert(!hasType());")
+				self.o("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
+				self.o("\t\tsetInner_<std::uint32_t, %d>(%d);"%(node.offset+2, len(tbl.default)))
+				self.o("\t\treturn constructUnionMember_<%sOut>();"%tbl.name)
+				self.o("\t}")
+			else:
+				self.o("\tvoid add%s() noexcept {"%(uname))
+				self.o("\t\tassert(!hasType());")
+				self.o("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
+				self.o("\t\tsetInner_<std::uint32_t, %d>(%d);"%(node.offset+2, 0))
+				self.o("\t}")
+			idx += 1
+
+	def generateVLBytesIn(self, node:VLBytes) -> None:
+		self.o("\tbool hasBytes() const noexcept {")
+		self.o("\t\treturn getInner_<std::uint32_t, %d>() != 0;"%(node.offset))
+		self.o("\t}")
+		self.o("\t")
+		self.outputDoc(node, "\t")
+		self.o("\tstd::pair<const void *, size_t> getBytes() const noexcept {")
+		self.o("\t\tassert(hasBytes());")
+		self.o("\t\treturn getVLBytes_<%d>();"%(node.offset))
+		self.o("\t}")
+
+	def generateVLBytesOut(self, node:VLBytes) -> None:
+		self.outputDoc(node, "\t")
+		self.o("\tvoid addBytes(const char * data, size_t size) noexcept {")
+		self.o("\t\taddVLBytes_<%d>(data, size);"%(node.offset))
+		self.o("\t}")
+
+	def generateVLListIn(self, node:VLList) -> None:
+		typeName, rawType = self.listTypes(node)
+		self.o("\tbool hasList() const noexcept {")
+		self.o("\t\treturn getInner_<std::uint32_t, %d>() != 0;"%(node.offset))
+		self.o("\t}")
+		self.o("\t")
+		self.outputDoc(node, "\t")
+		self.o("\tscalgoproto::ListIn<%s> getList() const {"%(typeName))
+		self.o("\t\treturn getVLList_<%s, %d>();"%(typeName, node.offset))
+		self.o("\t}")
+		if rawType:
+			self.o("\t")
+			self.outputDoc(node, "\t", [], ["\\note accessing this is undefined behaivour"])
+			self.o("\tstd::pair<const %s *, size_t> getListRaw() const {"%(rawType))
+			self.o("\t\tassert(hasList());")
+			self.o("\t\treturn getVLListRaw_<%s, %d>();"%(rawType, node.offset))
+			self.o("\t}")
+
+	def generateVLListOut(self, node:VLList) -> None:
+		typeName = self.outListType(node)
+		self.outputDoc(node, "\t")
+		self.o("\tscalgoproto::ListOut<%s> addList(size_t size) noexcept {"%(typeName))
+		self.o("\t\treturn addVLList_<%d, %s>(size);"%(node.offset, typeName))
+		self.o("\t}")
+
+	def generateVLTextIn(self, node:VLText) -> None:
+		self.o("\tbool hasText() const noexcept {")
+		self.o("\t\treturn getInner_<std::uint32_t, %d>() != 0;"%(node.offset))
+		self.o("\t}")
+		self.o("\t")
+		self.outputDoc(node, "\t")
+		self.o("\tstd::string_view getText() const noexcept {")
+		self.o("\t\tassert(hasText());")
+		self.o("\t\treturn getVLText_<%d>();"%(node.offset))
+		self.o("\t}")
+
+	def generateVLTextOut(self, node:VLText) -> None:
+		self.outputDoc(node, "\t")
+		self.o("\tvoid addText(std::string_view text) noexcept {")
+		self.o("\t\taddVLText_<%d>(text);"%(node.offset))
+		self.o("\t}")
+
 	def generateTable(self, table:Table ) -> None:
 		for node in table.values:
 			if node.t == NodeType.VLUNION:
@@ -114,177 +385,19 @@ class Generator:
 		for node in table.values:
 			if node.t == NodeType.VALUE:
 				assert isinstance(node, Value)
-				n = self.value(node.identifier)
-				uname = n[0].upper() + n[1:]
-				if node.list:
-					typeName, rawType = self.listTypes(node)
-					self.o("\tbool has%s() const noexcept {"%(uname))
-					self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
-					self.o("\t}")
-					self.o("\t")
-					self.outputDoc(node, "\t")
-					self.o("\tscalgoproto::ListIn<%s> get%s() const {"%(typeName, uname))
-					self.o("\t\tassert(has%s());"%uname)
-					self.o("\t\treturn getList_<%s, %d>();"%(typeName, node.offset))
-					self.o("\t}")
-					if rawType:
-						self.o("\t")
-						self.outputDoc(node, "\t", [], ["\\note accessing this is undefined behaivour"])
-						self.o("\tstd::pair<const %s *, size_t> get%sRaw() const {"%(rawType, uname))
-						self.o("\t\tassert(has%s());"%uname)
-						self.o("\t\treturn getListRaw_<%s, %d>();"%(rawType, node.offset))
-						self.o("\t}")
-				elif node.type.type in self.typeMap:
-					typeName = self.typeMap[node.type.type]
-					if node.optional:
-						self.o("\tbool has%s() const noexcept {"%( uname))
-						if node.type.type in (TokenType.FLOAT32, TokenType.FLOAT64):
-							self.o("\t\treturn !std::isnan(getInner_<%s, %s>(std::numeric_limits<%s>::quiet_NaN()));"%(typeName, node.offset, typeName))
-						else: 
-							self.o("\t\treturn getBit_<%d, %s, 0>();"%(node.hasOffset, node.hasBit))
-						self.o("\t}")
-					self.o("\t")
-					self.outputDoc(node, "\t")
-					self.o("\t%s get%s() const noexcept {"%(typeName, uname))
-					if node.optional:
-						self.o("\t\tassert(has%s());"%uname)
-					self.o("\t\treturn getInner_<%s, %d>(%s);"%(typeName, node.offset, node.parsedValue if not math.isnan(node.parsedValue) else "NAN"))
-					self.o("\t}")
-				elif node.type.type == TokenType.BOOL:
-					if node.optional:
-						self.o("\tbool has%s() const noexcept {"%( uname))
-						self.o("\t\treturn getBit_<%d, %s, 0>();"%(node.hasOffset, node.hasBit))
-						self.o("\t}")
-					self.o("\t")
-					self.outputDoc(node, "\t")
-					self.o("\tbool get%s() const noexcept {"%(uname))
-					if node.optional:
-						self.o("\t\tassert(has%s());"%uname)
-					self.o("\t\treturn getBit_<%d, %s, 0>();"%(node.offset, node.bit))
-					self.o("\t}")
-				elif node.type.type == TokenType.IDENTIFIER:
-					typeName = self.value(node.type)
-					if node.enum:
-						self.o("\tbool has%s() const noexcept {"%(uname))
-						self.o("\t\treturn getInner_<std::uint8_t, %d>(%d) != 255;"%(node.offset, node.parsedValue))
-						self.o("\t}")
-						self.o("\t")
-						self.outputDoc(node, "\t")
-						self.o("\t%s get%s() const noexcept {"%(typeName, uname))
-						self.o("\t\tassert(has%s());"%uname)
-						self.o("\t\treturn (%s)getInner_<std::uint8_t, %d>(%s);"%(typeName, node.offset, node.parsedValue))
-						self.o("\t}")
-					elif node.struct:
-						if node.optional:
-							self.o("\tbool has%s() const noexcept {"%(uname))
-							self.o("\t\treturn getBit_<%d, %s, 0>();"%(node.hasOffset, node.hasBit))
-							self.o("\t}")
-						self.o("\t")
-						self.outputDoc(node, "\t")
-						self.o("\t%s get%s() const noexcept {"%(typeName, uname))
-						if node.optional:
-							self.o("\t\tassert(has%s());"%uname)
-						self.o("\t\treturn getInner_<%s, %d>();"%( typeName, node.offset))
-						self.o("\t}")
-					elif node.table:
-						self.o("\tbool has%s() const noexcept {"%(uname))
-						self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
-						self.o("\t}")
-						self.o("\t")
-						self.outputDoc(node, "\t")
-						self.o("\t%sIn get%s() const {"%(typeName, uname))
-						self.o("\t\tassert(has%s());"%uname)
-						self.o("\t\treturn getTable_<%sIn, %d>();"%(typeName, node.offset))
-						self.o("\t}")
-					else:
-						assert False
-				elif node.type.type == TokenType.TEXT:
-					self.o("\tbool has%s() const noexcept {"%(uname))
-					self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
-					self.o("\t}")
-					self.o("\t")
-					self.outputDoc(node, "\t")
-					self.o("\tstd::string_view get%s() {"%(uname))
-					self.o("\t\treturn getText_<%d>();"%(node.offset))
-					self.o("\t}")
-				elif node.type.type == TokenType.BYTES:
-					self.o("\tbool has%s() const noexcept {"%(uname))
-					self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
-					self.o("\t}")
-					self.o("\t")
-					self.outputDoc(node, "\t")
-					self.o("\tstd::pair<const void*, size_t> get%s()  {"%(uname))
-					self.o("\t\treturn getBytes_<%d>();"%(node.offset))
-					self.o("\t}")
-				else:
-					assert False
+				self.generateValueIn(node)
 			elif node.t == NodeType.VLUNION:
 				assert isinstance(node, VLUnion)
-				self.o("\tenum Type {")
-				self.o("\t\tNONE,")
-				for member in node.members:
-					assert isinstance(member, (Table, Value))
-					self.o("\t\t%s,"%self.value(member.identifier).upper())
-				self.o("\t};")
-				self.o("\t")
-				self.outputDoc(node, "\t")
-				self.o("\tType getType() const noexcept {")
-				self.o("\t\treturn (Type)getInner_<std::uint16_t, %d>();"%node.offset)
-				self.o("\t}")
-				self.o("\tbool hasType() const noexcept {return getType() != NONE;}")
-				for member in node.members:
-					assert isinstance(member, (Table, Value))
-					n = self.value(member.identifier)
-					uname = n[0].upper() + n[1:]
-					tbl = member.table if isinstance(member, Value) else member
-					self.o("\tbool is%s() const noexcept {return getType() == %s;}"%(uname, n.upper()))
-					if tbl.values:
-						self.o("\t")
-						self.outputDoc(node, "\t")
-						self.o("\t%sIn get%s() const noexcept {"%(tbl.name, uname))
-						self.o("\t\tassert(is%s());"%(uname))
-						self.o("\t\treturn getVLTable_<%sIn, %d>();"%(tbl.name, node.offset+2))
-						self.o("\t}")
+				self.generateVLUnionIn(node)
 			elif node.t == NodeType.VLBYTES:
 				assert isinstance(node, VLBytes)
-				self.o("\tbool hasBytes() const noexcept {")
-				self.o("\t\treturn getInner_<std::uint32_t, %d>() != 0;"%(node.offset))
-				self.o("\t}")
-				self.o("\t")
-				self.outputDoc(node, "\t")
-				self.o("\tstd::pair<const void *, size_t> getBytes() const noexcept {")
-				self.o("\t\tassert(hasBytes());")
-				self.o("\t\treturn getVLBytes_<%d>();"%(node.offset))
-				self.o("\t}")
+				self.generateVLBytesIn(node)
 			elif node.t == NodeType.VLLIST:
 				assert isinstance(node, VLList)
-				typeName, rawType = self.listTypes(node)
-				self.o("\tbool hasList() const noexcept {")
-				self.o("\t\treturn getInner_<std::uint32_t, %d>() != 0;"%(node.offset))
-				self.o("\t}")
-				self.o("\t")
-				self.outputDoc(node, "\t")
-				self.o("\tscalgoproto::ListIn<%s> getList() const {"%(typeName))
-				self.o("\t\treturn getVLList_<%s, %d>();"%(typeName, node.offset))
-				self.o("\t}")
-				if rawType:
-					self.o("\t")
-					self.outputDoc(node, "\t", [], ["\\note accessing this is undefined behaivour"])
-					self.o("\tstd::pair<const %s *, size_t> getListRaw() const {"%(rawType))
-					self.o("\t\tassert(hasList());")
-					self.o("\t\treturn getVLListRaw_<%s, %d>();"%(rawType, node.offset))
-					self.o("\t}")
+				self.generateVLListIn(node)
 			elif node.t == NodeType.VLTEXT:
 				assert isinstance(node,VLText)
-				self.o("\tbool hasText() const noexcept {")
-				self.o("\t\treturn getInner_<std::uint32_t, %d>() != 0;"%(node.offset))
-				self.o("\t}")
-				self.o("\t")
-				self.outputDoc(node, "\t")
-				self.o("\tstd::string_view getText() const noexcept {")
-				self.o("\t\tassert(hasText());")
-				self.o("\t\treturn getVLText_<%d>();"%(node.offset))
-				self.o("\t}")
+				self.generateVLTextIn(node)
 			else:
 				assert(False)
 		self.o("};")
@@ -300,102 +413,19 @@ class Generator:
 		for node in table.values:
 			if node.t == NodeType.VALUE:
 				assert isinstance(node, Value)
-				n = self.value(node.identifier)
-				uname = getuname(n)
-				self.outputDoc(node, "\t")
-				if node.list:
-					typeName = self.outListType(node)
-					self.o("\tvoid add%s(scalgoproto::ListOut<%s> value) noexcept {"%(uname, typeName))
-					self.o("\t\tsetList_<%s, %d>(value);"%(typeName, node.offset))
-					self.o("\t}")
-				elif node.type.type in self.typeMap:
-					typeName = self.typeMap[node.type.type]
-					self.o("\tvoid add%s(%s value) noexcept {"%(uname, typeName))
-					if node.optional and node.type.type not in (TokenType.FLOAT32, TokenType.FLOAT64):
-						self.o("\t\tsetBit_<%d, %d>();"%(node.hasOffset, node.hasBit))
-					self.o("\t\tsetInner_<%s, %d>(value);"%(typeName, node.offset))
-					self.o("\t}")
-				elif node.type.type == TokenType.BOOL:
-					self.o("\tvoid add%s(bool value) noexcept {"%(uname))
-					if node.optional:
-						self.o("\t\tsetBit_<%d, %d>();"%(node.hasOffset, node.hasBit))
-					self.o("\t\tif(value) setBit_<%d, %d>(); else unsetBit_<%d, %d>();"%(node.offset, node.bit, node.offset, node.bit))
-					self.o("\t}")
-				elif node.type.type == TokenType.IDENTIFIER:
-					typeName = self.value(node.type)
-					if node.enum:
-						self.o("\tvoid add%s(%s value) noexcept {"%(uname, typeName))
-						self.o("\t\tsetInner_<%s, %d>(value);"%(typeName, node.offset))
-						self.o("\t}")
-					elif node.struct:
-						self.o("\tvoid add%s(const %s & value) noexcept {"%(uname, typeName))
-						if node.optional:
-							self.o("\t\tsetBit_<%d, %d>();"%(node.hasOffset, node.hasBit))
-						self.o("\t\tsetInner_<%s, %d>(value);"%(typeName, node.offset))
-						self.o("\t}")
-					elif node.table:
-						self.o("\tvoid add%s(%sOut value) noexcept {"%(uname, typeName))
-						self.o("\t\tsetTable_<%sOut, %d>(value);"%(typeName, node.offset))
-						self.o("\t}")
-						pass
-					else:
-						assert False
-				elif node.type.type == TokenType.TEXT:
-					self.o("\tvoid add%s(scalgoproto::TextOut t) noexcept {"%(uname))
-					self.o("\tsetText_<%d>(t);"%(node.offset))
-					self.o("\t}")
-				elif node.type.type == TokenType.BYTES:
-					self.o("\tvoid add%s(scalgoproto::BytesOut b) noexcept {"%(uname))
-					self.o("\tsetBytes_<%d>(b);"%(node.offset))
-					self.o("\t}")
-				else:
-					assert False
+				self.generateValueOut(node)
 			elif node.t == NodeType.VLUNION:
 				assert isinstance(node, VLUnion)
-				self.outputDoc(node, "\t")
-				self.o("\tbool hasType() const noexcept {")
-				self.o("\t\treturn getInner_<std::uint16_t, %d>() != 0;"%(node.offset))
-				self.o("\t}")
-				idx = 1
-				for member in node.members:
-					assert isinstance(member, (Table, Value))
-					n = self.value(member.identifier)
-					uname = n[0].upper() + n[1:]
-					tbl = member.table if isinstance(member, Value) else member
-					self.outputDoc(member, "\t")
-					if tbl.values:
-						self.o("\t%sOut add%s() noexcept {"%(tbl.name, uname))
-						self.o("\t\tassert(!hasType());")
-						self.o("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
-						self.o("\t\tsetInner_<std::uint32_t, %d>(%d);"%(node.offset+2, len(tbl.default)))
-						self.o("\t\treturn constructUnionMember_<%sOut>();"%tbl.name)
-						self.o("\t}")
-					else:
-						self.o("\tvoid add%s() noexcept {"%(uname))
-						self.o("\t\tassert(!hasType());")
-						self.o("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
-						self.o("\t\tsetInner_<std::uint32_t, %d>(%d);"%(node.offset+2, 0))
-						self.o("\t}")
-					idx += 1
+				self.generateVLUnionOut(node)
 			elif node.t == NodeType.VLBYTES:
 				assert isinstance(node, VLBytes)
-				self.outputDoc(node, "\t")
-				self.o("\tvoid addBytes(const char * data, size_t size) noexcept {")
-				self.o("\t\taddVLBytes_<%d>(data, size);"%(node.offset))
-				self.o("\t}")
+				self.generateVLBytesOut(node)
 			elif node.t == NodeType.VLLIST:
 				assert isinstance(node, VLList)
-				typeName = self.outListType(node)
-				self.outputDoc(node, "\t")
-				self.o("\tscalgoproto::ListOut<%s> addList(size_t size) noexcept {"%(typeName))
-				self.o("\t\treturn addVLList_<%d, %s>(size);"%(node.offset, typeName))
-				self.o("\t}")
+				self.generateVLListOut(node)
 			elif node.t == NodeType.VLTEXT:
 				assert isinstance(node,VLText)
-				self.outputDoc(node, "\t")
-				self.o("\tvoid addText(std::string_view text) noexcept {")
-				self.o("\t\taddVLText_<%d>(text);"%(node.offset))
-				self.o("\t}")
+				self.generateVLTextOut(node)
 			else:
 				assert(False)
 		self.o("};")
