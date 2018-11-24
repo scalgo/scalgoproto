@@ -395,7 +395,8 @@ class Generator:
 				self.o("enum class %s: std::uint8_t {"%name)
 				index = 0
 				for ev in node.members:
-					self.o("\t%s = %d,"%(self.value(ev), index))
+					self.output_doc(ev, "\t")
+					self.o("\t%s = %d,"%(self.value(ev.token), index))
 					index += 1
 				self.o("};")
 				self.o("namespace scalgoproto {template <> struct MetaMagic<%s> {using t=EnumTag;};}"%name)

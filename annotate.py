@@ -387,9 +387,9 @@ class Annotater:
 				enumValues: Dict[str, int] = {}
 				index = 0
 				for ev in node.members:
-					vv = self.value(ev)
+					vv = self.value(ev.identifier)
 					if vv in enumValues:
-						self.error(ev, "Duplicate name")
+						self.error(ev.identifier, "Duplicate name")
 						continue
 					enumValues[vv] = index
 					index += 1

@@ -106,7 +106,6 @@ class Generator:
 	def generate_value_in(self, tableName:str, node: Value) -> None:
 		n = self.value(node.identifier)
 		uname = snake(n)
-		print(node)
 		typeName = self.value(node.type_)
 
 		if node.list_:
@@ -456,7 +455,7 @@ class Generator:
 		self.output_doc(node, "\t")
 		index = 0
 		for ev in node.members:
-			self.o("\t%s = %d"%(self.value(ev), index))
+			self.o("\t%s = %d"%(self.value(ev.identifier), index))
 			index += 1
 		self.o()
 

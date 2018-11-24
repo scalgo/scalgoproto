@@ -33,7 +33,7 @@ class Struct(AstNode):
 class Enum(AstNode):
 	__slots__ = ['identifier', 'members', 'annotatedValues']
 	
-	def __init__(self, token: Token, identifier: Token, members: ty.List[Token], doccomment: Token) -> None:
+	def __init__(self, token: Token, identifier: Token, members: ty.List['Value'], doccomment: Token) -> None:
 		super().__init__(token, doccomment)
 		self.identifier = identifier
 		self.members = members
@@ -221,12 +221,17 @@ class Parser:
 				self.context = "enum %s"%self.value(i)
 				self.consume_token([TokenType.LBRACE])
 				values = []
+				doccomment2 = None
 				while True:
-					self.check_token(self.token, [TokenType.RBRACE, TokenType.IDENTIFIER])
+					self.check_token(self.token, [TokenType.RBRACE, TokenType.IDENTIFIER, TokenType.DOCCOMMENT])
 					if self.token.type == TokenType.RBRACE:
 						break
+					elif self.token.type == TokenType.DOCCOMMENT:
+						doccomment2 = self.token
 					elif self.token.type == TokenType.IDENTIFIER:
-						values.append(self.consume_token([TokenType.IDENTIFIER]))
+						ident = self.consume_token([TokenType.IDENTIFIER])
+						values.append(Value(ident, ident, None, None, None, None, None, None, None, doccomment2))
+						doccomment2 = None
 						if self.token.type in [TokenType.COMMA, TokenType.SEMICOLON]:
 							self.next_token()
 				self.consume_token([TokenType.RBRACE])
