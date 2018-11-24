@@ -3,344 +3,137 @@
 Parse a protocol description and generate an ast
 """
 import enum
-from typing import NamedTuple, Dict, Iterator, List, Union
+import typing as ty
+from error import error
+from tokenize import TokenType, tokenize, Token
 
-class TokenType(enum.Enum):
-	BAD = 0
-	BOOL = 1
-	BYTES = 2
-	COLON = 3
-	COMMA = 4
-	ENUM = 5
-	EOF = 6
-	EQUAL = 7
-	FALSE = 8
-	INT16 = 9
-	INT32 = 10
-	INT64 = 11
-	INT8 = 12
-	LBRACE = 13
-	LIST = 14
-	NUMBER = 15
-	OPTIONAL = 17
-	RBRACE = 18
-	SEMICOLON = 20
-	STRUCT = 22
-	TABLE = 23
-	TEXT = 24
-	TRUE = 25
-	UINT16 = 26
-	UINT32 = 27
-	UINT64 = 28
-	UINT8 = 29
-	UNION = 30
-	IDENTIFIER = 31
-	FLOAT32 = 32
-	FLOAT64 = 64
-	ID = 65
-	NAMESPACE = 66
-	COLONCOLON = 67
-	DOCCOMMENT = 68
-
-Token = NamedTuple('Token', [('type', TokenType), ('index',int), ('length', int)])
-
-def tokenize(data:str) -> Iterator[Token]:
-	cur: int = 0
-	end: int = 0
-	ops : Dict[str, TokenType] = {
-		':': TokenType.COLON,
-		';': TokenType.SEMICOLON,
-		',': TokenType.COMMA,
-		'=': TokenType.EQUAL,
-		'{': TokenType.LBRACE,
-		'}': TokenType.RBRACE,
-		}
-
-	keywords : Dict[str, TokenType]= {
-		'Bool': TokenType.BOOL,
-		'Bytes': TokenType.BYTES,
-		'Float32': TokenType.FLOAT32,
-		'Float64': TokenType.FLOAT64, 
-		'Int16': TokenType.INT16,
-		'Int32': TokenType.INT32,
-		'Int64': TokenType.INT64,
-		'Int8': TokenType.INT8,
-		'List': TokenType.LIST,
-		'Optional': TokenType.OPTIONAL,
-		'Text': TokenType.TEXT,
-		'UInt16': TokenType.UINT16,
-		'UInt32': TokenType.UINT32,
-		'UInt64': TokenType.UINT64,
-		'UInt8': TokenType.UINT8,
-		'enum': TokenType.ENUM,
-		'false': TokenType.FALSE,
-		'struct': TokenType.STRUCT,
-		'table': TokenType.TABLE,
-		'true': TokenType.TRUE,
-		'union': TokenType.UNION,
-		'namespace': TokenType.NAMESPACE,
-	}
-
-	while cur < len(data):
-		if data[cur] in " \t\n\r":
-			cur += 1
-			continue
-
-		if data[cur:cur+2] == '::':
-			yield Token(TokenType.COLONCOLON, cur, 2)
-			cur += 2
-			continue
-
-		if data[cur] in ops:
-			yield Token(ops[data[cur]], cur, 1)
-			cur += 1
-			continue
-		
-		if data[cur:cur+2] == '##' or data[cur:cur+2] == '///':
-			start = cur
-			cur += 2
-			while cur < len(data) and data[cur] != '\n':
-				cur += 1
-			while True:
-				while cur < len(data) and data[cur] in " \t":
-					cur += 1
-				if cur == len(data) or (data[cur] != '#' and data[cur:cur+2] != '//'):
-					break
-				cur += 1
-				while cur < len(data) and data[cur] != '\n':
-					cur += 1
-			yield Token(TokenType.DOCCOMMENT, start, cur-start)
-			continue
-
-		if data[cur:cur+3] == '/**':
-			start = cur
-			cur += 2
-			while cur < len(data) and data[cur:cur+2] != '*/':
-				cur += 1
-			if data[cur:cur+2] == '*/':
-				cur += 2
-				yield Token(TokenType.DOCCOMMENT, start, cur-start)
-			else:
-				yield Token(TokenType.BAD, start, cur-start)
-			continue
-
-		if data[cur] == '#' or data[cur:cur+2] == '//':
-			while cur < len(data) and data[cur] != '\n':
-				cur += 1
-			continue
-		if data[cur:cur+2] == '/*':
-			cnt = 1
-			cur += 2
-			while cnt !=0 and cur < len(data):
-				if data[cur:cur+2] == '/*':
-					cnt += 1
-					cur += 2
-				elif data[cur:cur+2] == '*/':
-					cnt -= 1
-					cur += 2
-				else:
-					cur += 1
-			continue
-
-		if data[cur].isalpha() or data[cur] == '_':
-			end = cur+1
-			while end < len(data) and (data[end] == '_' or data[end].isalnum()):
-				end += 1
-			type: TokenType = TokenType.IDENTIFIER
-			if data[cur:end] in keywords: type = keywords[data[cur:end]]
-			yield Token(type, cur, end-cur)
-			cur = end
-			continue
-
-		if data[cur] == '@':
-			end = cur+1
-			while end < len(data) and data[end] in "0123456789ABCDEFG":
-				end += 1
-			yield Token(TokenType.ID, cur, end-cur)
-			cur = end
-			continue
-									   
-		if data[cur] == '-' or data[cur] == '.' or data[cur] in "0123456789":
-			end = cur
-			if end < len(data) and data[end] == '-':
-				end += 1
-			while end < len(data) and data[end] in "0123456789":
-				end += 1
-			if end < len(data) and data[end] == '.':
-				end += 1
-				while end < len(data) and data[end] in "0123456789":
-					end += 1
-			if end < len(data) and data[end] in "eE":
-				end += 1
-				if end < len(data) and data[end] in "+-":
-					end += 1
-				while end < len(data) and data[end] in "0123456789":
-					end += 1
-			yield Token(TokenType.NUMBER, cur, end-cur)
-			cur = end
-			continue
-		
-		yield Token(TokenType.BAD, cur, 1)
-		cur += 1
-	yield Token(TokenType.EOF, cur, 0)
-
-
-class NodeType(enum.Enum):
-	STRUCT = 1
-	ENUM = 2
-	TABLE = 3
-	VALUE = 4
-	NAMESPACE = 5
-	VLBYTES = 6
-	VLLIST = 7
-	VLTEXT = 8
-	VLUNION = 9
-
-class AstNode:
-	bytes: int = 0
-	offset: int = 0
-	docstring: List[str] = None
-
-	def __init__(self, t: NodeType, token: Token, doccomment: Token = None) -> None:
-		self.t = t
+class AstNode(object):
+	__slots__ = ['token', 'docccomment', 'bytes', 'offset', 'docstring']
+	def __init__(self, token: Token, doccomment: Token = None) -> None:
 		self.token = token
 		self.docccomment = doccomment
-
+		self.bytes = 0
+		self.offset = 0
+		docstring: ty.List[str] = None
+		self.docstring = docstring
 
 class Namespace(AstNode):
+	__slots__ = ['namespace']
 	def __init__(self, token: Token, namespace:str) -> None:
-		super().__init__(NodeType.NAMESPACE, token)
+		super().__init__(token)
 		self.namespace = namespace
 		
 class Struct(AstNode):
-	def __init__(self, token: Token, identifier: Token, values: List[AstNode], doccomment: Token) -> None:
-		super().__init__(NodeType.STRUCT, token, doccomment)
+	__slots__ = ['identifier', 'members']
+	def __init__(self, token: Token, identifier: Token, members: ty.List['Value'], doccomment: Token) -> None:
+		super().__init__(token, doccomment)
 		self.identifier = identifier
-		self.values = values
+		self.members = members
 		
 class Enum(AstNode):
-	annotatedValues: Dict[str, int] = None
+	__slots__ = ['identifier', 'members', 'annotatedValues']
 	
-	def __init__(self, token: Token, identifier: Token, values: List[Token], doccomment: Token) -> None:
-		super().__init__(NodeType.ENUM, token, doccomment)
+	def __init__(self, token: Token, identifier: Token, members: ty.List[Token], doccomment: Token) -> None:
+		super().__init__(token, doccomment)
 		self.identifier = identifier
-		self.values = values
+		self.members = members
+		annotatedValues: ty.Dict[str, int] = None
+		self.annotatedValues = annotatedValues
 
 class Table(AstNode):
-	default: bytes = None
-	magic: int = 0
-	name: str = None
+	__slots__ = ['identifier', 'id_', 'members', 'default', 'magic', 'name']
 	
-	def __init__(self, token: Token, identifier: Token, id: Token, values: List[AstNode],  doccomment: Token) -> None:
-		super().__init__(NodeType.TABLE, token, doccomment)
+	def __init__(self, token: Token, identifier: Token, id_: Token, members: ty.List['Value'],  doccomment: Token) -> None:
+		super().__init__(token, doccomment)
 		self.identifier = identifier
-		self.id = id
-		self.values = values
-		
+		self.id_ = id_
+		self.members = members
+		default: bytes = None
+		name: str = None
+		self.default = default
+		self.magic: int = 0
+		self.name = name
+
+class Union(AstNode):
+	__slots__ = ['members', 'identifier', 'name']
+	def __init__(self, token: Token, identifier: Token, members: ty.List['Value'], docccomment: Token) -> None:
+		super().__init__(token, docccomment)
+		self.members = members
+		self.identifier = identifier
+		name: str = None
+		self.name = name
+
 class Value(AstNode):
-	hasOffset: int = 0
-	hasBit: int = 0
-	bit: int = 0
-	table: Table = None
-	enum: Enum = None
-	struct: Struct = None
-	parsedValue: Union[int, float] = 0
+	__slots__ = ['identifier', 'value', 'type_', 'optional', 'list_', 'inplace', 'direct_table', 'direct_union', 'has_offset', 'has_bit', 'bit', 'table',
+		'enum', 'struct', 'union', 'parsed_value']
 	
-	def __init__(self, token: Token, identifier: Token, value: Token, type: Token, optional: Token, list: Token, doccomment: Token) -> None:
-		super().__init__(NodeType.VALUE, token, doccomment)
+	def __init__(self, token: Token, identifier: Token, value: Token, type_: Token, optional: Token, 
+		list_: Token, inplace: Token, direct_table: Table, direct_union: Union,  doccomment: Token) -> None:
+		super().__init__(token, doccomment)
 		self.identifier = identifier
 		self.value = value
-		self.type = type
+		self.type_ = type_
 		self.optional = optional
-		self.list = list
-
-class VLUnion(AstNode):
-	def __init__(self, token: Token, members: List[AstNode], docccomment: Token) -> None:
-		super().__init__(NodeType.VLUNION, token, docccomment)
-		self.members = members
-
-class VLBytes(AstNode):
-	def __init__(self, token: Token, doccomment:Token) -> None:
-		super().__init__(NodeType.VLBYTES, token, doccomment)
-
-class VLText(AstNode):
-	def __init__(self, token: Token, doccomment:Token) -> None:
-		super().__init__(NodeType.VLTEXT, token, doccomment)
-
-class VLList(AstNode):
-	table: Table = None
-	enum: Enum = None
-	struct: Struct = None
-	def __init__(self, token: Token, type: Token, doccomment:Token) -> None:
-		super().__init__(NodeType.VLLIST, token, doccomment)
-		self.type = type
-
+		self.list_ = list_
+		self.inplace = inplace
+		self.direct_table = direct_table
+		self.direct_union = direct_union
+		self.has_offset = 0
+		self.has_bit = 0
+		self.bit = 0
+		table: Table = None
+		enum: Enum = None
+		struct: Struct = None
+		union: Union = None
+		parsed_value: ty.Union[int, float] = 0
+		self.table = table
+		self.enum = enum
+		self.struct = struct
+		self.union = union
+		self.parsed_value = parsed_value
+		self.direct_table = direct_table
+		self.direct_union = direct_union
 
 class ParseError(Exception):
-	def __init__(self, token: Token, message: str) -> None:
+	def __init__(self, token: Token, message: str, context: str) -> None:
 		self.token = token
 		self.message = message
+		self.context = context
 
 	def describe(self, data: str) -> None:
-		cnt = 1
-		idx = 0
-		start = 0
-		t = 0
-		while idx < self.token.index:
-			if data[idx] == '\n':
-				cnt += 1
-				start = idx + 1
-				t = 0
-			if data[idx] == '\t':
-				t += 1
-			idx += 1
-		print("Parse error on line %d: %s"%(cnt, self.message))
-		end = start
-		while end < len(data) and data[end] != '\n':
-			end += 1
-		print(data[start:end])
-		print("%s%s%s"%('\t'*t, ' '*(self.token.index - start -t), '^'*(self.token.length)))
+		error(data, self.context, self.token, self.message, "Parse error")
 		
 class Parser:
-	token: Token
+	token: Token = None
 
 	def __init__(self, data:str) -> None:
 		self.data = data
 		self.tokenizer = tokenize(data)
 		self.token = None
-		self.nextToken()
+		self.next_token()
+		self.context = ""
 
-	def checkToken(self, t: Token, types: List[TokenType]) -> None:
+	def check_token(self, t: Token, types: ty.List[TokenType]) -> None:
 		if not t.type in types:
-			raise ParseError(t, "Expected one of %s got %s"%(", ".join(map(str, types)), t.type))
+			raise ParseError(t, "Expected one of %s got %s"%(", ".join(map(str, types)), t.type), self.context)
 		
-	def consumeToken(self, types: List[TokenType]) -> Token:
+	def consume_token(self, types: ty.List[TokenType]) -> Token:
 		t = self.token
-		self.checkToken(t, types)
-		self.nextToken()
+		self.check_token(t, types)
+		self.next_token()
 		return t
 	
-	def nextToken(self) -> None:
+	def next_token(self) -> None:
 		self.token = next(self.tokenizer)
 
-	def parseType(self) -> Token:
-		return self.consumeToken([TokenType.BOOL, TokenType.TEXT, TokenType.IDENTIFIER, TokenType.BYTES,
-								  TokenType.INT8, TokenType.INT16, TokenType.INT32, TokenType.INT64,
-								  TokenType.UINT8, TokenType.UINT16, TokenType.UINT32, TokenType.UINT64,
-								  TokenType.FLOAT32, TokenType.FLOAT64])
-			
-	def parseContent(self) -> List[AstNode]:
-		ans: List[AstNode] = []
-		self.consumeToken([TokenType.LBRACE])
+	def parse_content(self) -> ty.List[Value]:
+		self.consume_token([TokenType.LBRACE])
+		members: ty.List[Value] = []
 		doccomment: Token = None
 		while True:
-			t = self.consumeToken([
+			t = self.consume_token([
 					TokenType.RBRACE,
 					TokenType.IDENTIFIER,
-					TokenType.UNION,
-					TokenType.LIST,
-					TokenType.TEXT,
-					TokenType.BYTES,
 					TokenType.DOCCOMMENT
 					])
 			if t.type == TokenType.DOCCOMMENT:
@@ -348,102 +141,103 @@ class Parser:
 			elif t.type == TokenType.RBRACE:
 				break
 			elif t.type == TokenType.IDENTIFIER:
-				colon = self.consumeToken([TokenType.COLON])
-				optional = None
-				list_ = None
-				if self.token.type == TokenType.OPTIONAL:
-					optional = self.consumeToken([TokenType.OPTIONAL])
-				elif self.token.type == TokenType.LIST:
-					list_ = self.consumeToken([TokenType.LIST])					
-				type_ = self.parseType()
-				value = None
-				if self.token.type == TokenType.EQUAL:
-					self.consumeToken([TokenType.EQUAL])
-					value = self.consumeToken([TokenType.TRUE, TokenType.FALSE, TokenType.NUMBER, TokenType.IDENTIFIER])
-				ans.append(Value(colon, t, value, type_, optional, list_, doccomment))
-				doccomment = None
-			elif t.type == TokenType.UNION:
-				self.consumeToken([TokenType.LBRACE])
-				members: List[AstNode] = []
-				doccomment2 : Token = None
-				while True:
-					t2 = self.consumeToken([TokenType.RBRACE, TokenType.IDENTIFIER, TokenType.DOCCOMMENT])
-					if t2.type == TokenType.DOCCOMMENT:
-						doccomment2 = t2
-					elif t2.type == TokenType.RBRACE:
-						break
-					elif t2.type == TokenType.IDENTIFIER:
-						self.checkToken(self.token, [TokenType.LBRACE, TokenType.COLON])
-						if self.token.type == TokenType.COLON:
-							self.consumeToken([TokenType.COLON])
-							type_ = self.consumeToken([TokenType.IDENTIFIER])
-							members.append(Value(self.token, t2, None, type_, None, None, doccomment2))
-						else:
-							members.append(Table(t2, t2, None, self.parseContent(), doccomment2))
-						doccomment2 = None
-					else:
-						assert(False)
-					if self.token.type in [TokenType.COMMA, TokenType.SEMICOLON]:
-						self.nextToken()
-				ans.append(VLUnion(t, members, doccomment))
-				doccomment = None
-			elif t.type == TokenType.LIST:
-				ans.append(VLList(t, self.parseType(), doccomment))
-				doccomment = None
-			elif t.type == TokenType.BYTES:
-				ans.append(VLBytes(t, doccomment))
-				doccomment = None
-			elif t.type == TokenType.TEXT:
-				ans.append(VLText(t, doccomment))
+				self.check_token(self.token, [TokenType.COLON, TokenType.LBRACE])
+				colon: Token = self.consume_token([TokenType.COLON]) if self.token.type == TokenType.COLON else None
+				optional: Token = None
+				list_: Token = None
+				inplace: Token = None
+				value: Token = None
+				direct_table: Table = None
+				direct_union: Union = None
+				while self.token.type in [TokenType.OPTIONAL, TokenType.LIST, TokenType.INPLACE]:
+					if self.token.type == TokenType.OPTIONAL:
+						optional = self.consume_token([TokenType.OPTIONAL])
+					elif self.token.type == TokenType.LIST:
+						list_ = self.consume_token([TokenType.LIST])		
+					elif self.token.type == TokenType.INPLACE:
+						inplace = self.consume_token([TokenType.INPLACE])	
+				type_ = self.token
+				self.check_token(self.token,[
+					TokenType.BOOL, TokenType.TEXT, TokenType.IDENTIFIER, TokenType.BYTES,
+					TokenType.INT8, TokenType.INT16, TokenType.INT32, TokenType.INT64,
+					TokenType.UINT8, TokenType.UINT16, TokenType.UINT32, TokenType.UINT64,
+					TokenType.FLOAT32, TokenType.FLOAT64, TokenType.UNION, TokenType.TABLE,
+					TokenType.LBRACE])
+				if type_.type == TokenType.LBRACE:
+					direct_table = Table(type_, None, None, self.parse_content(), doccomment)
+				else:
+					self.next_token()
+					if type_.type == TokenType.UNION:
+						direct_union = Union(type_, None, self.parse_content(), doccomment)
+					elif type_.type == TokenType.TABLE:
+						id_ = self.consume_token([TokenType.ID]) if self.token.type == TokenType.ID else None
+						direct_table = Table(type_, None, id_, self.parse_content(), doccomment)
+					if self.token.type == TokenType.EQUAL:
+						self.consume_token([TokenType.EQUAL])
+						value = self.consume_token([TokenType.TRUE, TokenType.FALSE, TokenType.NUMBER, TokenType.IDENTIFIER])
+				members.append(Value(colon, t, value, type_, optional, list_, inplace, direct_table, direct_union, doccomment))
 				doccomment = None
 			else:
 				assert(False)
 			if self.token.type in [TokenType.COMMA, TokenType.SEMICOLON]:
-				self.nextToken()
-		return ans
-		
-	def parseDocument(self) -> List[AstNode]:
-		ans: List[AstNode] = []
+				self.next_token()
+		return members
+
+
+	def value(self, t:Token) -> str:
+		return self.data[t.index: t.index + t.length]	
+
+	def parseDocument(self) -> ty.List[AstNode]:
+		ans: ty.List[AstNode] = []
 		doccomment: Token = None
 		while self.token.type != TokenType.EOF:
-			t = self.consumeToken([TokenType.STRUCT, TokenType.ENUM, TokenType.TABLE, TokenType.NAMESPACE, TokenType.DOCCOMMENT])
+			self.context = "message"
+			t = self.consume_token([TokenType.STRUCT, TokenType.ENUM, TokenType.TABLE, TokenType.NAMESPACE, TokenType.UNION, TokenType.DOCCOMMENT])
 			if t.type == TokenType.DOCCOMMENT:
 				doccomment = t
 			elif t.type == TokenType.NAMESPACE:
 				namespace = ""
 				while True:
-					i = self.consumeToken([TokenType.IDENTIFIER])
+					i = self.consume_token([TokenType.IDENTIFIER])
 					namespace += self.data[i.index: i.index + i.length]
-					tt = self.consumeToken([TokenType.COLONCOLON, TokenType.SEMICOLON])
+					tt = self.consume_token([TokenType.COLONCOLON, TokenType.SEMICOLON])
 					if tt.type != TokenType.COLONCOLON: break
 					namespace += "::"
 				ans.append(Namespace(t, namespace))
 				doccomment = None
 			elif t.type == TokenType.STRUCT:
-				i = self.consumeToken([TokenType.IDENTIFIER])
-				ans.append(Struct(t, i, self.parseContent(), doccomment))
+				i = self.consume_token([TokenType.IDENTIFIER])
+				self.context = "struct %s"%self.value(i)
+				ans.append(Struct(t, i, self.parse_content(), doccomment))
 				doccomment = None
 			elif t.type == TokenType.TABLE:
-				i = self.consumeToken([TokenType.IDENTIFIER])
-				id = self.consumeToken([TokenType.ID])
-				ans.append(Table(t, i, id, self.parseContent(), doccomment))
+				i = self.consume_token([TokenType.IDENTIFIER])
+				self.context = "table %s"%self.value(i)
+				id_ = self.consume_token([TokenType.ID]) if self.token.type == TokenType.ID else None
+				ans.append(Table(t, i, id_, self.parse_content(), doccomment))
 				doccomment = None
 			elif t.type == TokenType.ENUM:
-				i = self.consumeToken([TokenType.IDENTIFIER])
-				self.consumeToken([TokenType.LBRACE])
+				i = self.consume_token([TokenType.IDENTIFIER])
+				self.context = "enum %s"%self.value(i)
+				self.consume_token([TokenType.LBRACE])
 				values = []
 				while True:
-					self.checkToken(self.token, [TokenType.RBRACE, TokenType.IDENTIFIER])
+					self.check_token(self.token, [TokenType.RBRACE, TokenType.IDENTIFIER])
 					if self.token.type == TokenType.RBRACE:
 						break
 					elif self.token.type == TokenType.IDENTIFIER:
-						values.append(self.consumeToken([TokenType.IDENTIFIER]))
+						values.append(self.consume_token([TokenType.IDENTIFIER]))
 						if self.token.type in [TokenType.COMMA, TokenType.SEMICOLON]:
-							self.nextToken()
-				self.consumeToken([TokenType.RBRACE])
+							self.next_token()
+				self.consume_token([TokenType.RBRACE])
 				ans.append(Enum(t, i, values, doccomment))
 				doccomment = None
+			elif t.type == TokenType.UNION:
+				self.context = "union %s"%self.value(i)
+				self.consume_token([TokenType.IDENTIFIER])
+				ans.append(Union(t, i, self.parse_content(), doccomment))
+				doccomment = None
 			if self.token.type in [TokenType.COMMA, TokenType.SEMICOLON]:
-				self.nextToken()
+				self.next_token()
 		return ans
 

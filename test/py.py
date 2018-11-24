@@ -262,8 +262,8 @@ def test_out_complex(path:str) -> bool:
 	s = w.construct_table(base.ComplexOut)
 	s.member = m
 	s.text = t
-	s.bytes_ = b
-	s.list_ = l
+	s.my_bytes = b
+	s.int_list = l
 	s.struct_list = l3
 	s.enum_list = l2
 	s.text_list = l4
@@ -285,16 +285,16 @@ def test_in_complex(path:str) -> bool:
 	if require(s.has_ntext, False): return False
 	if require(s.has_nbytes, False): return False
 	if require(s.has_text, True): return False
-	if require(s.has_bytes_, True): return False
+	if require(s.has_my_bytes, True): return False
 	if require(s.text, "text"): return False
-	if require(s.bytes_, b"bytes"): return False
+	if require(s.my_bytes, b"bytes"): return False
 	if require(s.has_member, True): return False
 	m = s.member
 	if require(m.id, 42): return False
 
-	if require(s.has_list_, True): return False
-	if require(s.has_nlist, False): return False
-	l = s.list_
+	if require(s.has_int_list, True): return False
+	if require(s.has_nint_list, False): return False
+	l = s.int_list
 
 	if require(len(l), 31): return False
 
@@ -373,22 +373,22 @@ def test_out_vl(path:str) -> bool:
 	w = scalgoproto.Writer()
 	name = w.construct_text("nilson")
 	u = w.construct_table(base.VLUnionOut)
-	u.add_monkey().name = name
+	u.u_add_monkey().name = name
 
 	u2 = w.construct_table(base.VLUnionOut)
-	u2.add_text().text = "foobar"
+	u2.u_add_text().t = "foobar"
 
 	t = w.construct_table(base.VLTextOut)
 	t.id = 45
-	t.text = "cake"
+	t.t = "cake"
 
 	b = w.construct_table(base.VLBytesOut)
 	b.id = 46
-	b.bytes_ = b"hi"
+	b.b = b"hi"
 
 	l = w.construct_table(base.VLListOut)
 	l.id = 47
-	ll = l.add_list_(2)
+	ll = l.add_l(2)
 	ll[0] = 24
 	ll[1] = 99
 
@@ -408,35 +408,35 @@ def test_in_vl(path:str) -> bool:
 
 	if require(s.has_u, True): return False
 	u = s.u
-	if require(u.is_monkey, True): return False
-	monkey = u.monkey
+	if require(u.u_is_monkey, True): return False
+	monkey = u.u_monkey
 	if require(monkey.has_name, True): return False
 	if require(monkey.name, "nilson"): return False
 
 	if require(s.has_u2, True): return False
 	u2 = s.u2
-	if require(u2.is_text, True): return False
-	u2t = u2.text
-	if require(u2t.has_text, True): return False
-	if require(u2t.text, "foobar"): return False
+	if require(u2.u_is_text, True): return False
+	u2t = u2.u_text
+	if require(u2t.has_t, True): return False
+	if require(u2t.t, "foobar"): return False
 	
 	if require(s.has_t, True): return False
 	t = s.t
 	if require(t.id, 45): return False
-	if require(t.has_text, True): return False
-	if require(t.text, "cake"): return False
+	if require(t.has_t, True): return False
+	if require(t.t, "cake"): return False
 
 	if require(s.has_b, True): return False
 	b = s.b
 	if require(b.id, 46): return False
-	if require(b.has_bytes_, True): return False
-	if require(b.bytes_,  b"hi"): return False
+	if require(b.has_b, True): return False
+	if require(b.b, b"hi"): return False
 
 	if require(s.has_l, True): return False
 	l = s.l
 	if require(l.id, 47): return False
-	if require(l.has_list_, True): return False
-	ll = l.list_
+	if require(l.has_l, True): return False
+	ll = l.l
 	if require(len(ll), 2): return False
 	if require(ll[0], 24): return False
 	if require(ll[1], 99): return False
@@ -455,7 +455,7 @@ def test_in_extend1(path:str) -> bool:
 	s = r.root(base.Gen2In)
 	if require(s.aa, 77): return False
 	if require(s.bb, 42): return False
-	if require(s.has_type, False): return False
+	if require(s.has_u, False): return False
 	return True
 
 def test_out_extend2(path:str) -> bool:
@@ -463,7 +463,7 @@ def test_out_extend2(path:str) -> bool:
 	root = w.construct_table(base.Gen2Out)
 	root.aa = 80
 	root.bb = 81
-	cake = root.add_cake()
+	cake = root.u_add_cake()
 	cake.v = 45
 	data = w.finalize(root)
 	return validate_out(data, path)
@@ -474,8 +474,8 @@ def test_in_extend2(path:str) -> bool:
 	s = r.root(base.Gen3In)
 	if require(s.aa, 80): return False
 	if require(s.bb, 81): return False
-	if require(s.is_cake, True): return False
-	if require(s.cake.v, 45): return False
+	if require(s.u_is_cake, True): return False
+	if require(s.u_cake.v, 45): return False
 	if require(s.e, base.MyEnum.c): return False
 	if require(s.s.x, 0): return False
 	if require(s.s.y, 0): return False
@@ -505,8 +505,8 @@ def test_in_extend2(path:str) -> bool:
 	if require(s.has_od, False): return False
 	if require(s.has_member, False): return False
 	if require(s.has_text, False): return False
-	if require(s.has_bytes_, False): return False
-	if require(s.has_list_, False): return False
+	if require(s.has_mbytes, False): return False
+	if require(s.has_int_list, False): return False
 	if require(s.has_enum_list, False): return False
 	if require(s.has_struct_list, False): return False
 	if require(s.has_text_list, False): return False

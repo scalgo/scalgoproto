@@ -50,12 +50,13 @@ class ListIn(Sequence[B]):
 	def __getitem__(self, idx) -> B:
 		return self._getter(self._reader, self._offset, idx)
 
-class TableIn:
+class TableIn(object):
 	"""Base class for reading a table"""
-	_MAGIC: int = 0
-	_offset: int = 0
 
-	def __init__(self, reader, offset:int, size:int) -> None:
+	__slots__ = ['_reader', '_offset', '_size']
+	_MAGIC: int = 0
+
+	def __init__(self, reader: 'Reader', offset:int, size:int) -> None:
 		"""Private constructor. Use the accessor methods on tables or the root method on Reader to get an instance"""
 		self._reader = reader
 		self._offset = offset
@@ -99,7 +100,7 @@ class TableIn:
 		size = self._get_uint32_f(o)
 		return self._reader._data[self._offset+self._size:self._offset+self._size+size]
 
-class Reader:
+class Reader(object):
 	"""Responsible for reading a message"""
 
 	def __init__(self, data:bytes) -> None:
@@ -155,15 +156,16 @@ class Reader:
 		return type(self, offset+8, size)
 
 
-class TextOut:
+class TextOut(object):
 	def __init__(self, offset:int) -> None:
 		self._offset = offset
 
-class BytesOut:
+class BytesOut(object):
 	def __init__(self, offset:int) -> None:
 		self._offset = offset
 
-class TableOut:
+class TableOut(object):
+	__slots__ = ['_writer', '_offset']
 	_MAGIC: ClassVar[int] = 0
 
 	def __init__(self, writer: 'Writer', with_weader: bool, default: bytes) -> None:

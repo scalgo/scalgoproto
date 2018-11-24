@@ -50,32 +50,32 @@ table Simple @F0606B0B {
     f: Float32 = 10;
     d: Float64 = 11;
 
-    os: Optional MyStruct;
-    ob: Optional Bool; 
-    ou8: Optional UInt8;
-    ou16: Optional UInt16;
-    ou32: Optional UInt32;
-    ou64: Optional UInt64;
-    oi8: Optional Int8;
-    oi16: Optional Int16;
-    oi32: Optional Int32;
-    oi64: Optional Int64;
-    of: Optional Float32;
-    od: Optional Float64;
+    os: optional MyStruct;
+    ob: optional Bool;
+    ou8: optional UInt8;
+    ou16: optional UInt16;
+    ou32: optional UInt32;
+    ou64: optional UInt64;
+    oi8: optional Int8;
+    oi16: optional Int16;
+    oi32: optional Int32;
+    oi64: optional Int64;
+    of: optional Float32;
+    od: optional Float64;
 
     ne: MyEnum;
-    ns: Optional MyStruct;
-    nb: Optional Bool; 
-    nu8: Optional UInt8;
-    nu16: Optional UInt16;
-    nu32: Optional UInt32;
-    nu64: Optional UInt64;
-    ni8: Optional Int8;
-    ni16: Optional Int16;
-    ni32: Optional Int32;
-    ni64: Optional Int64;
-    nf: Optional Float32;
-    nd: Optional Float64;
+    ns: optional MyStruct;
+    nb: optional Bool;
+    nu8: optional UInt8;
+    nu16: optional UInt16;
+    nu32: optional UInt32;
+    nu64: optional UInt64;
+    ni8: optional Int8;
+    ni16: optional Int16;
+    ni32: optional Int32;
+    ni64: optional Int64;
+    nf: optional Float32;
+    nd: optional Float64;
 }
 
 table Member @836DE498 {
@@ -86,40 +86,40 @@ table Complex @CCDD589C {
     member: Member;
     nmember: Member;
     text: Text;
-    bytes: Bytes;
+    myBytes: Bytes;
     ntext: Text;
     nbytes: Bytes;
-    list: List Int32;
-    nlist: List Int32;
-    enumList: List MyEnum;
-    structList: List MyStruct;
-    textList: List Text;
-    bytesList: List Bytes;
-    memberList: List Member;
-    f32list: List Float32;
-    f64list: List Float64;
-    u8list: List UInt8;
-    blist: List Bool;
+    intList: list Int32;
+    nintList: list Int32;
+    enumList: list MyEnum;
+    structList: list MyStruct;
+    textList: list Text;
+    bytesList: list Bytes;
+    memberList: list Member;
+    f32list: list Float32;
+    f64list: list Float64;
+    u8list: list UInt8;
+    blist: list Bool;
 }
 
 table VLList @793045DD {
     id: Int32;
-    List Int32;
+    l: inplace list Int32;
 }
 
 table VLText @DC784D79 {
     id: Int32;
-    Text;
+    t: inplace Text;
 }
 
 table VLBytes @259A2E79 {
     id: Int32;
-    Bytes;
+    b: inplace Bytes;
 }
 
 table VLUnion @944099A8 {
     id: Int32;
-    union {
+    u: inplace union {
         monkey {
             name: Text;
         };
@@ -143,9 +143,9 @@ table Gen1 @B4957DF9 {
 table Gen2 @B4957DF9 {
     aa: Int32;
     bb: Int32 = 42;
-    union {
-    	  monkey {},
-	  cake {v:Int32},
+    u : inplace union {
+         monkey {},
+	    cake {v:Int32},
     }
 }
 
@@ -153,8 +153,8 @@ table Gen3 @B4957DF9 {
     aa: Int32;
     bb: Int32 = 42;
 
-    union {
-    	  monkey {},
+    u: inplace union {
+         monkey {},
          cake {v:Int32},
          bat {}
     }
@@ -173,30 +173,31 @@ table Gen3 @B4957DF9 {
     f: Float32 = 10;
     d: Float64 = 11;
 
-    os: Optional MyStruct;
-    ob: Optional Bool;
-    ou8: Optional UInt8;
-    ou16: Optional UInt16;
-    ou32: Optional UInt32;
-    ou64: Optional UInt64;
-    oi8: Optional Int8;
-    oi16: Optional Int16;
-    oi32: Optional Int32;
-    oi64: Optional Int64;
-    of: Optional Float32;
-    od: Optional Float64;
+    os: optional MyStruct;
+    ob: optional Bool;
+    ou8: optional UInt8;
+    ou16: optional UInt16;
+    ou32: optional UInt32;
+    ou64: optional UInt64;
+    oi8: optional Int8;
+    oi16: optional Int16;
+    oi32: optional Int32;
+    oi64: optional Int64;
+    of: optional Float32;
+    od: optional Float64;
 
     member: Member;
     nmember: Member;
     text: Text;
-    bytes: Bytes;
+    mbytes: Bytes;
     ntext: Text;
     nbytes: Bytes;
-    list: List Int32;
-    nlist: List Int32;
-    enumList: List MyEnum;
-    structList: List MyStruct;
-    textList: List Text;
-    bytesList: List Bytes;
-    memberList: List Member;
+    intList: list Int32;
+    nintList: list Int32;
+    enumList: list MyEnum;
+    structList: list MyStruct;
+    textList: list Text;
+    bytesList: list Bytes;
+    memberList: list Member;
 }
+

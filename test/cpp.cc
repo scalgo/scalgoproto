@@ -242,8 +242,8 @@ int main(int, char ** argv) {
 		auto s = w.construct<ComplexOut>();
 		s.addMember(m);
 		s.addText(t);
-		s.addBytes(b);
-		s.addList(l);
+		s.addMyBytes(b);
+		s.addIntList(l);
 		s.addStructList(l3);
 		s.addEnumList(l2);
 		s.addTextList(l4);
@@ -264,18 +264,18 @@ int main(int, char ** argv) {
 		REQUIRE(s.hasNtext(), false);
 		REQUIRE(s.hasNbytes(), false);
 		REQUIRE(s.hasText(), true);
-		REQUIRE(s.hasBytes(), true);
+		REQUIRE(s.hasMyBytes(), true);
 		REQUIRE(s.getText(), "text");
-		REQUIRE(s.getBytes().second, 5);
-		REQUIRE(memcmp(s.getBytes().first, "bytes", 5), 0);
+		REQUIRE(s.getMyBytes().second, 5);
+		REQUIRE(memcmp(s.getMyBytes().first, "bytes", 5), 0);
 		REQUIRE(s.hasMember(), true);
 		auto m = s.getMember();
 		REQUIRE(m.getId(), 42);
 
-		REQUIRE(s.hasList(), true);
-		REQUIRE(s.hasNlist(), false);
-		auto l = s.getList();
-		auto rl = s.getListRaw();
+		REQUIRE(s.hasIntList(), true);
+		REQUIRE(s.hasNintList(), false);
+		auto l = s.getIntList();
+		auto rl = s.getIntListRaw();
 
 		REQUIRE(l.size(), 31);
 		REQUIRE(rl.second, 31);
@@ -357,22 +357,22 @@ int main(int, char ** argv) {
 		scalgoproto::Writer w;
 		auto name = w.constructText("nilson");
 		auto u = w.construct<VLUnionOut>();
-		u.addMonkey().addName(name);
+		u.uAddMonkey().addName(name);
 
 		auto u2 = w.construct<VLUnionOut>();
-		u2.addText().addText("foobar");
+		u2.uAddText().addT("foobar");
 
 		auto t = w.construct<VLTextOut>();
 		t.addId(45);
-		t.addText("cake");
+		t.addT("cake");
 
 		auto b = w.construct<VLBytesOut>();
 		b.addId(46);
-		b.addBytes("hi", 2);
+		b.addB("hi", 2);
 
 		auto l = w.construct<VLListOut>();
 		l.addId(47);
-		auto ll = l.addList(2);
+		auto ll = l.addL(2);
 		ll.add(0, 24);
 		ll.add(1, 99);
 
@@ -400,27 +400,27 @@ int main(int, char ** argv) {
 		auto u2 = s.getU2();
 		REQUIRE(u2.isText(), true);
 		auto u2t = u2.getText();
-		REQUIRE(u2t.hasText(), true);
-		REQUIRE(u2t.getText(), "foobar");
+		REQUIRE(u2t.hasT(), true);
+		REQUIRE(u2t.getT(), "foobar");
 		
 		REQUIRE(s.hasT(), true);
 		auto t = s.getT();
 		REQUIRE(t.getId(), 45);
-		REQUIRE(t.hasText(), true);
-		REQUIRE(t.getText(), "cake");
+		REQUIRE(t.hasT(), true);
+		REQUIRE(t.getT(), "cake");
 
 		REQUIRE(s.hasB(), true);
 		auto b = s.getB();
 		REQUIRE(b.getId(), 46);
-		REQUIRE(b.hasBytes(), true);
-		REQUIRE(b.getBytes().second,  2);
-		REQUIRE(memcmp(b.getBytes().first, "hi", 2), 0);
+		REQUIRE(b.hasB(), true);
+		REQUIRE(b.getB().second,  2);
+		REQUIRE(memcmp(b.getB().first, "hi", 2), 0);
 
 		REQUIRE(s.hasL(), true);
 		auto l = s.getL();
 		REQUIRE(l.getId(), 47);
-		REQUIRE(l.hasList(), true);
-		auto ll = l.getList();
+		REQUIRE(l.hasL(), true);
+		auto ll = l.getL();
 		REQUIRE(ll.size(), 2);
 		REQUIRE(ll[0], 24);
 		REQUIRE(ll[1], 99);
@@ -444,7 +444,7 @@ int main(int, char ** argv) {
 		auto root = w.construct<Gen2Out>();
 		root.addAa(80);
 		root.addBb(81);
-		auto cake = root.addCake();
+		auto cake = root.uAddCake();
 		cake.addV(45);
 		auto [data, size] = w.finalize(root);
 		return !validateOut(data, size, argv[2]);
@@ -485,8 +485,8 @@ int main(int, char ** argv) {
 		REQUIRE(s.hasOd(), false);
 		REQUIRE(s.hasMember(), false);
 		REQUIRE(s.hasText(), false);
-		REQUIRE(s.hasBytes(), false);
-		REQUIRE(s.hasList(), false);
+		REQUIRE(s.hasMbytes(), false);
+		REQUIRE(s.hasIntList(), false);
 		REQUIRE(s.hasEnumList(), false);
 		REQUIRE(s.hasStructList(), false);
 		REQUIRE(s.hasTextList(), false);

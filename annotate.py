@@ -2,15 +2,23 @@
 """
 Perform validation of the ast, and assign offsets and such
 """
-from parser import TokenType, NodeType, Token, Struct, AstNode, Value, Enum, Table, VLUnion, VLList
+from parser import TokenType, Token, Struct, AstNode, Value, Enum, Table, Union, Namespace
 from typing import Set, Dict, List
-import sys, struct
+import sys, struct, enum
 from keywords import keywords
+from error import error
+from util import ucamel
+
+class ContentType(enum.Enum):
+	TABLE = 0
+	STRUCT = 1
+	UNION = 2
 
 class Annotater:
 	enums: Dict[str, Enum]
 	structs: Dict[str, Struct]
 	tabels: Dict[str, Table]
+	unions: Dict[str, Union]
 
 	def __init__(self, data:str) -> None:
 		self.data = data
@@ -21,45 +29,30 @@ class Annotater:
 		
 	def error(self, token: Token, message: str) -> None:
 		self.errors += 1
-		cnt = 1
-		idx = 0
-		start = 0
-		t = 0
-		while idx < token.index:
-			if self.data[idx] == '\n':
-				cnt += 1
-				start = idx + 1
-				t = 0
-			if self.data[idx] == '\t':
-				t += 1
-			idx += 1
-		print("Error in %s on line %d: %s"%(self.context, cnt, message))
-		end = start
-		while end < len(self.data) and self.data[end] != '\n':
-			end += 1
-		print(self.data[start:end])
-		print("%s%s%s"%('\t'*t, ' '*(token.index - start -t), '^'*(token.length)))
-	
-	def validateUname(self, t:Token) -> str:
+		error(self.data, self.context, token, message)
+
+	def validate_uname(self, t:Token) -> str:
 		name = self.value(t)
 		if not name[0].isupper() or name.count("_") or not name.isidentifier():
 			self.error(t, "Name must be CamelCase")
-		if name in self.enums or name in self.structs or name in self.tabels:
-			self.error(t, "Duplicate name")
 		if name in keywords:
 			self.error(t, "Illegal name")
+		if name in self.enums or name in self.structs or name in self.tabels or name in self.unions:
+			self.error(t, "Duplicate name")
 		if name in self.enums:
 			self.error(self.enums[name].identifier, "Previously defined here")
 		if name in self.structs:
 			self.error(self.structs[name].identifier, "Previously defined here")
 		if name in self.tabels:
 			self.error(self.tabels[name].identifier, "Previously defined here")
+		if name in self.unions:
+			self.error(self.unions[name].identifier, "Previously defined here")
 		return name
 
-	def validateMemberName(self, t:Token, name:str, seen: Dict[str, Token], has:bool=False, is_:bool=False, add:bool=False, get:bool=False, allow_keywords=False) -> None:
+	def validate_member_name(self, t:Token, name:str, seen: Dict[str, Token], has:bool=False, is_:bool=False, add:bool=False, get:bool=False) -> None:
 		if name[0].isupper() or name.count("_") or not name.isidentifier():
 			self.error(t, "Name must be CamelCase")
-		if not allow_keywords and name in keywords:
+		if name in keywords:
 			self.error(t, "Illegal name '%s'"%name)
 		hasName = "has%s%s"%(name[0].upper(), name[1:]) if has else None
 		isName = "is%s%s"%(name[0].upper(), name[1:]) if is_ else None
@@ -72,7 +65,7 @@ class Annotater:
 				self.error(seen[name], "Conflicts with this")
 			seen[n] = t
 
-	def getInt(self, value:Token, min:int, max:int, d:int) -> int:
+	def get_int(self, value:Token, min:int, max:int, d:int) -> int:
 		if not value:
 			return d
 		try:
@@ -84,7 +77,7 @@ class Annotater:
 			self.error(value, "Must be an integer")
 		return d
 
-	def getFloat(self, value:Token, d:float) -> float:
+	def get_float(self, value:Token, d:float) -> float:
 		if not value:
 			return d
 		try:
@@ -93,7 +86,7 @@ class Annotater:
 			self.error(value, "Must be a float")
 		return d
 
-	def createDocString(self, node: AstNode) -> None:
+	def create_doc_string(self, node: AstNode) -> None:
 		if not node.docccomment: return
 		v = self.value(node.docccomment)
 		node.docstring = []
@@ -111,243 +104,261 @@ class Annotater:
 		while node.docstring and not node.docstring[-1]:
 			node.docstring.pop()
 
-	def visitContent(self, tableName: str, values: List[AstNode], isStruct: bool) -> bytes:
+	
+	def visit_content(self, name:str, values: List[Value], t:ContentType) -> bytes:
 		content: Dict[str, Token] = {}
 		bytes = 0
 		default = []
-		boolBit = 8
-		boolOffset = 0
-		vl:AstNode = None
+		bool_bit = 8
+		bool_offset = 0
+		inplace: Value = None
 		for v in values:
-			self.createDocString(v)
-			if v.t == NodeType.VALUE:
-				assert isinstance(v, Value)
-				if v.value:
-					if isStruct:
-						self.error(v.value, "Not allowed in structs")
-					elif v.optional:
-						self.error(v.value, "Not allowed for optionals")
-					elif v.list:
-						self.error(v.value, "Not allowed for lists")
-					elif v.value.type in (TokenType.TRUE, TokenType.FALSE):
-						self.error(v.value, "Booleans cannot have default values")
-					elif v.value.type == TokenType.NUMBER:
-						if v.type.type not in (TokenType.UINT8, TokenType.UINT16, TokenType.UINT32, TokenType.UINT64, TokenType.INT8, TokenType.INT16, TokenType.INT32, TokenType.INT64,  TokenType.FLOAT32,  TokenType.FLOAT64):
-							self.error(v.value, "Only allowed for number types")
-					elif v.value.type == TokenType.IDENTIFIER:
-						if v.type.type != TokenType.IDENTIFIER or self.value(v.type) not in self.enums:
-							self.error(v.value, "Only allowed for enumes")
-						elif self.value(v.value) not in self.enums[self.value(v.type)].annotatedValues:
-							self.error(v.value, "Not member of enum")
-							self.error(self.enums[self.value(v.type)].token, "Enum declared here")
-					else:
-						self.error(v.value, "Unhandled value")
+			self.create_doc_string(v)
 
-				val = self.value(v.identifier)
-				self.validateMemberName(v.identifier, val, content, get=False, has=v.optional, add=v.list != None)
-				typeName = self.value(v.type)
-
-				if isStruct and v.optional:
-					self.error(v.optional, "Not allowed in structs")
-				if v.optional and v.type.type in (
-								TokenType.UINT8, TokenType.UINT16, TokenType.UINT32, TokenType.UINT64,
-								TokenType.INT8, TokenType.INT16, TokenType.INT32, TokenType.INT64,
-								TokenType.BOOL):
-					if boolBit == 8:
-						boolBit = 0
-						boolOffset = bytes
-						default.append(b"\0")
-						bytes += 1
-					v.hasOffset = boolOffset
-					v.hasBit = boolBit
-					boolBit += 1
-				if v.list:
-					if v.type.type == TokenType.IDENTIFIER:
-						typeName = self.value(v.type)
-						if typeName in self.enums:
-							v.enum = self.enums[typeName]
-						elif typeName in self.tabels:
-							v.table = self.tabels[typeName]
-						elif typeName in self.structs:
-							v.struct = self.structs[typeName]
-						else:
-							self.error(v.type, "Unknown type")
-					if isStruct:
-						self.error(v.list, "Not allowed in structs")
-					if v.optional:
-						self.error(v.optional, "Lists are alwayes optional")
-					default.append(b"\0\0\0\0")
-					v.bytes = 4
-					v.offset = bytes
-				elif not isStruct and v.type.type == TokenType.BOOL:
-					if boolBit == 8:
-						boolBit = 0
-						boolOffset = bytes
-						default.append(b"\0")
-						bytes += 1
-					v.offset = boolOffset
-					v.bit = boolBit
-					boolBit += 1
-				elif v.type.type in (TokenType.UINT8, TokenType.INT8, TokenType.BOOL):
-					if v.type.type == TokenType.UINT8:
-						v.parsedValue = self.getInt(v.value, 0, 255, 0)
-						default.append(struct.pack("<B", v.parsedValue))
-					elif v.type.type == TokenType.INT8:
-						v.parsedValue = self.getInt(v.value, -128, 127, 0)
-						default.append(struct.pack("<b", v.parsedValue))
-					elif v.type.type == TokenType.BOOL:
-						default.append(b"\0")
-					else:
-						self.error(v.type.type, "Internal error")
-					v.bytes = 1
-					v.offset = bytes
-				elif v.type.type in (TokenType.UINT16, TokenType.INT16):
-					if v.type.type == TokenType.UINT16:
-						v.parsedValue = self.getInt(v.value, 0, 2**16-1, 0)
-						default.append(struct.pack("<H", v.parsedValue))
-					elif v.type.type == TokenType.INT16:
-						v.parsedValue = self.getInt(v.value, -2**15, 2**15-1, 0)
-						default.append(struct.pack("<h", v.parsedValue))
-					else:
-						self.error(v.type.type, "Internal error")
-					v.bytes = 2
-					v.offset = bytes
-				elif v.type.type in (TokenType.UINT32, TokenType.INT32, TokenType.FLOAT32):
-					if v.type.type == TokenType.UINT32:
-						v.parsedValue = self.getInt(v.value, 0, 2**32-1, 0)
-						default.append(struct.pack("<I", v.parsedValue))
-					elif v.type.type == TokenType.INT32:
-						v.parsedValue = self.getInt(v.value, -2**31, 2**31-1, 0)
-						default.append(struct.pack("<i", v.parsedValue))
-					elif v.type.type == TokenType.FLOAT32:
-						v.parsedValue = self.getFloat(v.value, float('nan') if v.optional else 0.0)
-						default.append(struct.pack("<f", v.parsedValue))
-					else:
-						self.error(v.type.type, "Internal error")
-					v.bytes = 4
-					v.offset = bytes
-				elif v.type.type in (TokenType.UINT64, TokenType.INT64, TokenType.FLOAT64):
-					if v.type.type == TokenType.UINT64:
-						v.parsedValue = self.getInt(v.value, 0, 2**64-1, 0)
-						default.append(struct.pack("<Q", v.parsedValue))
-					elif v.type.type == TokenType.INT64:
-						v.parsedValue = self.getInt(v.value, -2**64, 2**64-1, 0)
-						default.append(struct.pack("<q", v.parsedValue))
-					elif v.type.type == TokenType.FLOAT64:
-						v.parsedValue = self.getFloat(v.value, float('nan') if v.optional else 0.0)
-						default.append(struct.pack("<d", v.parsedValue))
-					else:
-						self.error(v.type.type, "Internal error")
-					v.bytes = 8
-					v.offset = bytes
-				elif v.type.type in (TokenType.BYTES, TokenType.TEXT):
-					if v.optional:
-						self.error(v.optional, "Are alwayes optional")
-					if isStruct:
-						self.error(v.type, "Not allowed in structs")
-					default.append(b"\0\0\0\0")
-					v.bytes = 4
-					v.offset = bytes
-				elif v.type.type != TokenType.IDENTIFIER:
-					self.error(v.type, "Unknown type")
-					continue
-				elif typeName in self.enums:
-					if v.optional:
-						self.error(v.optional, "Are alwayes optional")
-					v.enum = self.enums[typeName]
-					d = 255
-					if v.value:
-						dn = self.value(v.value)
-						if not dn in v.enum.annotatedValues:
-							self.error(v.value, "Not member of enum")
-						d = v.enum.annotatedValues[dn]
-					v.parsedValue = d
-					default.append(struct.pack("<B", d))
-					v.bytes = 1
-					v.offset = bytes
-				elif typeName in self.structs:
-					if v.optional:
-						if boolBit == 8:
-							boolBit = 0
-							boolOffset = bytes
-							default.append(b"\0")
-							bytes += 1
-						v.hasOffset = boolOffset
-						v.hasBit = boolBit
-						boolBit += 1
-					v.bytes = self.structs[typeName].bytes
-					default.append(b"\0" * v.bytes)
-					v.offset = bytes
-					v.struct = self.structs[typeName]
-				elif typeName in self.tabels:
-					if isStruct:
-						self.error(v.type, "Tabels not allowed in structs")
-					if v.optional:
-						self.error(v.optional, "Lists are alwayes optional")
-					default.append(b"\0\0\0\0")
-					v.bytes = 4
-					v.offset = bytes
-					v.table = self.tabels[typeName]
-				else: 
-					self.error(v.type, "Unknown identifier")
-					continue
-			elif v.t in (NodeType.VLUNION, NodeType.VLBYTES, NodeType.VLTEXT, NodeType.VLLIST):
-				if isStruct:
-					self.error(v.token, "Variable length members not allowed in structs")
-				elif vl:
-					self.error(v.token, "Cannot add more than one variable length member")
-					self.error(vl.token, "We already have this variable length")
+			if v.value:
+				if t == ContentType.STRUCT:
+					self.error(v.value, "Not allowed in structs")
+				elif t == ContentType.UNION:
+					self.error(v.value, "Not allowed in unions")
+				elif v.optional:
+					self.error(v.value, "Not allowed for optionals")
+				elif v.list_:
+					self.error(v.value, "Not allowed for lists")
+				elif v.value.type in (TokenType.TRUE, TokenType.FALSE):
+					self.error(v.value, "Booleans cannot have default values")
+				elif v.value.type == TokenType.NUMBER:
+					if v.type_.type not in (TokenType.UINT8, TokenType.UINT16, TokenType.UINT32, TokenType.UINT64, TokenType.INT8, TokenType.INT16, TokenType.INT32, TokenType.INT64,  TokenType.FLOAT32,  TokenType.FLOAT64):
+						self.error(v.value, "Only allowed for number types")
+				elif v.value.type == TokenType.IDENTIFIER:
+					if v.type_.type != TokenType.IDENTIFIER or self.value(v.type_) not in self.enums:
+						self.error(v.value, "Only allowed for enumes")
+					elif self.value(v.value) not in self.enums[self.value(v.type_)].annotatedValues:
+						self.error(v.value, "Not member of enum")
+						self.error(self.enums[self.value(v.type_)].token, "Enum declared here")
 				else:
-					vl = v
+					self.error(v.value, "Unhandled value")
+
+			val = self.value(v.identifier)
+			self.validate_member_name(v.identifier, val, content, get=False, has=v.optional != None, add=v.list_ != None)
+
+			type_name = self.value(v.type_)
+
+			if t == ContentType.STRUCT and v.optional:
+				self.error(v.optional, "Not allowed in structs")
+			if t == ContentType.UNION and v.optional:
+				self.error(v.optional, "Not allowed in unions")
+
+			if t == ContentType.STRUCT and v.inplace:
+				self.error(v.inplace, "Not allowed in structs")
+			if t == ContentType.UNION and v.inplace:
+				self.error(v.inplace, "Not allowed in unions")
+
+			if v.inplace and inplace:
+				self.error(v.inplace, "More than one inplace element defined")
+				self.error(inplace.inplace, "Previously defined here")
+
+			if v.inplace:
+				inplace = v
+
+			if v.optional and v.type_.type in (
+							TokenType.UINT8, TokenType.UINT16, TokenType.UINT32, TokenType.UINT64,
+							TokenType.INT8, TokenType.INT16, TokenType.INT32, TokenType.INT64,
+							TokenType.BOOL):
+				if bool_bit == 8:
+					bool_bit = 0
+					bool_offset = bytes
+					default.append(b"\0")
+					bytes += 1
+				v.has_offset = bool_offset
+				v.has_bit = bool_bit
+				bool_bit += 1
+
+			typeName = self.value(v.type_)
+			if v.list_:
+				if v.type_.type == TokenType.IDENTIFIER:
+					typeName = self.value(v.type_)
+					if typeName in self.enums:
+						v.enum = self.enums[typeName]
+					elif typeName in self.tabels:
+						v.table = self.tabels[typeName]
+					elif typeName in self.structs:
+						v.struct = self.structs[typeName]
+					elif typeName in self.unions:
+						v.union = self.unions[typeName]
+					else:
+						self.error(v.type_, "Unknown type")
+				if t == ContentType.STRUCT:
+					self.error(v.list_, "Not allowed in structs")
+				if v.optional:
+					self.error(v.optional, "Lists are alwayes optional")
+				#TODO recurse in direct unions or tabels
+				default.append(b"\0\0\0\0")
+				v.bytes = 4
 				v.offset = bytes
-				if v.t == NodeType.VLUNION:
-					v.bytes = 6
-					default.append(b"\0\0\0\0\0\0")									
-					assert isinstance(v, VLUnion)
-					self.validateMemberName(v.token, "type", content, get=True, has=True, is_=True, allow_keywords=True)
-					for member in v.members:
-						self.createDocString(member)
-						if member.t == NodeType.VALUE:
-							assert isinstance(member, Value)
-							if member.type.type != TokenType.IDENTIFIER or self.value(member.type) not in self.tabels:
-								self.error(member.type, "Must be a table")
-							else:
-								member.table = self.tabels[self.value(member.type)]
-							name = self.value(member.identifier)
-							self.validateMemberName(member.identifier, name, content, get=True, has=True, add=True, is_=True)
-						elif member.t == NodeType.TABLE:
-							assert isinstance(member, Table)
-							name = self.value(member.identifier)
-							self.validateMemberName(member.identifier, name, content, get=True, has=True, add=True, is_=True)
-							member.name = "%s_%s"%(tableName, name)
-							member.default = self.visitContent(member.name, member.values, False)
-						else:
-							self.error(member.token, "Unknown member type")
-				elif v.t == NodeType.VLLIST:
-					self.validateMemberName(v.token, "list", content, get=True, has=True, add=True, allow_keywords=True)
-					v.bytes = 4
-					default.append(b"\0\0\0\0")
-					assert isinstance(v, VLList)
-					if v.type.type == TokenType.IDENTIFIER:
-						typeName = self.value(v.type)
-						if typeName in self.enums:
-							v.enum = self.enums[typeName]
-						elif typeName in self.tabels:
-							v.table = self.tabels[typeName]
-						elif typeName in self.structs:
-							v.struct = self.structs[typeName]
-						else:
-							self.error(v.type, "Unknown type")
-				elif v.t == NodeType.VLBYTES:
-					self.validateMemberName(v.token, "bytes", content, get=True, has=True, add=True, allow_keywords=True)
-					v.bytes = 4
-					default.append(b"\0\0\0\0")
-				elif v.t == NodeType.VLTEXT:
-					self.validateMemberName(v.token, "text", content, get=True, has=True, add=True, allow_keywords=True)
-					v.bytes = 4
-					default.append(b"\0\0\0\0")
+			elif t == ContentType.UNION and v.type_.type in (
+				TokenType.BOOL, TokenType.UINT8, TokenType.INT8, TokenType.UINT8, TokenType.INT8,
+				TokenType.UINT32, TokenType.INT32, TokenType.FLOAT32,
+				TokenType.UINT64, TokenType.INT64, TokenType.FLOAT64):
+				self.error(v.type_, "Not allowed in unions")
+				v.bytes = 0
+				v.offset = bytes
+			elif t == ContentType.TABLE and v.type_.type == TokenType.BOOL:
+				if bool_bit == 8:
+					bool_bit = 0
+					bool_offset = bytes
+					default.append(b"\0")
+					bytes += 1
+				v.offset = bool_offset
+				v.bit = bool_bit
+				bool_bit += 1
+			elif v.type_.type in (TokenType.UINT8, TokenType.INT8, TokenType.BOOL):
+				if v.inplace:
+					self.error(v.inplace, "Basic types may not be implace")
+				if v.type_.type == TokenType.UINT8:
+					v.parsed_value = self.get_int(v.value, 0, 255, 0)
+					default.append(struct.pack("<B", v.parsed_value))
+				elif v.type_.type == TokenType.INT8:
+					v.parsed_value = self.get_int(v.value, -128, 127, 0)
+					default.append(struct.pack("<b", v.parsed_value))
+				elif v.type_.type == TokenType.BOOL:
+					default.append(b"\0")
+				else:
+					self.error(v.type_.type, "Internal error")
+				v.bytes = 1
+				v.offset = bytes
+			elif v.type_.type in (TokenType.UINT16, TokenType.INT16):
+				if v.inplace:
+					self.error(v.inplace, "Basic types may not be implace")
+				if v.type_.type == TokenType.UINT16:
+					v.parsed_value = self.get_int(v.value, 0, 2**16-1, 0)
+					default.append(struct.pack("<H", v.parsed_value))
+				elif v.type_.type == TokenType.INT16:
+					v.parsed_value = self.get_int(v.value, -2**15, 2**15-1, 0)
+					default.append(struct.pack("<h", v.parsed_value))
+				else:
+					self.error(v.type_.type, "Internal error")
+				v.bytes = 2
+				v.offset = bytes
+			elif v.type_.type in (TokenType.UINT32, TokenType.INT32, TokenType.FLOAT32):
+				if v.inplace:
+					self.error(v.inplace, "Basic types may not be implace")
+				if v.type_.type == TokenType.UINT32:
+					v.parsed_value = self.get_int(v.value, 0, 2**32-1, 0)
+					default.append(struct.pack("<I", v.parsed_value))
+				elif v.type_.type == TokenType.INT32:
+					v.parsed_value = self.get_int(v.value, -2**31, 2**31-1, 0)
+					default.append(struct.pack("<i", v.parsed_value))
+				elif v.type_.type == TokenType.FLOAT32:
+					v.parsed_value = self.get_float(v.value, float('nan') if v.optional else 0.0)
+					default.append(struct.pack("<f", v.parsed_value))
+				else:
+					self.error(v.type_.type, "Internal error")
+				v.bytes = 4
+				v.offset = bytes
+			elif v.type_.type in (TokenType.UINT64, TokenType.INT64, TokenType.FLOAT64):
+				if v.inplace:
+					self.error(v.inplace, "Basic types may not be implace")
+				if v.type_.type == TokenType.UINT64:
+					v.parsed_value = self.get_int(v.value, 0, 2**64-1, 0)
+					default.append(struct.pack("<Q", v.parsed_value))
+				elif v.type_.type == TokenType.INT64:
+					v.parsed_value = self.get_int(v.value, -2**64, 2**64-1, 0)
+					default.append(struct.pack("<q", v.parsed_value))
+				elif v.type_.type == TokenType.FLOAT64:
+					v.parsed_value = self.get_float(v.value, float('nan') if v.optional else 0.0)
+					default.append(struct.pack("<d", v.parsed_value))
+				else:
+					self.error(v.type_.type, "Internal error")
+				v.bytes = 8
+				v.offset = bytes
+			elif v.type_.type in (TokenType.BYTES, TokenType.TEXT):
+				if v.optional:
+					self.error(v.optional, "Are alwayes optional")
+				if  t == ContentType.STRUCT:
+					self.error(v.type_, "Not allowed in structs")
+				default.append(b"\0\0\0\0")
+				v.bytes = 4
+				v.offset = bytes
+			elif v.direct_table:
+				if  t == ContentType.STRUCT:
+					self.error(v.type_, "Not allowed in structs")
+				if v.optional:
+					self.error(v.optional, "Tabels are alwayes optional")
+				v.bytes = 4
+				v.offset = bytes
+				default.append(b"\0\0\0\0")
+				#TODO docstring
+				v.direct_table.name = name + ucamel(val)
+				v.direct_table.default = self.visit_content(v.direct_table.name, v.direct_table.members, ContentType.TABLE)
+				v.table = v.direct_table
+			elif v.direct_union:
+				if  t == ContentType.STRUCT:
+					self.error(v.type_, "Not allowed in structs")
+				if v.optional:
+					self.error(v.optional, "Unions are alwayes optional")
+				v.bytes = 6
+				v.offset = bytes
+				default.append(b"\0\0\0\0\0\0")
+				#TODO docstring
+				v.direct_union.name = name + ucamel(val)
+				self.visit_content(v.direct_union.name, v.direct_union.members, ContentType.UNION)
+				v.union = v.direct_union
+			elif v.type_.type != TokenType.IDENTIFIER:
+				self.error(v.type_, "Unknown type")
+				continue
+			elif typeName in self.enums:
+				if v.inplace:
+					self.error(v.inplace, "Enums types may not be implace")
+				if v.optional:
+					self.error(v.optional, "Are alwayes optional")
+				v.enum = self.enums[typeName]
+				d = 255
+				if v.value:
+					dn = self.value(v.value)
+					if not dn in v.enum.annotatedValues:
+						self.error(v.value, "Not member of enum")
+					d = v.enum.annotatedValues[dn]
+				v.parsed_value = d
+				default.append(struct.pack("<B", d))
+				v.bytes = 1
+				v.offset = bytes
+			elif typeName in self.structs:
+				if v.inplace:
+					self.error(v.inplace, "Structs types may not be implace")
+				if v.optional:
+					if bool_bit == 8:
+						bool_bit = 0
+						bool_offset = bytes
+						default.append(b"\0")
+						bytes += 1
+					v.has_offset = bool_offset
+					v.has_bit = bool_bit
+					bool_bit += 1
+				v.bytes = self.structs[typeName].bytes
+				default.append(b"\0" * v.bytes)
+				v.offset = bytes
+				v.struct = self.structs[typeName]
+			elif typeName in self.tabels:
+				if t == ContentType.STRUCT:
+					self.error(v.type_, "Tabels not allowed in structs")
+				if v.optional:
+					self.error(v.optional, "Lists are alwayes optional")
+				default.append(b"\0\0\0\0")
+				v.bytes = 4
+				v.offset = bytes
+				v.table = self.tabels[typeName]
+			elif typeName in self.unions:
+				if t == ContentType.STRUCT:
+					self.error(v.type_, "Unions not allowed in structs")
+				if v.optional:
+					self.error(v.optional, "Unions are alwayes optional")
+				default.append(b"\0\0\0\0\0\0")
+				v.bytes = 6
+				v.offset = bytes
+				v.unions = self.unions[typeName]
 			else:
-				assert(False)
+				self.error(v.type_, "Unknown identifier")
+				continue
 			bytes += v.bytes
 
 		default2 = b"".join(default)
@@ -358,25 +369,24 @@ class Annotater:
 		self.enums = {}
 		self.structs = {}
 		self.tabels = {}
-		ids: Set[str] = set()
+		self.unions = {}
 		for node in ast:
-			self.createDocString(node)
-			if node.t == NodeType.STRUCT:
-				assert isinstance(node, Struct)
+			self.context = "outer"
+			self.create_doc_string(node)
+			if isinstance(node, Struct):
 				self.context = "struct %s"%self.value(node.identifier)
-				name = self.validateUname(node.identifier)
+				name = self.validate_uname(node.identifier)
 				structValues: Set[str] = set()
-				bytes = len(self.visitContent(name, node.values, True))
+				bytes = len(self.visit_content(name, node.members, ContentType.STRUCT))
 				self.structs[name] = node
 				node.bytes = bytes
 				print("struct %s of size %d"%(name, bytes), file=sys.stderr)
-			elif node.t == NodeType.ENUM:
-				assert isinstance(node, Enum)
+			elif isinstance(node, Enum):
 				self.context = "enum %s"%self.value(node.identifier)
-				name = self.validateUname(node.identifier)
+				name = self.validate_uname(node.identifier)
 				enumValues: Dict[str, int] = {}
 				index = 0
-				for ev in node.values:
+				for ev in node.members:
 					vv = self.value(ev)
 					if vv in enumValues:
 						self.error(ev, "Duplicate name")
@@ -388,17 +398,27 @@ class Annotater:
 				node.annotatedValues = enumValues
 				self.enums[name] = node
 				print("enum %s with %s members"%(name, len(enumValues)), file=sys.stderr)
-			elif node.t == NodeType.TABLE:
-				assert isinstance(node, Table)
+			elif isinstance(node, Table):
 				self.context = "tabel %s"%self.value(node.identifier)
-				name = self.validateUname(node.identifier)
+				name = self.validate_uname(node.identifier)
 				node.name = name
-				node.magic = int(self.value(node.id)[1:], 16)
-				node.default = self.visitContent(name, node.values, False)
+				node.magic = int(self.value(node.id_)[1:], 16)
+				node.default = self.visit_content(name, node.members, ContentType.TABLE)
 				self.tabels[name] = node
 				print("table %s of size >= %d"%(name, len(node.default)+8), file=sys.stderr)
-
-				
+			elif isinstance(node, Union):
+				self.context = "union %s"%self.value(node.identifier)
+				name = self.validate_uname(node.identifier)
+				node.name = name
+				self.visit_content(name, node.members, ContentType.UNION)
+				self.unions[name] = node
+				print("union %s"%name, file=sys.stderr)
+			elif isinstance(node, Namespace):
+				#TODO handel namespace
+				pass
+			else:
+				self.error(node.token, "Unknown thing")
+				continue
 
 def annotate(data: str, ast: List[AstNode]) -> bool:
 	a = Annotater(data)
