@@ -322,19 +322,18 @@ class Generator:
 			assert False
 
 	def visit_union(self, union:Union) -> None:
+		# Recursively generate direct contained members
 		for value in union.members:
-			if value.direct_table:
-				self.generate_table(value.direct_table)
-			if value.direct_union:
-				self.visit_union(value.direct_union)
+			if value.direct_table: self.generate_table(value.direct_table)
+			if value.direct_union: self.visit_union(value.direct_union)
+			if value.direct_enum: self.generate_enum(value.direct_enum)
 
 	def generate_table(self, table:Table) -> None:
 		# Recursively generate direct contained members
 		for value in table.members:
-			if value.direct_table:
-				self.generate_table(value.direct_table)
-			if value.direct_union:
-				self.visit_union(value.direct_union)
+			if value.direct_table: self.generate_table(value.direct_table)
+			if value.direct_union: self.visit_union(value.direct_union)
+			if value.direct_enum: self.generate_enum(value.direct_enum)
 
 		self.output_doc(table)
 		self.o("class %sIn: public scalgoproto::In {"%table.name)
@@ -362,6 +361,17 @@ class Generator:
 		self.o("};")
 		self.o("namespace scalgoproto {template <> struct MetaMagic<%sOut> {using t=TableTag;};}"%table.name)
 		self.o("")
+
+	def generate_enum(self, node:Enum):
+		self.o("enum class %s: std::uint8_t {"%node.name)
+		index = 0
+		for ev in node.members:
+			self.output_doc(ev, "\t")
+			self.o("\t%s = %d,"%(self.value(ev.token), index))
+			index += 1
+		self.o("};")
+		self.o("namespace scalgoproto {template <> struct MetaMagic<%s> {using t=EnumTag;};}"%node.name)
+		self.o()
 	
 	def generate(self, ast: List[AstNode]) -> None:
 		for node in ast:
@@ -391,18 +401,8 @@ class Generator:
 				self.o("namespace scalgoproto {template <> struct MetaMagic<%s> {using t=PodTag;};}"%name)
 				self.o()
 			elif isinstance(node, Enum):
-				name = self.value(node.identifier)
-				self.o("enum class %s: std::uint8_t {"%name)
-				index = 0
-				for ev in node.members:
-					self.output_doc(ev, "\t")
-					self.o("\t%s = %d,"%(self.value(ev.token), index))
-					index += 1
-				self.o("};")
-				self.o("namespace scalgoproto {template <> struct MetaMagic<%s> {using t=EnumTag;};}"%name)
-				self.o()
+				self.generate_enum(node)
 			elif isinstance(node, Table):
-				name = self.value(node.identifier)
 				self.generate_table(node)
 			elif isinstance(node, Union):
 				self.visit_union(node)

@@ -364,18 +364,16 @@ class Generator:
 
 	def visit_union(self, union:Union) -> None:
 		for value in union.members:
-			if value.direct_table:
-				self.generate_table(value.direct_table)
-			if value.direct_union:
-				self.visit_union(value.direct_union)
+			if value.direct_table: self.generate_table(value.direct_table)
+			if value.direct_union: self.visit_union(value.direct_union)
+			if value.direct_enum: self.generate_enum(value.direct_enum)
 
 	def generate_table(self, table:Table) -> None:
 		# Recursively generate direct contained members
 		for value in table.members:
-			if value.direct_table:
-				self.generate_table(value.direct_table)
-			if value.direct_union:
-				self.visit_union(value.direct_union)
+			if value.direct_table: self.generate_table(value.direct_table)
+			if value.direct_union: self.visit_union(value.direct_union)
+			if value.direct_enum: self.generate_enum(value.direct_enum)
 
 		# Generate table reader
 		self.o("class %sIn(scalgoproto.TableIn):"%table.name)
@@ -450,8 +448,7 @@ class Generator:
 		self.o()
 
 	def generate_enum(self, node:Enum) -> None:
-		name = self.value(node.identifier)
-		self.o("class %s(enum.IntEnum):"%name)
+		self.o("class %s(enum.IntEnum):"%node.name)
 		self.output_doc(node, "\t")
 		index = 0
 		for ev in node.members:

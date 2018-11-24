@@ -104,7 +104,23 @@ class Annotater:
 		while node.docstring and not node.docstring[-1]:
 			node.docstring.pop()
 
-	
+
+	def visit_enum(self, node: Enum):
+		self.create_doc_string(node)
+		enumValues: Dict[str, int] = {}
+		index = 0
+		for ev in node.members:
+			self.create_doc_string(ev)
+			vv = self.value(ev.identifier)
+			if vv in enumValues:
+				self.error(ev.identifier, "Duplicate name")
+				continue
+			enumValues[vv] = index
+			index += 1
+		if len(enumValues) > 254:
+			self.error(node.identifier, "Too many enum values")
+		node.annotatedValues = enumValues
+
 	def visit_content(self, name:str, values: List[Value], t:ContentType) -> bytes:
 		content: Dict[str, Token] = {}
 		bytes = 0
@@ -114,6 +130,19 @@ class Annotater:
 		inplace: Value = None
 		for v in values:
 			self.create_doc_string(v)
+			val = self.value(v.identifier)
+
+			if v.direct_enum:
+				v.direct_enum.name = name + ucamel(val)
+				self.visit_enum(v.direct_enum)
+
+			if v.direct_table:
+				v.direct_table.name = name + ucamel(val)
+				v.direct_table.default = self.visit_content(v.direct_table.name, v.direct_table.members, ContentType.TABLE)
+
+			if v.direct_union:
+				v.direct_union.name = name + ucamel(val)
+				self.visit_content(v.direct_union.name, v.direct_union.members, ContentType.UNION)
 
 			if v.value:
 				if t == ContentType.STRUCT:
@@ -138,7 +167,6 @@ class Annotater:
 				else:
 					self.error(v.value, "Unhandled value")
 
-			val = self.value(v.identifier)
 			self.validate_member_name(v.identifier, val, content, get=False, has=v.optional != None, add=v.list_ != None)
 
 			type_name = self.value(v.type_)
@@ -191,7 +219,6 @@ class Annotater:
 					self.error(v.list_, "Not allowed in structs")
 				if v.optional:
 					self.error(v.optional, "Lists are alwayes optional")
-				#TODO recurse in direct unions or tabels
 				default.append(b"\0\0\0\0")
 				v.bytes = 4
 				v.offset = bytes
@@ -279,39 +306,12 @@ class Annotater:
 				default.append(b"\0\0\0\0")
 				v.bytes = 4
 				v.offset = bytes
-			elif v.direct_table:
-				if  t == ContentType.STRUCT:
-					self.error(v.type_, "Not allowed in structs")
-				if v.optional:
-					self.error(v.optional, "Tabels are alwayes optional")
-				v.bytes = 4
-				v.offset = bytes
-				default.append(b"\0\0\0\0")
-				#TODO docstring
-				v.direct_table.name = name + ucamel(val)
-				v.direct_table.default = self.visit_content(v.direct_table.name, v.direct_table.members, ContentType.TABLE)
-				v.table = v.direct_table
-			elif v.direct_union:
-				if  t == ContentType.STRUCT:
-					self.error(v.type_, "Not allowed in structs")
-				if v.optional:
-					self.error(v.optional, "Unions are alwayes optional")
-				v.bytes = 6
-				v.offset = bytes
-				default.append(b"\0\0\0\0\0\0")
-				#TODO docstring
-				v.direct_union.name = name + ucamel(val)
-				self.visit_content(v.direct_union.name, v.direct_union.members, ContentType.UNION)
-				v.union = v.direct_union
-			elif v.type_.type != TokenType.IDENTIFIER:
-				self.error(v.type_, "Unknown type")
-				continue
-			elif typeName in self.enums:
+			elif typeName in self.enums or v.direct_enum:
 				if v.inplace:
 					self.error(v.inplace, "Enums types may not be implace")
 				if v.optional:
 					self.error(v.optional, "Are alwayes optional")
-				v.enum = self.enums[typeName]
+				v.enum = v.direct_enum if v.direct_enum else self.enums[typeName]
 				d = 255
 				if v.value:
 					dn = self.value(v.value)
@@ -338,7 +338,7 @@ class Annotater:
 				default.append(b"\0" * v.bytes)
 				v.offset = bytes
 				v.struct = self.structs[typeName]
-			elif typeName in self.tabels:
+			elif typeName in self.tabels or v.direct_table:
 				if t == ContentType.STRUCT:
 					self.error(v.type_, "Tabels not allowed in structs")
 				if v.optional:
@@ -346,8 +346,8 @@ class Annotater:
 				default.append(b"\0\0\0\0")
 				v.bytes = 4
 				v.offset = bytes
-				v.table = self.tabels[typeName]
-			elif typeName in self.unions:
+				v.table = v.direct_table if v.direct_table else self.tabels[typeName]
+			elif typeName in self.unions or v.direct_union:
 				if t == ContentType.STRUCT:
 					self.error(v.type_, "Unions not allowed in structs")
 				if v.optional:
@@ -355,7 +355,7 @@ class Annotater:
 				default.append(b"\0\0\0\0\0\0")
 				v.bytes = 6
 				v.offset = bytes
-				v.unions = self.unions[typeName]
+				v.union = v.direct_union if v.direct_union else self.unions[typeName]
 			else:
 				self.error(v.type_, "Unknown identifier")
 				continue
@@ -384,20 +384,10 @@ class Annotater:
 			elif isinstance(node, Enum):
 				self.context = "enum %s"%self.value(node.identifier)
 				name = self.validate_uname(node.identifier)
-				enumValues: Dict[str, int] = {}
-				index = 0
-				for ev in node.members:
-					vv = self.value(ev.identifier)
-					if vv in enumValues:
-						self.error(ev.identifier, "Duplicate name")
-						continue
-					enumValues[vv] = index
-					index += 1
-				if len(enumValues) > 254:
-					self.error(node.identifier, "Too many enum values")
-				node.annotatedValues = enumValues
+				node.name = name
+				self.visit_enum(node)
 				self.enums[name] = node
-				print("enum %s with %s members"%(name, len(enumValues)), file=sys.stderr)
+				print("enum %s with %s members"%(name, len(node.annotatedValues)), file=sys.stderr)
 			elif isinstance(node, Table):
 				self.context = "tabel %s"%self.value(node.identifier)
 				name = self.validate_uname(node.identifier)
