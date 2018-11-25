@@ -47,7 +47,7 @@ def runTest(name:str, func: Callable[[],bool]) -> bool:
 		failures.append(name)
 		return False
 
-def runNeg(name:str, base: str, bag:str, god:str) -> None:
+def runNeg(name:str, base: str, bad:str, good:str) -> None:
 	l = 80 - len(name) - 4
 	print("%s> %s <%s"%("="*(l//2 ), name, "="*(l - l//2)))
 	with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as f:
@@ -67,8 +67,8 @@ def runNeg(name:str, base: str, bag:str, god:str) -> None:
 			failures.append(name)
 			return
 	print("SUCCESS")
-		
-if __name__ == '__main__':
+
+def main():
 	# Test names
 	for (bad, good) in ( ("monkey", "Monkey"), ("Monkey_Cat", "MonkeyCat")):
 		runNeg("bad table name %s"%bad, "table %s @8908828A {}", bad, good)
@@ -81,6 +81,18 @@ if __name__ == '__main__':
 	# Test struct types
 	for (bad, good) in ( ("optional UInt32", "UInt32"), ("UInt64 = 7", "UInt64"), ("list Bool", "Bool"), ("Bytes", "UInt8"), ("Text", "UInt16"), ("union {}", "Float32")):
 		runNeg("bad struct member type %s"%bad, "struct Monkey {a: %s}", bad, good)
+
+	# Test table id
+	for (bad, good) in ( ("0x1234567", "@8908828A"), ("@8908828X", "@8908828A"), ("@8908828a", "@8908828A"), ("@8908828A78", "@8908828A"), ("", "@8908828A")):
+		runNeg("table id %s"%bad, "table Monkey %s {}", bad, good)
+	runNeg("table id inplace a", "table Monkey @8908828A {a: table %s {}}", "", "@8908828B")
+	runNeg("table id inplace b", "/*HAT*/ table Monkey @8908828A {a: %s table {}}", "", "inplace")
+	runNeg("table id inplace c", "union Monkey {a: table %s {}}", "", "@8908828B")
+	runNeg("table id inplace d", "table Monkey @8908828A {a: union { a: table %s {}}}", "", "@8908828B")
+	runNeg("table id inplace e", "table Monkey @8908828A {a: %s union { a: table {}}}", "", "inplace")
+	runNeg("table id inplace f", "table Monkey @8908828A {a: %s union { a: {}}}", "", "inplace")
+
+	runNeg("multi inplace", "table Monkey @8908828A {a: inplace Bytes; b: %s Text}", "inplace", "")
 
 
 	runTest("validate base", lambda: runValidate("test/base.spr"))
@@ -120,3 +132,5 @@ if __name__ == '__main__':
 			print("%s failed"%t)
 		sys.exit(1)
 		
+if __name__ == '__main__':
+	main()

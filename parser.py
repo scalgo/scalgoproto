@@ -246,8 +246,8 @@ class Parser:
 				ans.append(Enum(t, i, self.parse_enum(), doccomment))
 				doccomment = None
 			elif t.type == TokenType.UNION:
+				i = self.consume_token([TokenType.IDENTIFIER])
 				self.context = "union %s"%self.value(i)
-				self.consume_token([TokenType.IDENTIFIER])
 				ans.append(Union(t, i, self.parse_content(), doccomment))
 				doccomment = None
 			if self.token.type in [TokenType.COMMA, TokenType.SEMICOLON]:

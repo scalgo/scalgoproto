@@ -121,7 +121,16 @@ class Annotater:
 			self.error(node.identifier, "Too many enum values")
 		node.annotatedValues = enumValues
 
-	def visit_content(self, name:str, values: List[Value], t:ContentType) -> bytes:
+	def assign_magic(self, node: Table, required:bool) -> None:
+		if not node.id_:
+			if required:
+				self.error(node.token, "Magic required in none inline context")
+		else:
+			node.magic = int(self.value(node.id_)[1:], 16)
+			if not 1 <= node.magic < 2**32:
+				self.error(node.id_, "Magic outside range")
+
+	def visit_content(self, name:str, values: List[Value], t:ContentType, inplace_context:bool) -> bytes:
 		content: Dict[str, Token] = {}
 		bytes = 0
 		default = []
@@ -138,11 +147,13 @@ class Annotater:
 
 			if v.direct_table:
 				v.direct_table.name = name + ucamel(val)
-				v.direct_table.default = self.visit_content(v.direct_table.name, v.direct_table.members, ContentType.TABLE)
+				ip = v.inplace != None if t == ContentType.TABLE else inplace_context
+				self.assign_magic(v.direct_table, not ip)
+				v.direct_table.default = self.visit_content(v.direct_table.name, v.direct_table.members, ContentType.TABLE, ip)
 
 			if v.direct_union:
 				v.direct_union.name = name + ucamel(val)
-				self.visit_content(v.direct_union.name, v.direct_union.members, ContentType.UNION)
+				self.visit_content(v.direct_union.name, v.direct_union.members, ContentType.UNION, v.inplace != None)
 
 			if v.value:
 				if t == ContentType.STRUCT:
@@ -377,7 +388,7 @@ class Annotater:
 				self.context = "struct %s"%self.value(node.identifier)
 				name = self.validate_uname(node.identifier)
 				structValues: Set[str] = set()
-				bytes = len(self.visit_content(name, node.members, ContentType.STRUCT))
+				bytes = len(self.visit_content(name, node.members, ContentType.STRUCT, False))
 				self.structs[name] = node
 				node.bytes = bytes
 				print("struct %s of size %d"%(name, bytes), file=sys.stderr)
@@ -392,15 +403,15 @@ class Annotater:
 				self.context = "tabel %s"%self.value(node.identifier)
 				name = self.validate_uname(node.identifier)
 				node.name = name
-				node.magic = int(self.value(node.id_)[1:], 16) if node.id_ else 0
-				node.default = self.visit_content(name, node.members, ContentType.TABLE)
+				self.assign_magic(node, True)
+				node.default = self.visit_content(name, node.members, ContentType.TABLE, False)
 				self.tabels[name] = node
 				print("table %s of size >= %d"%(name, len(node.default)+8), file=sys.stderr)
 			elif isinstance(node, Union):
 				self.context = "union %s"%self.value(node.identifier)
 				name = self.validate_uname(node.identifier)
 				node.name = name
-				self.visit_content(name, node.members, ContentType.UNION)
+				self.visit_content(name, node.members, ContentType.UNION, False)
 				self.unions[name] = node
 				print("union %s"%name, file=sys.stderr)
 			elif isinstance(node, Namespace):
