@@ -369,6 +369,53 @@ def test_in_complex(path:str) -> bool:
 
 	return True
 
+def test_out_complex2(path:str) -> bool:
+	w = scalgoproto.Writer()
+
+	m = w.construct_table(base.MemberOut)
+	m.id = 42
+
+	b = w.construct_bytes(b"bytes")
+	t = w.construct_text("text")
+
+	l = w.construct_enum_list(base.NamedUnionEnumList, 2)
+	l[0] = base.NamedUnionEnumList.x
+	l[1] = base.NamedUnionEnumList.z
+
+	r = w.construct_table(base.Complex2Out)
+	r.u1_member = m
+	r.u2_text = t
+	r.u3_my_bytes = b
+	r.u4_enum_list = l
+	r.u5_add_a()
+
+	m2 = r.add_hat()
+	m2.id = 43
+
+	data = w.finalize(r)
+	return validate_out(data, path)
+
+def test_in_complex2(path:str) -> bool:
+	r = scalgoproto.Reader(read_in(path))
+
+	s = r.root(base.Complex2In)
+	if require(s.u1_is_member, True): return False
+	if require(s.u1_member.id, 42): return False
+	if require(s.u2_is_text, True): return False
+	if require(s.u2_text, "text"): return False
+	if require(s.u3_is_my_bytes, True): return False
+	if require(s.u3_my_bytes, b"bytes"): return False
+	if require(s.u4_is_enum_list, True): return False
+	l = s.u4_enum_list
+	if require(len(l), 2): return False
+	if require(l[0], base.NamedUnionEnumList.x): return False
+	if require(l[1], base.NamedUnionEnumList.z): return False
+	if require(s.u5_is_a, True): return False
+	if require(s.has_hat, True): return False
+	if require(s.hat.id, 43): return False
+	return True
+
+
 def test_out_vl(path:str) -> bool:
 	w = scalgoproto.Writer()
 	name = w.construct_text("nilson")
@@ -525,6 +572,8 @@ def main() -> None:
 	elif test == "in_default": ans = test_in_default(path)
 	elif test == "out_complex": ans = test_out_complex(path)
 	elif test == "in_complex": ans = test_in_complex(path)
+	elif test == "out_complex2": ans = test_out_complex2(path)
+	elif test == "in_complex2": ans = test_in_complex2(path)
 	elif test == "out_vl": ans = test_out_vl(path)
 	elif test == "in_vl": ans = test_in_vl(path)
 	elif test == "out_extend1": ans = test_out_extend1(path)

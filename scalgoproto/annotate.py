@@ -17,7 +17,7 @@ class ContentType(enum.Enum):
 class Annotater:
 	enums: Dict[str, Enum]
 	structs: Dict[str, Struct]
-	tabels: Dict[str, Table]
+	tables: Dict[str, Table]
 	unions: Dict[str, Union]
 
 	def __init__(self, data:str) -> None:
@@ -37,14 +37,14 @@ class Annotater:
 			self.error(t, "Name must be CamelCase")
 		if name in keywords:
 			self.error(t, "Illegal name")
-		if name in self.enums or name in self.structs or name in self.tabels or name in self.unions:
+		if name in self.enums or name in self.structs or name in self.tables or name in self.unions:
 			self.error(t, "Duplicate name")
 		if name in self.enums:
 			self.error(self.enums[name].identifier, "Previously defined here")
 		if name in self.structs:
 			self.error(self.structs[name].identifier, "Previously defined here")
-		if name in self.tabels:
-			self.error(self.tabels[name].identifier, "Previously defined here")
+		if name in self.tables:
+			self.error(self.tables[name].identifier, "Previously defined here")
 		if name in self.unions:
 			self.error(self.unions[name].identifier, "Previously defined here")
 		return name
@@ -155,28 +155,6 @@ class Annotater:
 				v.direct_union.name = name + ucamel(val)
 				self.visit_content(v.direct_union.name, v.direct_union.members, ContentType.UNION, v.inplace != None)
 
-			if v.value:
-				if t == ContentType.STRUCT:
-					self.error(v.value, "Not allowed in structs")
-				elif t == ContentType.UNION:
-					self.error(v.value, "Not allowed in unions")
-				elif v.optional:
-					self.error(v.value, "Not allowed for optionals")
-				elif v.list_:
-					self.error(v.value, "Not allowed for lists")
-				elif v.value.type in (TokenType.TRUE, TokenType.FALSE):
-					self.error(v.value, "Booleans cannot have default values")
-				elif v.value.type == TokenType.NUMBER:
-					if v.type_.type not in (TokenType.UINT8, TokenType.UINT16, TokenType.UINT32, TokenType.UINT64, TokenType.INT8, TokenType.INT16, TokenType.INT32, TokenType.INT64,  TokenType.FLOAT32,  TokenType.FLOAT64):
-						self.error(v.value, "Only allowed for number types")
-				elif v.value.type == TokenType.IDENTIFIER:
-					if v.type_.type != TokenType.IDENTIFIER or self.value(v.type_) not in self.enums:
-						self.error(v.value, "Only allowed for enumes")
-					elif self.value(v.value) not in self.enums[self.value(v.type_)].annotatedValues:
-						self.error(v.value, "Not member of enum")
-						self.error(self.enums[self.value(v.type_)].token, "Enum declared here")
-				else:
-					self.error(v.value, "Unhandled value")
 
 			self.validate_member_name(v.identifier, val, content, get=False, has=v.optional != None, add=v.list_ != None)
 
@@ -214,12 +192,18 @@ class Annotater:
 
 			typeName = self.value(v.type_)
 			if v.list_:
-				if v.type_.type == TokenType.IDENTIFIER:
+				if v.direct_enum:
+					v.enum = v.direct_enum
+				elif v.direct_table:
+						v.table = v.direct_table
+				elif v.direct_union:
+						v.union = v.direct_union
+				elif v.type_.type == TokenType.IDENTIFIER:
 					typeName = self.value(v.type_)
 					if typeName in self.enums:
 						v.enum = self.enums[typeName]
-					elif typeName in self.tabels:
-						v.table = self.tabels[typeName]
+					elif typeName in self.tables:
+						v.table = self.tables[typeName]
 					elif typeName in self.structs:
 						v.struct = self.structs[typeName]
 					elif typeName in self.unions:
@@ -349,15 +333,15 @@ class Annotater:
 				default.append(b"\0" * v.bytes)
 				v.offset = bytes
 				v.struct = self.structs[typeName]
-			elif typeName in self.tabels or v.direct_table:
+			elif typeName in self.tables or v.direct_table:
 				if t == ContentType.STRUCT:
-					self.error(v.type_, "Tabels not allowed in structs")
+					self.error(v.type_, "tables not allowed in structs")
 				if v.optional:
 					self.error(v.optional, "Lists are alwayes optional")
 				default.append(b"\0\0\0\0")
 				v.bytes = 4
 				v.offset = bytes
-				v.table = v.direct_table if v.direct_table else self.tabels[typeName]
+				v.table = v.direct_table if v.direct_table else self.tables[typeName]
 			elif typeName in self.unions or v.direct_union:
 				if t == ContentType.STRUCT:
 					self.error(v.type_, "Unions not allowed in structs")
@@ -369,7 +353,33 @@ class Annotater:
 				v.union = v.direct_union if v.direct_union else self.unions[typeName]
 			else:
 				self.error(v.type_, "Unknown identifier")
-				continue
+				v.bytes = 0
+				v.offset = bytes
+
+			if v.value:
+				if t == ContentType.STRUCT:
+					self.error(v.value, "Not allowed in structs")
+				elif t == ContentType.UNION:
+					self.error(v.value, "Not allowed in unions")
+				elif v.optional:
+					self.error(v.value, "Not allowed for optionals")
+				elif v.list_:
+					self.error(v.value, "Not allowed for lists")
+				elif v.value.type in (TokenType.TRUE, TokenType.FALSE):
+					self.error(v.value, "Booleans cannot have default values")
+				elif v.value.type == TokenType.NUMBER:
+					if v.type_.type not in (TokenType.UINT8, TokenType.UINT16, TokenType.UINT32, TokenType.UINT64, TokenType.INT8, TokenType.INT16, TokenType.INT32, TokenType.INT64,  TokenType.FLOAT32,  TokenType.FLOAT64):
+						self.error(v.value, "Only allowed for number types")
+				elif v.value.type == TokenType.IDENTIFIER:
+					if not v.enum:
+						self.error(v.value, "Only allowed for enumes")
+					elif self.value(v.value) not in v.enum.annotatedValues:
+						self.error(v.value, "Not member of enum")
+						self.error(v.enum.token, "Enum declared here")
+				else:
+					self.error(v.value, "Unhandled value")
+
+
 			bytes += v.bytes
 
 		default2 = b"".join(default)
@@ -379,7 +389,7 @@ class Annotater:
 	def annotate(self, ast: List[AstNode]) -> None:
 		self.enums = {}
 		self.structs = {}
-		self.tabels = {}
+		self.tables = {}
 		self.unions = {}
 		for node in ast:
 			self.context = "outer"
@@ -387,6 +397,7 @@ class Annotater:
 			if isinstance(node, Struct):
 				self.context = "struct %s"%self.value(node.identifier)
 				name = self.validate_uname(node.identifier)
+				node.name = name
 				structValues: Set[str] = set()
 				bytes = len(self.visit_content(name, node.members, ContentType.STRUCT, False))
 				self.structs[name] = node
@@ -400,12 +411,12 @@ class Annotater:
 				self.enums[name] = node
 				print("enum %s with %s members"%(name, len(node.annotatedValues)), file=sys.stderr)
 			elif isinstance(node, Table):
-				self.context = "tabel %s"%self.value(node.identifier)
+				self.context = "table %s"%self.value(node.identifier)
 				name = self.validate_uname(node.identifier)
 				node.name = name
 				self.assign_magic(node, True)
 				node.default = self.visit_content(name, node.members, ContentType.TABLE, False)
-				self.tabels[name] = node
+				self.tables[name] = node
 				print("table %s of size >= %d"%(name, len(node.default)+8), file=sys.stderr)
 			elif isinstance(node, Union):
 				self.context = "union %s"%self.value(node.identifier)

@@ -5,69 +5,107 @@ Parse a protocol description and generate an ast
 import enum
 import typing as ty
 from error import error
-from tokenize import TokenType, tokenize, Token
+from sp_tokenize import TokenType, tokenize, Token
 
 class AstNode(object):
 	__slots__ = ['token', 'docccomment', 'bytes', 'offset', 'docstring']
+	token: Token
+	doccomment: Token
+	bytes: int
+	offset: int
+	docstring: ty.List[str] 
+
 	def __init__(self, token: Token, doccomment: Token = None) -> None:
 		self.token = token
 		self.docccomment = doccomment
 		self.bytes = 0
 		self.offset = 0
-		docstring: ty.List[str] = None
-		self.docstring = docstring
+		self.docstring = None
 
 class Namespace(AstNode):
 	__slots__ = ['namespace']
+	namespace: str
+
 	def __init__(self, token: Token, namespace:str) -> None:
 		super().__init__(token)
 		self.namespace = namespace
 		
 class Struct(AstNode):
-	__slots__ = ['identifier', 'members']
+	__slots__ = ['identifier', 'members', 'name']
+	identifier: Token
+	members: ty.List['Value']
+	name: str
+
 	def __init__(self, token: Token, identifier: Token, members: ty.List['Value'], doccomment: Token) -> None:
 		super().__init__(token, doccomment)
 		self.identifier = identifier
 		self.members = members
+		self.name = None
 		
 class Enum(AstNode):
 	__slots__ = ['identifier', 'members', 'annotatedValues', 'name']
-	
+	identifier: Token
+	members: ty.List['Value']
+	name: str
+	annotatedValues: ty.Dict[str, int]
+
 	def __init__(self, token: Token, identifier: Token, members: ty.List['Value'], doccomment: Token) -> None:
 		super().__init__(token, doccomment)
 		self.identifier = identifier
 		self.members = members
-		name: str = None
-		self.name = name
-		annotatedValues: ty.Dict[str, int] = None
-		self.annotatedValues = annotatedValues
+		self.name = None
+		self.annotatedValues = None
 
 class Table(AstNode):
 	__slots__ = ['identifier', 'id_', 'members', 'default', 'magic', 'name']
-	
+	identifier: Token
+	id_: Token
+	members: ty.List['Value']
+	default: bytes
+	name: str
+	magic: int
+
 	def __init__(self, token: Token, identifier: Token, id_: Token, members: ty.List['Value'],  doccomment: Token) -> None:
 		super().__init__(token, doccomment)
 		self.identifier = identifier
 		self.id_ = id_
 		self.members = members
-		default: bytes = None
-		name: str = None
-		self.default = default
+		self.default = None
 		self.magic: int = 0
-		self.name = name
+		self.name = None
 
 class Union(AstNode):
 	__slots__ = ['members', 'identifier', 'name']
+	members: ty.List['Value']
+	identifier: Token
+	name: str
+
 	def __init__(self, token: Token, identifier: Token, members: ty.List['Value'], docccomment: Token) -> None:
 		super().__init__(token, docccomment)
 		self.members = members
 		self.identifier = identifier
-		name: str = None
-		self.name = name
+		self.name = None
 
 class Value(AstNode):
 	__slots__ = ['identifier', 'value', 'type_', 'optional', 'list_', 'inplace', 'direct_table', 'direct_union', 'has_offset', 'has_bit', 'bit', 'table',
 		'enum', 'struct', 'union', 'parsed_value', 'direct_enum']
+	identifier: Token
+	value: Token
+	type_: Token
+	optional: Token
+	list_: Token
+	inplace: Token
+	direct_table: Table
+	direct_union: Union
+	direct_enum: Enum
+	has_offset: int
+	has_bit: int
+	bit: int
+	table: Table
+	enum: Enum
+	struct: Struct
+	union: Union
+	parsed_value: ty.Union[int, float]
 	
 	def __init__(self, token: Token, identifier: Token, value: Token, type_: Token, optional: Token, 
 		list_: Token, inplace: Token, direct_table: Table, direct_union: Union, direct_enum: Enum, doccomment: Token) -> None:
@@ -80,22 +118,15 @@ class Value(AstNode):
 		self.inplace = inplace
 		self.direct_table = direct_table
 		self.direct_union = direct_union
+		self.direct_enum = direct_enum
 		self.has_offset = 0
 		self.has_bit = 0
 		self.bit = 0
-		table: Table = None
-		enum: Enum = None
-		struct: Struct = None
-		union: Union = None
-		parsed_value: ty.Union[int, float] = 0
-		self.table = table
-		self.enum = enum
-		self.struct = struct
-		self.union = union
-		self.parsed_value = parsed_value
-		self.direct_table = direct_table
-		self.direct_union = direct_union
-		self.direct_enum = direct_enum
+		self.table = None
+		self.enum = None
+		self.struct = None
+		self.union = None
+		self.parsed_value = 0
 
 class ParseError(Exception):
 	def __init__(self, token: Token, message: str, context: str) -> None:

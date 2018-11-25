@@ -94,7 +94,6 @@ def main():
 
 	runNeg("multi inplace", "table Monkey @8908828A {a: inplace Bytes; b: %s Text}", "inplace", "")
 
-
 	runTest("validate base", lambda: runValidate("test/base.spr"))
 	if runTest("cpp setup", lambda: runCppSetup("test/base.spr", "test/cpp.cc")):
 		runTest("cpp out default simple", lambda: runCpp("out_default", "test/simple_default.bin"))
@@ -103,6 +102,8 @@ def main():
 		runTest("cpp in simple", lambda: runCpp("in", "test/simple.bin"))
 		runTest("cpp out complex", lambda: runCpp("out_complex", "test/complex.bin"))
 		runTest("cpp in complex", lambda: runCpp("in_complex", "test/complex.bin"))
+		runTest("cpp out complex2", lambda: runCpp("out_complex2", "test/complex2.bin"))
+		runTest("cpp in complex2", lambda: runCpp("in_complex2", "test/complex2.bin"))
 		runTest("cpp out vl", lambda: runCpp("out_vl", "test/vl.bin"))
 		runTest("cpp in vl", lambda: runCpp("in_vl", "test/vl.bin"))
 		runTest("cpp out extend1", lambda: runCpp("out_extend1", "test/extend1.bin"))
@@ -116,6 +117,8 @@ def main():
 		runTest("py in simple", lambda: runPy("in", "test/simple.bin"))
 		runTest("py out complex", lambda: runPy("out_complex", "test/complex.bin"))
 		runTest("py in complex", lambda: runPy("in_complex", "test/complex.bin"))
+		runTest("py out complex2", lambda: runPy("out_complex2", "test/complex2.bin"))
+		runTest("py in complex2", lambda: runPy("in_complex2", "test/complex2.bin"))
 		runTest("py out vl", lambda: runPy("out_vl", "test/vl.bin"))
 		runTest("py in vl", lambda: runPy("in_vl", "test/vl.bin"))
 		runTest("py out extend1", lambda: runPy("out_extend1", "test/extend1.bin"))

@@ -201,3 +201,23 @@ table Gen3 @B4957DF9 {
 	memberList: list Member;
 }
 
+union NamedUnion {
+	member: Member;
+	text: Text;
+	myBytes: Bytes;
+	enumList: list enum {x, y, z};
+}
+
+table Complex2 @76AB8115 {
+	u1: NamedUnion;
+	u2: NamedUnion;
+	u3: NamedUnion;
+	u4: NamedUnion;
+	u5: union {
+		a: table @DBD93EF0 {};
+	}
+	hat: inplace table {
+		id: Int16;
+	};
+}
+

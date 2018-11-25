@@ -4,7 +4,7 @@ Generate python reader/wirter
 """
 from parser import Parser, ParseError
 from annotate import annotate
-from tokenize import TokenType, Token
+from sp_tokenize import TokenType, Token
 from parser import Struct, Union, Enum, Table, Value, Namespace, AstNode
 from typing import Set, Dict, List, TextIO, Tuple, NamedTuple
 from types import SimpleNamespace
@@ -30,20 +30,21 @@ typeMap: Dict[TokenType, TypeInfo] = {
 class Generator:
 	out: TextIO = None
 
+	def __init__(self, data:str, out:TextIO) -> None:
+		self.data = data
+		self.out = out
+
 	def out_list_type(self, node:Value) -> str:
 		if node.type_.type == TokenType.BOOL:
 			return "scalgoproto.BoolListOut"
 		elif node.type_.type in typeMap:
 			return "scalgoproto.BasicListOut[%s]"%(typeMap[node.type_.type].p)
-		elif node.type_.type == TokenType.IDENTIFIER:
-			if node.struct:
-				return "scalgoproto.StructListOut[%s]"%(self.value(node.type_))
-			elif node.enum:
-				return "scalgoproto.EnumListOut[%s]"%(self.value(node.type_))
-			elif node.table:
-				return "scalgoproto.ObjectListOut[%sOut]"%(self.value(node.type_))
-			else:
-				assert False
+		elif node.struct:
+			return "scalgoproto.StructListOut[%s]"%(node.struct.name)
+		elif node.enum:
+			return "scalgoproto.EnumListOut[%s]"%(node.enum.name)
+		elif node.table:
+			return "scalgoproto.ObjectListOut[%sOut]"%(node.table.name)
 		elif node.type_.type == TokenType.TEXT:
 			return "scalgoproto.ObjectListOut[scalgoproto.TextOut]"
 		elif node.type_.type == TokenType.BYTES:
@@ -52,7 +53,6 @@ class Generator:
 			assert False
 
 	def in_lish_help(self, node:Value, os:str) -> Tuple[str, str]:
-		tn = self.value(node.type_)
 		if node.type_.type == TokenType.BOOL:
 			return ("bool", "\t\treturn self._reader._get_bool_list(%s)"%(os))
 		elif node.type_.type in (TokenType.FLOAT32, TokenType.FLOAT64):
@@ -61,15 +61,12 @@ class Generator:
 		elif node.type_.type in typeMap:
 			ti = typeMap[node.type_.type]
 			return (ti.p, "\t\treturn self._reader._get_int_list('%s', %d, %s)"%(ti.s, ti.w, os))
-		elif node.type_.type == TokenType.IDENTIFIER:
-			if node.struct:
-				return (tn, "\t\treturn self._reader._get_struct_list(%s, %s,)"%(tn, os))
-			elif node.enum:
-				return (tn, "\t\treturn self._reader._get_enum_list(%s, %s)"%(tn, os))
-			elif node.table:
-				return (tn+"In", "\t\treturn self._reader._get_table_list(%sIn, %s)"%(tn, os))
-			else:
-				assert False
+		elif node.struct:
+			return (node.struct.name, "\t\treturn self._reader._get_struct_list(%s, %s,)"%(node.struct.name, os))
+		elif node.enum:
+			return (node.enum.name, "\t\treturn self._reader._get_enum_list(%s, %s)"%(node.enum.name, os))
+		elif node.table:
+			return (node.table.name+"In", "\t\treturn self._reader._get_table_list(%sIn, %s)"%(node.table.name, os))
 		elif node.type_.type == TokenType.TEXT:
 			return ("str", "\t\treturn self._reader._get_text_list(%s)"%(os))
 		elif node.type_.type == TokenType.BYTES:
@@ -79,10 +76,6 @@ class Generator:
 
 	def o(self, text="") -> None:
 		print(text, file=self.out)
-	
-	def __init__(self, data:str, out:TextIO) -> None:
-		self.data = data
-		self.out = out
 		
 	def value(self, t:Token) -> str:
 		return self.data[t.index: t.index + t.length]
@@ -114,6 +107,30 @@ class Generator:
 		self.o(acc)
 		self.o("")
 
+	def generate_union_list_in(self, node: Value, member:Value, uname:str, uuname:str) -> None:
+		(tn, acc) = self.in_lish_help(member, "self._offset + self._size, self._get_uint32(%d, 0)"%(node.offset+2) if node.inplace else "*self._get_list(%d)"%(node.offset+2))
+		self.o("\t@property")
+		self.o("\tdef %s_%s(self) -> scalgoproto.ListIn[%s]:"%(uname, uuname, tn))
+		self.output_doc(member, "\t\t")
+		self.o("\t\tassert self.%s_is_%s"%(uname, uuname))
+		self.o(acc)
+		self.o("\t")
+
+	def generate_vl_list_constructor(self, node: Value) -> None:
+		if node.type_.type in typeMap:
+			ti = typeMap[node.type_.type]
+			self.o( "\t\tl = scalgoproto.BasicListOut[%s](self._writer, '%s', %d, size, False)"%(ti.p, ti.s, ti.w))
+		elif node.enum:
+			self.o( "\t\tl = scalgoproto.EnumListOut[%s](self._writer, %s, size, False)"%(node.enum.name, node.enum.name))
+		elif node.struct:
+			self.o("\t\tl = scalgoproto.StructListOut[%s](self._writer, %s, size, False)"%(node.struct.name, node.struct.name))
+		elif node.table:
+			self.o( "\t\tl = scalgoproto.ObjectListOut[%sOut](self._writer, size, False)"%(node.table))
+		elif node.type_.type == TokenType.TEXT:
+			self.o("\t\tl = scalgoproto.ObjectListOut[TextOut](self._writer, size, False)")
+		elif node.type_.type == TokenType.BYTES:
+			self.o("\t\tl = scalgoproto.ObjectListOut[TextOut](self._writer, size, False)")
+
 	def generate_list_out(self, node: Value, uname:str) -> None:
 		if not node.inplace:
 			self.o("\t@scalgoproto.Adder")
@@ -124,22 +141,27 @@ class Generator:
 		else:
 			self.o("\tdef add_%s(self, size: int) -> %s:"%(uname, self.out_list_type(node)))
 			self.output_doc(node, "\t\t")
-			cons = None
-			tname = self.value(node.type_)
-			if node.type_.type in typeMap:
-				ti = typeMap[node.type_.type]
-				self.o("\t\tl = scalgoproto.BasicListOut[%s](self._writer, '%s', %d, size, False)"%(ti.p, ti.s, ti.w))
-			elif node.enum:
-				self.o("\t\tl = scalgoproto.EnumListOut[%s](self._writer, %s, size, False)"%(tname, tname))
-			elif node.struct:
-				self.o("\t\tl = scalgoproto.StructListOut[%s](self._writer, %s, size, False)"%(tname, tname))
-			elif node.table:
-				self.o("\t\tl = scalgoproto.ObjectListOut[%sOut](self._writer, size, False)"%(tname))
-			elif node.type_.type == TokenType.TEXT:
-				self.o("\t\tl = scalgoproto.ObjectListOut[TextOut](self._writer, size, False)")
-			elif node.type_.type == TokenType.BYTES:
-				self.o("\t\tl = scalgoproto.ObjectListOut[TextOut](self._writer, size, False)")
+			self.generate_vl_list_constructor(node)
 			self.o("\t\tself._set_vl_list(%d, size)"%(node.offset))
+			self.o("\t\treturn l")
+			self.o("\t")
+
+	def generate_union_list_out(self, node:Value, member:Value, uname:str, uuname:str, idx:int) -> None:
+		if not node.inplace:
+			self.o("\t@scalgoproto.Adder")
+			self.o("\tdef %s_%s(self, value: %s):"%(uname, uuname, self.out_list_type(member)))
+			self.output_doc(member, "\t\t")
+			self.o("\t\tassert not self.has_%s"%uname)
+			self.o("\t\tself._set_uint16(%d, %d)"%(node.offset, idx))
+			self.o("\t\tself._set_list(%d, value)"%(node.offset+2))
+			self.o("\t")
+		else:
+			self.o("\tdef %s_add_%s(self, size: int) -> %s:"%(uname, uuname, self.out_list_type(member)))
+			self.output_doc(member, "\t\t")
+			self.o("\t\tassert not self.has_%s"%uname)
+			self.generate_vl_list_constructor(member)
+			self.o("\t\tself._set_uint16(%d, %d)"%(node.offset, idx))
+			self.o("\t\tself._set_vl_list(%d, size)"%(node.offset+2))
 			self.o("\t\treturn l")
 			self.o("\t")
 
@@ -195,64 +217,114 @@ class Generator:
 		self.o("\t\tself._set_%s(%d, value)"%(ti.n, node.offset))
 		self.o("\t")
 		
-	def generate_enum_in(self, node: Value, uname:str, typeName:str) -> None:
+	def generate_enum_in(self, node: Value, uname:str) -> None:
 		assert not node.inplace
 		self.o("\t@property")
 		self.o("\tdef has_%s(self) -> bool: return self._get_uint8(%d, %d) != 255"%(uname, node.offset, node.parsed_value))
 		self.o("\t@property")
-		self.o("\tdef %s(self) -> %s:"%(uname, typeName))
+		self.o("\tdef %s(self) -> %s:"%(uname, node.enum.name))
 		self.output_doc(node, "\t\t")
 		self.o("\t\tassert self.has_%s"%uname)
-		self.o("\t\treturn %s(self._get_uint8(%d, %s))"%(typeName, node.offset, node.parsed_value))
+		self.o("\t\treturn %s(self._get_uint8(%d, %s))"%(node.enum.name, node.offset, node.parsed_value))
 		self.o("\t")
 	
-	def generate_enum_out(self, node: Value, uname:str, typeName:str) -> None:
+	def generate_enum_out(self, node: Value, uname:str) -> None:
 		assert not node.inplace
 		self.o("\t@scalgoproto.Adder")
-		self.o("\tdef %s(self, value: %s) -> None:"%(uname, typeName))
+		self.o("\tdef %s(self, value: %s) -> None:"%(uname, node.enum.name))
 		self.output_doc(node, "\t\t")
 		self.o("\t\tself._set_uint8(%d, int(value))"%(node.offset))
 		self.o("\t")
 
-	def generate_struct_in(self, node:Value, uname:str, typeName:str) -> None:
+	def generate_struct_in(self, node:Value, uname:str) -> None:
 		assert not node.inplace
 		if node.optional:
 			self.o("\t@property")
 			self.o("\tdef has_%s(self) -> bool: return self._get_bit(%d, %s, 0)"%(uname, node.has_offset, node.has_bit))
 		self.o("\t@property")
-		self.o("\tdef %s(self) -> %s:"%(uname, typeName))
+		self.o("\tdef %s(self) -> %s:"%(uname, node.struct.name))
 		self.output_doc(node, "\t\t")
 		if node.optional:
 			self.o("\t\tassert self.has_%s"%uname)
-		self.o("\t\treturn %s._read(self._reader, self._offset+%d) if self._offset < self._size else %s()"%(typeName, node.offset, typeName))
+		self.o("\t\treturn %s._read(self._reader, self._offset+%d) if self._offset < self._size else %s()"%(node.struct.name, node.offset, node.struct.name))
 		self.o("\t")
 
-	def generate_struct_out(self, node:Value, uname:str, typeName:str) -> None:
+	def generate_struct_out(self, node:Value, uname:str) -> None:
 		assert not node.inplace
 		self.o("\t@scalgoproto.Adder")
-		self.o("\tdef %s(self, value: %s) -> None:"%(uname, typeName))
+		self.o("\tdef %s(self, value: %s) -> None:"%(uname, node.struct.name))
 		self.output_doc(node, "\t\t")
 		if node.optional:
 			self.o("\t\tself._set_bit(%d, %d)"%(node.has_offset, node.has_bit))
-		self.o("\t\t%s._write(self._writer, self._offset + %d, value)"%(typeName, node.offset))
+		self.o("\t\t%s._write(self._writer, self._offset + %d, value)"%(node.struct.name, node.offset))
 		self.o("\t")
 
-	def generate_table_in(self, node:Value, uname:str, typeName:str) -> None:
+	def generate_table_in(self, node:Value, uname:str) -> None:
 		self.o("\t@property")
 		self.o("\tdef has_%s(self) -> bool: return self._get_uint32(%d, 0) != 0"%(uname, node.offset))
 		self.o("\t@property")
-		self.o("\tdef %s(self) -> %sIn:"%(uname, typeName))
+		self.o("\tdef %s(self) -> %sIn:"%(uname, node.table.name))
 		self.output_doc(node, "\t\t")
 		self.o("\t\tassert self.has_%s"%uname)
-		self.o("\t\treturn self._get_table(%sIn, %d)"%(typeName, node.offset))
+		if node.inplace: self.o("\t\treturn self._get_vl_table(%sIn, %d)"%(node.table.name, node.offset))
+		else: self.o("\t\treturn self._get_table(%sIn, %d)"%(node.table.name, node.offset))
 		self.o("\t")
 
-	def generate_table_out(self, node:Value, uname:str, typeName:str) -> None:
-		self.o("\t@scalgoproto.Adder")
-		self.o("\tdef %s(self, value: %sOut) -> None:"%(uname, typeName))
-		self.output_doc(node, "\t\t")
-		self.o("\t\tself._set_table(%d, value)"%(node.offset))
-		self.o("\t")
+	def generate_union_table_in(self, node: Value, member: Value, uname:str, uuname:str) -> None:
+		if member.table.members:
+			self.o("\t@property")
+			self.o("\tdef %s_%s(self) -> %sIn:"%(uname, uuname, member.table.name))
+			self.output_doc(member, "\t\t")
+			self.o("\t\tassert self.%s_is_%s"%(uname, uuname))
+			if node.inplace: self.o("\t\treturn self._get_vl_table(%sIn, %d)"%(member.table.name, node.offset+2))
+			else: self.o("\t\treturn self._get_table(%sIn, %d)"%(member.table.name, node.offset+2))
+			self.o("\t")
+
+	def generate_table_out(self, node:Value, uname:str) -> None:
+		if not node.inplace:
+			self.o("\t@scalgoproto.Adder")
+			self.o("\tdef %s(self, value: %sOut) -> None:"%(uname, node.table.name))
+			self.output_doc(node, "\t\t")
+			self.o("\t\tself._set_table(%d, value)"%(node.offset))
+			self.o("\t")
+		elif node.table.members:
+			self.o("\tdef add_%s(self) -> %sOut:"%(uname, node.table.name))
+			self.output_doc(node, "\t\t")
+			self.o("\t\tself._set_uint32(%d, %d)"%(node.offset, len(node.table.default)))
+			self.o("\t\treturn self._construct_union_member(%sOut)"%node.table.name)
+			self.o("\t")
+		else:
+			self.o("\tdef add_%s(self) -> None:"%(uname))
+			self.output_doc(node, "\t\t")
+			self.o("\t\tself._set_uint32(%d, %d)"%(node.offset, 0))
+			self.o("\t")
+
+	def generate_union_table_out(self, node:Value, member:Value, uname:str, uuname:str, idx:int) -> None:
+		table = member.table
+		if not table.members:
+			self.o("\tdef %s_add_%s(self) -> None:"%(uname, uuname))
+			self.output_doc(member, "\t\t")
+			self.o("\t\tassert not self.has_%s"%uname)
+			self.o("\t\tself._set_uint16(%d, %d)"%(node.offset, idx))
+			self.o("\t\tself._set_uint32(%d, %d)"%(node.offset+2, 0))
+			self.o("\t")
+		elif not node.inplace:
+			self.o("\t@scalgoproto.Adder")
+			self.o("\tdef %s_%s(self, value: %sOut) -> None:"%(uname, uuname, table.name))
+			self.output_doc(member, "\t\t")
+			self.o("\t\tassert not self.has_%s"%uname)
+			self.o("\t\tself._set_uint16(%d, %d)"%(node.offset, idx))
+			self.o("\t\tself._set_table(%d, value)"%(node.offset+2))
+			self.o("\t")
+		else:
+			self.o("\tdef %s_add_%s(self) -> %sOut:"%(uname, uuname, table.name))
+			self.output_doc(member, "\t\t")
+			self.o("\t\tassert not self.has_%s"%uname)
+			self.o("\t\tself._set_uint16(%d, %d)"%(node.offset, idx))
+			self.o("\t\tself._set_uint32(%d, %d)"%(node.offset+2, len(table.default)))
+			self.o("\t\treturn self._construct_union_member(%sOut)"%table.name)
+			self.o("\t")
+		
 
 	def generate_text_in(self, node:Value, uname:str) -> None:
 		self.o("\t@property")
@@ -265,6 +337,15 @@ class Generator:
 		else: self.o("\t\treturn self._get_text(%d)"%(node.offset))
 		self.o("\t")
 
+	def generate_union_text_in(self, node: Value, member: Value, uname:str, uuname:str) -> None:
+		self.o("\t@property")
+		self.o("\tdef %s_%s(self) -> str:"%(uname, uuname))
+		self.output_doc(member, "\t\t")
+		self.o("\t\tassert self.%s_is_%s"%(uname, uuname))
+		if node.inplace: self.o("\t\treturn self._get_vl_text(%d)"%(node.offset+2))
+		else: self.o("\t\treturn self._get_text(%d)"%(node.offset+2))
+		self.o("\t")
+
 	def generate_text_out(self, node:Value, uname:str) -> None:
 		self.o("\t@scalgoproto.Adder")
 		if node.inplace: self.o("\tdef %s(self, text:str) -> None:"%(uname))
@@ -272,6 +353,16 @@ class Generator:
 		self.output_doc(node, "\t\t")
 		if node.inplace: self.o("\t\tself._add_vl_text(%d, text)"%(node.offset))
 		else: self.o("\t\tself._set_text(%d, t)"%(node.offset))
+		self.o("\t")
+
+	def generate_union_text_out(self, node:Value, member:Value, uname:str, uuname:str, idx:int) -> None:
+		self.o("\t@scalgoproto.Adder")
+		if node.inplace: self.o("\tdef %s_%s(self, value: str) -> None:"%(uname, uuname))
+		else: self.o("\tdef %s_%s(self, b: scalgoproto.TextOut) -> None:"%(uname, uuname))
+		self.output_doc(member, "\t\t")
+		self.o("\t\tself._set_uint16(%d, %d)"%(node.offset, idx))
+		if node.inplace: self.o("\t\tself._add_vl_bytes(%d, value)"%(node.offset+2))
+		else: self.o("\t\tself._set_bytes(%d, b)"%(node.offset+2))
 		self.o("\t")
 
 	def generate_bytes_in(self, node:Value, uname:str) -> None:
@@ -285,6 +376,15 @@ class Generator:
 		else: self.o("\t\treturn self._get_bytes(%d)"%(node.offset))
 		self.o("\t")
 
+	def generate_union_bytes_in(self, node: Value, member: Value, uname:str, uuname:str) -> None:
+		self.o("\t@property")
+		self.o("\tdef %s_%s(self) -> bytes:"%(uname, uuname))
+		self.output_doc(member, "\t\t")
+		self.o("\t\tassert self.%s_is_%s"%(uname, uuname))
+		if node.inplace: self.o("\t\treturn self._get_vl_bytes(%d)"%(node.offset+2))
+		else: self.o("\t\treturn self._get_bytes(%d)"%(node.offset+2))
+		self.o("\t")
+
 	def generate_bytes_out(self, node:Value, uname:str) -> None:
 		self.o("\t@scalgoproto.Adder")
 		if node.inplace: self.o("\tdef %s(self, value: bytes) -> None:"%(uname))
@@ -294,13 +394,22 @@ class Generator:
 		else: self.o("\t\tself._set_bytes(%d, b)"%(node.offset))
 		self.o("\t")
 
-	def generate_union_in(self, node:Value, uname:str, tableName:str) -> None:
-		assert node.inplace
+	def generate_union_bytes_out(self, node:Value, member:Value, uname:str, uuname:str, idx:int) -> None:
+		self.o("\t@scalgoproto.Adder")
+		if node.inplace: self.o("\tdef %s_%s(self, value: bytes) -> None:"%(uname, uuname))
+		else: self.o("\tdef %s_%s(self, b: scalgoproto.BytesOut) -> None:"%(uname, uuname))
+		self.output_doc(member, "\t\t")
+		self.o("\t\tself._set_uint16(%d, %d)"%(node.offset, idx))
+		if node.inplace: self.o("\t\tself._add_vl_bytes(%d, value)"%(node.offset+2))
+		else: self.o("\t\tself._set_bytes(%d, b)"%(node.offset+2))
+		self.o("\t")
+
+	def generate_union_in(self, node:Value, uname:str, table: Table) -> None:
 		tn = "%sType"%ucamel(self.value(node.identifier))
 		self.o("\tclass %s(enum.IntEnum):"%tn)
 		self.o("\t\tNONE = 0")
 		idx = 1
-		union = node.union
+		union:Union = node.union
 		for member in union.members:
 			assert isinstance(member, (Table, Value))
 			self.o("\t\t%s = %d"%(self.value(member.identifier).upper(), idx))
@@ -309,59 +418,48 @@ class Generator:
 		self.o("\t@property")
 		self.o("\tdef %s_type(self) -> %s:"%(uname, tn))
 		self.output_doc(node, "\t")
-		self.o("\t\treturn %sIn.%s(self._get_uint16(%d, 0))"%(tableName, tn, node.offset))
+		self.o("\t\treturn %sIn.%s(self._get_uint16(%d, 0))"%(table.name, tn, node.offset))
 		self.o("\t")
 		self.o("\t@property")
-		self.o("\tdef has_%s(self) -> bool: return self.%s_type != %sIn.%s.NONE"%(uname, uname, tableName, tn))
+		self.o("\tdef has_%s(self) -> bool: return self.%s_type != %sIn.%s.NONE"%(uname, uname, table.name, tn))
 		for member in union.members:
 			n = self.value(member.identifier)
 			uuname = snake(n)
-			table = member.table
 			self.o("\t@property")
-			self.o("\tdef %s_is_%s(self) -> bool: return self.%s_type == %sIn.%s.%s"%(uname, uuname, uname, tableName, tn, n.upper()))
-			if table.members:
-				self.o("\t")
-				self.o("\t@property")
-				self.o("\tdef %s_%s(self) -> %sIn:"%(uname, uuname, table.name))
-				self.output_doc(node, "\t\t")
-				self.o("\t\tassert self.%s_is_%s"%(uname, uuname))
-				self.o("\t\treturn self._get_vl_table(%sIn, %d)"%(table.name, node.offset+2))
-				self.o("\t")
-
+			self.o("\tdef %s_is_%s(self) -> bool: return self.%s_type == %sIn.%s.%s"%(uname, uuname, uname, table.name, tn, n.upper()))
+			self.o("\t")
+			if member.table:
+				self.generate_union_table_in(node, member, uname, uuname)
+			elif member.list_:			
+				self.generate_union_list_in(node, member, uname, uuname)
+			elif member.type_.type == TokenType.BYTES:
+				self.generate_union_bytes_in(node, member, uname, uuname)
+			elif member.type_.type == TokenType.TEXT:
+				self.generate_union_text_in(node, member, uname, uuname)
+			else:
+				assert False
+		
 	def generate_union_out(self, node:Value, uname:str) -> None:
-		assert node.inplace
 		union = node.union
-
-		self.output_doc(node, "\t")
 		self.o("\t@property")
 		self.o("\tdef has_%s(self) -> bool: return self._get_uint16(%d) != 0"%(uname, node.offset))
 		idx = 1
 		for member in union.members:
-			n = self.value(member.identifier)
-			uuname = snake(n)
-			assert member.table
-			tbl = member.table
-			if tbl.members:
-				self.o("\tdef %s_add_%s(self) -> %sOut:"%(uname, uuname, tbl.name))
-				self.output_doc(member, "\t\t")
-				self.o("\t\tassert not self.has_%s"%uname)
-				self.o("\t\tself._set_uint16(%d, %d)"%(node.offset, idx))
-				self.o("\t\tself._set_uint32(%d, %d)"%(node.offset+2, len(tbl.default)))
-				self.o("\t\treturn self._construct_union_member(%sOut)"%tbl.name)
-				self.o("\t")
+			uuname = snake(self.value(member.identifier))
+			if member.table:
+				self.generate_union_table_out(node, member, uname, uuname, idx)
+			elif member.list_:
+				self.generate_union_list_out(node, member, uname, uuname, idx)
+			elif member.type_.type == TokenType.BYTES:
+				self.generate_union_bytes_out(node, member, uname, uuname, idx)
+			elif member.type_.type == TokenType.TEXT:
+				self.generate_union_text_out(node, member, uname, uuname, idx)
 			else:
-				self.o("\tdef %s_add_%s(self) -> None:"%(uname, uuname))
-				self.output_doc(member, "\t\t")
-				self.o("\t\tassert not self.has_%s"%uname)
-				self.o("\t\tself._set_uint16(%d, %d)"%(node.offset, idx))
-				self.o("\t\tself._set_uint32(%d, %d)"%(node.offset+2, 0))
-				self.o("\t")
+				assert False
 			idx += 1
 
-	def generate_value_in(self, tableName:str, node: Value) -> None:
-		n = self.value(node.identifier)
-		uname = snake(n)
-		typeName = self.value(node.type_)
+	def generate_value_in(self, table:Table, node: Value) -> None:
+		uname = snake(self.value(node.identifier))
 		if node.list_:
 			self.generate_list_in(node, uname)
 		elif node.type_.type == TokenType.BOOL:
@@ -369,13 +467,13 @@ class Generator:
 		elif node.type_.type in typeMap:
 			self.generate_basic_in(node, uname)
 		elif node.enum:
-			self.generate_enum_in(node, uname, typeName)
+			self.generate_enum_in(node, uname)
 		elif node.struct:
-			self.generate_struct_in(node, uname, typeName)
+			self.generate_struct_in(node, uname)
 		elif node.table:
-			self.generate_table_in(node, uname, typeName)
+			self.generate_table_in(node, uname)
 		elif node.union:
-			self.generate_union_in(node, uname, tableName)
+			self.generate_union_in(node, uname, table)
 		elif node.type_.type == TokenType.TEXT:
 			self.generate_text_in(node, uname)
 		elif node.type_.type == TokenType.BYTES:
@@ -383,10 +481,8 @@ class Generator:
 		else:
 			assert False
 
-	def generate_value_out(self, node:Value) -> None:
-		n = self.value(node.identifier)
-		uname = snake(n)
-		typeName = self.value(node.type_)
+	def generate_value_out(self, table:Table, node:Value) -> None:
+		uname = snake(self.value(node.identifier))
 		if node.list_:
 			self.generate_list_out(node, uname)
 		elif node.type_.type == TokenType.BOOL:
@@ -394,11 +490,11 @@ class Generator:
 		elif node.type_.type in typeMap:
 			self.generate_basic_out(node, uname)
 		elif node.enum:
-			self.generate_enum_out(node, uname, typeName)
+			self.generate_enum_out(node, uname)
 		elif node.struct:
-			self.generate_struct_out(node, uname, typeName)
+			self.generate_struct_out(node, uname)
 		elif node.table:
-			self.generate_table_out(node, uname, typeName)
+			self.generate_table_out(node, uname)
 		elif node.union:
 			self.generate_union_out(node, uname)			
 		elif node.type_.type == TokenType.TEXT:
@@ -431,7 +527,7 @@ class Generator:
 		self.o('\t\t"""Private constructor. Call factory methods on scalgoproto.Reader to construct instances"""')
 		self.o("\t\tsuper().__init__(reader, offset, size)")
 		for node in table.members:
-			self.generate_value_in(table.name, node)
+			self.generate_value_in(table, node)
 		self.o("")
 
 		#Generate Table writer
@@ -443,7 +539,7 @@ class Generator:
 		self.o('\t\t"""Private constructor. Call factory methods on scalgoproto.Reader to construct instances"""')
 		self.o("\t\tsuper().__init__(writer, withHeader, b\"%s\")"%(cescape(table.default)))
 		for node in table.members:
-			self.generate_value_out(node)
+			self.generate_value_out(table, node)
 		self.o("")
 
 	def generate_struct(self, node:Struct) -> None:
@@ -513,6 +609,10 @@ class Generator:
 				self.generate_table(node)
 			elif isinstance(node, Union):
 				self.visit_union(node)
+			elif isinstance(node, Namespace):
+				pass
+			else:
+				assert False
 
 def run(args) -> int:
 	data = open(args.schema, "r").read()

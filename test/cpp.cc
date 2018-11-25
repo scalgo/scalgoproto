@@ -353,6 +353,50 @@ int main(int, char ** argv) {
 		REQUIRE(l10[9], false);
 
 		return 0;
+	} else if (!strcmp(argv[1], "out_complex2")) {
+		scalgoproto::Writer w;
+
+		auto m = w.construct<MemberOut>();
+		m.addId(42);
+
+		auto b = w.constructBytes("bytes", 5);
+		auto t = w.constructText("text");
+
+		auto l = w.constructList<NamedUnionEnumList>(2);
+		l.add(0, NamedUnionEnumList::x);
+		l.add(1, NamedUnionEnumList::z);
+
+		auto r = w.construct<Complex2Out>();
+		r.u1AddMember(m);
+		r.u2AddText(t);
+		r.u3AddMyBytes(b);
+		r.u4AddEnumList(l);
+		r.u5AddA();
+
+		auto m2 = r.addHat();
+		m2.addId(43);
+
+		auto [data, size] = w.finalize(r);
+		return !validateOut(data, size, argv[2]);
+	} else if (!strcmp(argv[1], "in_complex2")) {
+		auto o = readIn(argv[2]);
+		scalgoproto::Reader r(o.data(), o.size());
+		auto s = r.root<Complex2In>();
+		REQUIRE(s.u1IsMember(), true);
+		REQUIRE(s.u1GetMember().getId(), 42);
+		REQUIRE(s.u2IsText(), true);
+		REQUIRE(s.u2GetText(), "text");
+		REQUIRE(s.u3IsMyBytes(), true);
+		REQUIRE(s.u3GetMyBytes().second, 5);
+		REQUIRE(memcmp(s.u3GetMyBytes().first, "bytes", 5), 0);
+		REQUIRE(s.u4IsEnumList(), true);
+		auto l = s.u4GetEnumList();
+		REQUIRE(l.size(), 2);
+		REQUIREQ(l[0], NamedUnionEnumList::x);
+		REQUIREQ(l[1], NamedUnionEnumList::z);
+		REQUIRE(s.u5IsA(), true);
+		REQUIRE(s.hasHat(), true);
+		REQUIRE(s.getHat().getId(), 43);
 	} else if (!strcmp(argv[1], "out_vl")) {
 		scalgoproto::Writer w;
 		auto name = w.constructText("nilson");
@@ -391,15 +435,15 @@ int main(int, char ** argv) {
 
 		REQUIRE(s.hasU(), true);
 		auto u = s.getU();
-		REQUIRE(u.isMonkey(), true);
-		auto monkey = u.getMonkey();
+		REQUIRE(u.uIsMonkey(), true);
+		auto monkey = u.uGetMonkey();
 		REQUIRE(monkey.hasName(), true);
 		REQUIRE(monkey.getName(), "nilson");
 
 		REQUIRE(s.hasU2(), true);
 		auto u2 = s.getU2();
-		REQUIRE(u2.isText(), true);
-		auto u2t = u2.getText();
+		REQUIRE(u2.uIsText(), true);
+		auto u2t = u2.uGetText();
 		REQUIRE(u2t.hasT(), true);
 		REQUIRE(u2t.getT(), "foobar");
 		
@@ -437,7 +481,7 @@ int main(int, char ** argv) {
 		auto s = r.root<Gen2In>();
 		REQUIRE(s.getAa(), 77);
 		REQUIRE(s.getBb(), 42);
-		REQUIRE(s.hasType(), false);
+		REQUIRE(s.hasU(), false);
 		return 0;
 	} else if (!strcmp(argv[1], "out_extend2")) {
 		scalgoproto::Writer w;
@@ -454,8 +498,8 @@ int main(int, char ** argv) {
 		auto s = r.root<Gen3In>();
 		REQUIRE(s.getAa(), 80);
 		REQUIRE(s.getBb(), 81);
-		REQUIRE(s.isCake(), true);
-		REQUIRE(s.getCake().getV(), 45);
+		REQUIRE(s.uIsCake(), true);
+		REQUIRE(s.uGetCake().getV(), 45);
 		REQUIREQ(s.getE(), MyEnum::c);
 		REQUIRE(s.getS().x, 0);
 		REQUIRE(s.getS().y, 0);
