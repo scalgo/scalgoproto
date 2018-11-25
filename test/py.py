@@ -382,6 +382,9 @@ def test_out_complex2(path:str) -> bool:
 	l[0] = base.NamedUnionEnumList.x
 	l[1] = base.NamedUnionEnumList.z
 
+	l2 = w.construct_struct_list(base.Complex2L, 1)
+	l2[0] = base.Complex2L(2, True)
+
 	r = w.construct_table(base.Complex2Out)
 	r.u1_member = m
 	r.u2_text = t
@@ -391,6 +394,9 @@ def test_out_complex2(path:str) -> bool:
 
 	m2 = r.add_hat()
 	m2.id = 43
+
+	r.l = l2
+	r.s = base.Complex2S(base.Complex2SX.p, base.Complex2SY(8))
 
 	data = w.finalize(r)
 	return validate_out(data, path)
@@ -413,6 +419,14 @@ def test_in_complex2(path:str) -> bool:
 	if require(s.u5_is_a, True): return False
 	if require(s.has_hat, True): return False
 	if require(s.hat.id, 43): return False
+	if require(s.has_l, True): return False
+	l2 = s.l
+	if require(len(l2), 1): return False
+	if require(l2[0].a, 2): return False
+	if require(l2[0].b, True): return False
+	if require(s.s.x, base.Complex2SX.p): return False
+	if require(s.s.y.z, 8): return False
+
 	return True
 
 

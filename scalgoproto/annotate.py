@@ -155,6 +155,10 @@ class Annotater:
 				v.direct_union.name = name + ucamel(val)
 				self.visit_content(v.direct_union.name, v.direct_union.members, ContentType.UNION, v.inplace != None)
 
+			if v.direct_struct:
+				v.direct_struct.name = name + ucamel(val)
+				v.direct_struct.bytes = len(self.visit_content(v.direct_struct.name, v.direct_struct.members, ContentType.STRUCT, False))
+
 
 			self.validate_member_name(v.identifier, val, content, get=False, has=v.optional != None, add=v.list_ != None)
 
@@ -195,9 +199,11 @@ class Annotater:
 				if v.direct_enum:
 					v.enum = v.direct_enum
 				elif v.direct_table:
-						v.table = v.direct_table
+					v.table = v.direct_table
 				elif v.direct_union:
-						v.union = v.direct_union
+					v.union = v.direct_union
+				elif v.direct_struct:
+					v.struct = v.direct_struct
 				elif v.type_.type == TokenType.IDENTIFIER:
 					typeName = self.value(v.type_)
 					if typeName in self.enums:
@@ -306,7 +312,7 @@ class Annotater:
 					self.error(v.inplace, "Enums types may not be implace")
 				if v.optional:
 					self.error(v.optional, "Are alwayes optional")
-				v.enum = v.direct_enum if v.direct_enum else self.enums[typeName]
+				v.enum = v.direct_enum or self.enums[typeName]
 				d = 255
 				if v.value:
 					dn = self.value(v.value)
@@ -317,7 +323,7 @@ class Annotater:
 				default.append(struct.pack("<B", d))
 				v.bytes = 1
 				v.offset = bytes
-			elif typeName in self.structs:
+			elif typeName in self.structs or v.direct_struct:
 				if v.inplace:
 					self.error(v.inplace, "Structs types may not be implace")
 				if v.optional:
@@ -329,10 +335,10 @@ class Annotater:
 					v.has_offset = bool_offset
 					v.has_bit = bool_bit
 					bool_bit += 1
-				v.bytes = self.structs[typeName].bytes
-				default.append(b"\0" * v.bytes)
 				v.offset = bytes
-				v.struct = self.structs[typeName]
+				v.struct = v.direct_struct or self.structs[typeName]
+				v.bytes = v.struct.bytes
+				default.append(b"\0" * v.bytes)
 			elif typeName in self.tables or v.direct_table:
 				if t == ContentType.STRUCT:
 					self.error(v.type_, "tables not allowed in structs")
@@ -341,7 +347,7 @@ class Annotater:
 				default.append(b"\0\0\0\0")
 				v.bytes = 4
 				v.offset = bytes
-				v.table = v.direct_table if v.direct_table else self.tables[typeName]
+				v.table = v.direct_table or self.tables[typeName]
 			elif typeName in self.unions or v.direct_union:
 				if t == ContentType.STRUCT:
 					self.error(v.type_, "Unions not allowed in structs")
@@ -350,7 +356,7 @@ class Annotater:
 				default.append(b"\0\0\0\0\0\0")
 				v.bytes = 6
 				v.offset = bytes
-				v.union = v.direct_union if v.direct_union else self.unions[typeName]
+				v.union = v.direct_union or self.unions[typeName]
 			else:
 				self.error(v.type_, "Unknown identifier")
 				v.bytes = 0
@@ -398,7 +404,6 @@ class Annotater:
 				self.context = "struct %s"%self.value(node.identifier)
 				name = self.validate_uname(node.identifier)
 				node.name = name
-				structValues: Set[str] = set()
 				bytes = len(self.visit_content(name, node.members, ContentType.STRUCT, False))
 				self.structs[name] = node
 				node.bytes = bytes

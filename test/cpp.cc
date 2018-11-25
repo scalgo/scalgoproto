@@ -366,6 +366,9 @@ int main(int, char ** argv) {
 		l.add(0, NamedUnionEnumList::x);
 		l.add(1, NamedUnionEnumList::z);
 
+		auto l2 = w.constructList<Complex2L>(1);
+		l2.add(0, {2, true});
+
 		auto r = w.construct<Complex2Out>();
 		r.u1AddMember(m);
 		r.u2AddText(t);
@@ -375,6 +378,9 @@ int main(int, char ** argv) {
 
 		auto m2 = r.addHat();
 		m2.addId(43);
+
+		r.addL(l2);
+		r.addS({Complex2SX::p, {8}});
 
 		auto [data, size] = w.finalize(r);
 		return !validateOut(data, size, argv[2]);
@@ -397,6 +403,14 @@ int main(int, char ** argv) {
 		REQUIRE(s.u5IsA(), true);
 		REQUIRE(s.hasHat(), true);
 		REQUIRE(s.getHat().getId(), 43);
+
+		REQUIRE(s.hasL(), true);
+		auto l2 = s.getL();
+		REQUIRE(l2.size(), 1);
+		REQUIRE(l2[0].a, 2);
+		REQUIRE(l2[0].b, true);
+		REQUIREQ(s.getS().x, Complex2SX::p)
+		REQUIRE(s.getS().y.z, 8);
 	} else if (!strcmp(argv[1], "out_vl")) {
 		scalgoproto::Writer w;
 		auto name = w.constructText("nilson");

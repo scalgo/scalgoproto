@@ -88,7 +88,7 @@ class Union(AstNode):
 
 class Value(AstNode):
 	__slots__ = ['identifier', 'value', 'type_', 'optional', 'list_', 'inplace', 'direct_table', 'direct_union', 'has_offset', 'has_bit', 'bit', 'table',
-		'enum', 'struct', 'union', 'parsed_value', 'direct_enum']
+		'enum', 'struct', 'union', 'parsed_value', 'direct_enum', 'direct_struct']
 	identifier: Token
 	value: Token
 	type_: Token
@@ -98,6 +98,7 @@ class Value(AstNode):
 	direct_table: Table
 	direct_union: Union
 	direct_enum: Enum
+	direct_struct: Struct
 	has_offset: int
 	has_bit: int
 	bit: int
@@ -108,7 +109,7 @@ class Value(AstNode):
 	parsed_value: ty.Union[int, float]
 	
 	def __init__(self, token: Token, identifier: Token, value: Token, type_: Token, optional: Token, 
-		list_: Token, inplace: Token, direct_table: Table, direct_union: Union, direct_enum: Enum, doccomment: Token) -> None:
+		list_: Token, inplace: Token, direct_table: Table, direct_union: Union, direct_enum: Enum, direct_struct: Struct, doccomment: Token) -> None:
 		super().__init__(token, doccomment)
 		self.identifier = identifier
 		self.value = value
@@ -119,6 +120,7 @@ class Value(AstNode):
 		self.direct_table = direct_table
 		self.direct_union = direct_union
 		self.direct_enum = direct_enum
+		self.direct_struct = direct_struct
 		self.has_offset = 0
 		self.has_bit = 0
 		self.bit = 0
@@ -184,6 +186,7 @@ class Parser:
 				direct_table: Table = None
 				direct_union: Union = None
 				direct_enum: Enum = None
+				direct_struct: Struct = None
 				while self.token.type in [TokenType.OPTIONAL, TokenType.LIST, TokenType.INPLACE]:
 					if self.token.type == TokenType.OPTIONAL:
 						optional = self.consume_token([TokenType.OPTIONAL])
@@ -197,7 +200,7 @@ class Parser:
 					TokenType.INT8, TokenType.INT16, TokenType.INT32, TokenType.INT64,
 					TokenType.UINT8, TokenType.UINT16, TokenType.UINT32, TokenType.UINT64,
 					TokenType.FLOAT32, TokenType.FLOAT64, TokenType.UNION, TokenType.TABLE,
-					TokenType.LBRACE, TokenType.ENUM])
+					TokenType.LBRACE, TokenType.ENUM, TokenType.STRUCT])
 				if type_.type == TokenType.LBRACE:
 					direct_table = Table(type_, None, None, self.parse_content(), doccomment)
 				else:
@@ -209,10 +212,12 @@ class Parser:
 						direct_table = Table(type_, None, id_, self.parse_content(), doccomment)
 					elif type_.type == TokenType.ENUM:
 						direct_enum = Enum(t, None, self.parse_enum(), doccomment)
+					elif type_.type == TokenType.STRUCT:
+						direct_struct = Struct(type_, None, self.parse_content(), doccomment)
 					if self.token.type == TokenType.EQUAL:
 						self.consume_token([TokenType.EQUAL])
 						value = self.consume_token([TokenType.TRUE, TokenType.FALSE, TokenType.NUMBER, TokenType.IDENTIFIER])
-				members.append(Value(colon, t, value, type_, optional, list_, inplace, direct_table, direct_union, direct_enum, doccomment))
+				members.append(Value(colon, t, value, type_, optional, list_, inplace, direct_table, direct_union, direct_enum, direct_struct, doccomment))
 				doccomment = None
 			else:
 				assert(False)
@@ -232,7 +237,7 @@ class Parser:
 				doccomment2 = self.token
 			elif self.token.type == TokenType.IDENTIFIER:
 				ident = self.consume_token([TokenType.IDENTIFIER])
-				values.append(Value(ident, ident, None, None, None, None, None, None, None, None, doccomment))
+				values.append(Value(ident, ident, None, None, None, None, None, None, None, None, None, doccomment))
 				doccomment = None
 				if self.token.type in [TokenType.COMMA, TokenType.SEMICOLON]:
 					self.next_token()

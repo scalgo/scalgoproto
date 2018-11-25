@@ -485,6 +485,7 @@ class Generator:
 			if value.direct_table: self.generate_table(value.direct_table)
 			if value.direct_union: self.visit_union(value.direct_union)
 			if value.direct_enum: self.generate_enum(value.direct_enum)
+			if value.direct_struct: self.generate_struct(value.direct_struct)
 
 	def generate_table(self, table:Table) -> None:
 		# Recursively generate direct contained members
@@ -492,6 +493,7 @@ class Generator:
 			if value.direct_table: self.generate_table(value.direct_table)
 			if value.direct_union: self.visit_union(value.direct_union)
 			if value.direct_enum: self.generate_enum(value.direct_enum)
+			if value.direct_struct: self.generate_struct(value.direct_struct)
 
 		self.output_doc(table)
 		self.o("class %sIn: public scalgoproto::In {"%table.name)
@@ -521,9 +523,13 @@ class Generator:
 		self.o("")
 
 	def generate_struct(self, node:Struct) -> None:
-		name = self.value(node.identifier)
+		# Recursively generate direct contained members
+		for value in node.members:
+			if value.direct_enum: self.generate_enum(value.direct_enum)
+			if value.direct_struct: self.generate_struct(value.direct_struct)
+
 		self.o("#pragma pack(push, 1)")
-		self.o("struct %s {"%name)
+		self.o("struct %s {"%node.name)
 		for v in node.members:
 			assert isinstance(v, Value)
 			typeName = ""
@@ -538,12 +544,13 @@ class Generator:
 			elif v.type_.type == TokenType.FLOAT32: typeName = "float"
 			elif v.type_.type == TokenType.FLOAT64: typeName = "double"
 			elif v.type_.type == TokenType.BOOL: typeName = "bool"
-			elif v.type_.type == TokenType.IDENTIFIER: typeName = self.value(v.type_)
+			elif v.struct: typeName = v.struct.name
+			elif v.enum: typeName = v.enum.name
 			else: assert(False)
 			self.o("\t%s %s;"%(typeName, self.value(v.identifier)))
 		self.o("};")
 		self.o("#pragma pack(pop)")
-		self.o("namespace scalgoproto {template <> struct MetaMagic<%s> {using t=PodTag;};}"%name)
+		self.o("namespace scalgoproto {template <> struct MetaMagic<%s> {using t=PodTag;};}"%node.name)
 		self.o()
 
 	def generate_enum(self, node:Enum):

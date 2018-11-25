@@ -219,5 +219,17 @@ table Complex2 @76AB8115 {
 	hat: inplace table {
 		id: Int16;
 	};
+	l: list struct {
+		a: Int16;
+		b: Bool;
+	}
+	s: struct {
+		x: enum {
+			p
+		};
+		y : struct {
+			z: UInt8;
+		}
+	}
 }
 

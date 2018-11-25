@@ -246,7 +246,7 @@ class Generator:
 		self.output_doc(node, "\t\t")
 		if node.optional:
 			self.o("\t\tassert self.has_%s"%uname)
-		self.o("\t\treturn %s._read(self._reader, self._offset+%d) if self._offset < self._size else %s()"%(node.struct.name, node.offset, node.struct.name))
+		self.o("\t\treturn %s._read(self._reader, self._offset+%d) if %d < self._size else %s()"%(node.struct.name, node.offset, node.offset, node.struct.name))
 		self.o("\t")
 
 	def generate_struct_out(self, node:Value, uname:str) -> None:
@@ -510,6 +510,7 @@ class Generator:
 			if value.direct_table: self.generate_table(value.direct_table)
 			if value.direct_union: self.visit_union(value.direct_union)
 			if value.direct_enum: self.generate_enum(value.direct_enum)
+			if value.direct_struct: self.generate_struct(value.direct_struct)
 
 	def generate_table(self, table:Table) -> None:
 		# Recursively generate direct contained members
@@ -517,6 +518,7 @@ class Generator:
 			if value.direct_table: self.generate_table(value.direct_table)
 			if value.direct_union: self.visit_union(value.direct_union)
 			if value.direct_enum: self.generate_enum(value.direct_enum)
+			if value.direct_struct: self.generate_struct(value.direct_struct)
 
 		# Generate table reader
 		self.o("class %sIn(scalgoproto.TableIn):"%table.name)
@@ -543,18 +545,22 @@ class Generator:
 		self.o("")
 
 	def generate_struct(self, node:Struct) -> None:
-		name = self.value(node.identifier)
-		self.o("class %s(scalgoproto.StructType):"%name)
-		self.o("\t_WIDTH: typing_.ClassVar[int] = %d"%node.bytes)
+		# Recursively generate direct contained members
+		for value in node.members:
+			if value.direct_enum: self.generate_enum(value.direct_enum)
+			if value.direct_struct: self.generate_struct(value.direct_struct)
+
+		self.o("class %s(scalgoproto.StructType):"%node.name)
 		init = []
 		copy = []
 		write = []
 		read = []
+		slots = []
 		for v in node.members:
 			thing = ('','', '', 0, 0, "")
-			n = self.value(v.identifier)
-			tn = self.value(v.type_)
+			n = snake(self.value(v.identifier))
 			copy.append("self.%s = %s"%(n, n))
+			slots.append("'%s'"%n)
 			if v.type_.type in typeMap:
 				ti = typeMap[v.type_.type]
 				if v.type_.type in (TokenType.FLOAT32 , TokenType.FLOAT64):
@@ -565,26 +571,28 @@ class Generator:
 					init.append("%s: %s = 0"%(n, ti.p))
 				write.append("writer._data[offset+%d:offset+%d] = struct.pack('<%s', ins.%s)"%(v.offset, v.offset+ti.w, ti.s, n))
 				read.append("struct.unpack('<%s', reader._data[offset+%d:offset+%d])[0]"%(ti.s, v.offset, v.offset+ti.w))
-			elif v.type_.type == TokenType.IDENTIFIER and v.enum:
-				init.append("%s: %s = %s(0)"%(n, tn, tn))
+			elif v.enum:
+				init.append("%s: %s = %s(0)"%(n, v.enum.name, v.enum.name))
 				write.append("writer._data[offset+%d] = int(ins.%s)"%(v.offset, n))
-				read.append("%s(reader._data[offset+%d])"%(tn, v.offset))
-			elif v.type_.type == TokenType.IDENTIFIER and v.struct:
-				init.append("%s: %s = %s()"%(n, tn, tn))
-				write.append("%s._write(writer, offset+%d, ins.%s)"%(tn, v.offset, n))
-				read.append("%s._read(reader, offset+%d)"%(tn, v.offset))
+				read.append("%s(reader._data[offset+%d])"%(v.enum.name, v.offset))
+			elif v.struct:
+				init.append("%s: %s = %s()"%(n, v.struct.name, v.struct.name))
+				write.append("%s._write(writer, offset+%d, ins.%s)"%(v.struct.name, v.offset, n))
+				read.append("%s._read(reader, offset+%d)"%(v.struct.name, v.offset))
 			else:
 				assert(False)
+		self.o("\t__slots__ = [%s]"%",".join(slots))
+		self.o("\t_WIDTH: typing_.ClassVar[int] = %d"%node.bytes)
 		self.o("\tdef __init__(self, %s) -> None:"%(", ".join(init)))
 		for line in copy:
 			self.o("\t\t%s"%line)
 		self.o("\t@staticmethod")
-		self.o("\tdef _write(writer: scalgoproto.Writer, offset:int, ins: '%s') -> None:"%name)
+		self.o("\tdef _write(writer: scalgoproto.Writer, offset:int, ins: '%s') -> None:"%node.name)
 		for line in write:
 			self.o("\t\t%s"%line)
 		self.o("\t@staticmethod")
-		self.o("\tdef _read(reader: scalgoproto.Reader, offset:int) -> '%s':"%name)
-		self.o("\t\treturn %s("%name)
+		self.o("\tdef _read(reader: scalgoproto.Reader, offset:int) -> '%s':"%node.name)
+		self.o("\t\treturn %s("%node.name)
 		for line in read:
 			self.o("\t\t\t%s,"%line)
 		self.o("\t\t)")
