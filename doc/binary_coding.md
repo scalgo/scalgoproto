@@ -1,3 +1,4 @@
+# Binary coding
 The following describes the binary encoding used by scalgoproto.
 
 ### Basic types
