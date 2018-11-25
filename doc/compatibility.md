@@ -30,6 +30,11 @@ This is supported if and only if the modifications are in the list below:
 
     You may reorder structs, tabels, enums and unions in the top level of a schema. The order is not used in the binary coding.
 
+* Move direct entity to the top level, or make top level entity direct.
+
+    You may make turn a direct table, struct, enum or union into a named top level entity. 
+    You may turn a named top level table, strut, enum or union into a direct entity.
+   
 * Add new table, struct, enum or union
 
     You are allowed to add a new table, struct, enum or union to a schema. This does not affect the encoding of existing items.
