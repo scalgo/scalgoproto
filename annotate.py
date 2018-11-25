@@ -392,7 +392,7 @@ class Annotater:
 				self.context = "tabel %s"%self.value(node.identifier)
 				name = self.validate_uname(node.identifier)
 				node.name = name
-				node.magic = int(self.value(node.id_)[1:], 16)
+				node.magic = int(self.value(node.id_)[1:], 16) if node.id_ else 0
 				node.default = self.visit_content(name, node.members, ContentType.TABLE)
 				self.tabels[name] = node
 				print("table %s of size >= %d"%(name, len(node.default)+8), file=sys.stderr)

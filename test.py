@@ -3,7 +3,7 @@
 Test that everything works
 """
 
-import subprocess, sys
+import subprocess, sys, tempfile
 from typing import Callable 
 
 
@@ -46,8 +46,43 @@ def runTest(name:str, func: Callable[[],bool]) -> bool:
 		print("FAILURE")
 		failures.append(name)
 		return False
+
+def runNeg(name:str, base: str, bag:str, god:str) -> None:
+	l = 80 - len(name) - 4
+	print("%s> %s <%s"%("="*(l//2 ), name, "="*(l - l//2)))
+	with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as f:
+		f.write(base%bad)
+		f.flush()
+		code = subprocess.call(["python3", "scalgoproto.py", "validate", f.name])
+		if code == 0:
+			print("FAILURE1")
+			failures.append(name)
+			return
+	with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as f:
+		f.write(base%good)
+		f.flush()
+		code = subprocess.call(["python3", "scalgoproto.py", "validate", f.name])
+		if code != 0:
+			print("FAILURE2")
+			failures.append(name)
+			return
+	print("SUCCESS")
 		
 if __name__ == '__main__':
+	# Test names
+	for (bad, good) in ( ("monkey", "Monkey"), ("Monkey_Cat", "MonkeyCat")):
+		runNeg("bad table name %s"%bad, "table %s @8908828A {}", bad, good)
+	for (bad, good) in ( ("Cat", "cat"), ("type", "myType"), ("cat_dog", "catDog")):
+		runNeg("bad table member name %s"%bad, "table Monkey @8908828A {%s : UInt32}", bad, good)
+	# Test table types
+	for (bad, good) in ( ("Int", "Int32"), ("int32", "Int32"), ("bool", "Bool"), ("bytes", "Bytes"), ("text", "Text"), ("String", "Text")):
+		runNeg("bad table member type %s"%bad, "table Monkey @8908828A {a: %s}", bad, good)
+
+	# Test struct types
+	for (bad, good) in ( ("optional UInt32", "UInt32"), ("UInt64 = 7", "UInt64"), ("list Bool", "Bool"), ("Bytes", "UInt8"), ("Text", "UInt16"), ("union {}", "Float32")):
+		runNeg("bad struct member type %s"%bad, "struct Monkey {a: %s}", bad, good)
+
+
 	runTest("validate base", lambda: runValidate("test/base.spr"))
 	if runTest("cpp setup", lambda: runCppSetup("test/base.spr", "test/cpp.cc")):
 		runTest("cpp out default simple", lambda: runCpp("out_default", "test/simple_default.bin"))
