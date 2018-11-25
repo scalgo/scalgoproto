@@ -5,15 +5,15 @@ Main executable
 from parser import Parser, ParseError
 import argparse
 import validate
-import cpp
-import py
+import cpp_generator
+import python_generator
 import magic
 import sys
 parser = argparse.ArgumentParser(description='Process schema.')
 subparsers = parser.add_subparsers(help='Subcommand to run')
 validate.setup(subparsers)
 magic.setup(subparsers)
-cpp.setup(subparsers)
-py.setup(subparsers)
+cpp_generator.setup(subparsers)
+python_generator.setup(subparsers)
 args = parser.parse_args()
 sys.exit(args.func(args))

@@ -10,12 +10,12 @@ from typing import Callable
 failures=[]
 
 def runValidate(schema:str, fail:bool=False)->bool:
-	code = subprocess.call(["python3", "scalgoproto.py", "validate", schema])
+	code = subprocess.call(["python3", "scalgoproto", "validate", schema])
 	return fail == (code != 0)
 
 def runCppSetup(schema: str, cpp: str) -> bool:
-	subprocess.check_call(["python3", "scalgoproto.py", "cpp", schema, "tmp/test.hh"])
-	subprocess.check_call(["g++", "-ggdb", "-std=c++17", "-Wall", "-Wextra", "-I", "tmp", "-I", ".", cpp, "-o", "tmp/bin"])
+	subprocess.check_call(["python3", "scalgoproto", "cpp", schema, "tmp/test.hh"])
+	subprocess.check_call(["g++", "-ggdb", "-std=c++17", "-Wall", "-Wextra", "-I", "tmp", "-I", "lib/cpp", cpp, "-o", "tmp/bin"])
 	return True
 
 def runCpp(name:str, bin:str) -> bool:
@@ -23,7 +23,7 @@ def runCpp(name:str, bin:str) -> bool:
 	return True
 
 def runPySetup(schema: str) -> bool:
-	subprocess.check_call(["python3", "scalgoproto.py", "py", schema, "tmp/base.py"])
+	subprocess.check_call(["python3", "scalgoproto", "py", schema, "tmp/base.py"])
 	return True
 
 
@@ -53,7 +53,7 @@ def runNeg(name:str, base: str, bad:str, good:str) -> None:
 	with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as f:
 		f.write(base%bad)
 		f.flush()
-		code = subprocess.call(["python3", "scalgoproto.py", "validate", f.name])
+		code = subprocess.call(["python3", "scalgoproto", "validate", f.name])
 		if code == 0:
 			print("FAILURE1")
 			failures.append(name)
@@ -61,7 +61,7 @@ def runNeg(name:str, base: str, bad:str, good:str) -> None:
 	with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as f:
 		f.write(base%good)
 		f.flush()
-		code = subprocess.call(["python3", "scalgoproto.py", "validate", f.name])
+		code = subprocess.call(["python3", "scalgoproto", "validate", f.name])
 		if code != 0:
 			print("FAILURE2")
 			failures.append(name)
