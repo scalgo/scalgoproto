@@ -45,8 +45,8 @@ Any other change to a schema **will break** cross compatibly. In paticular the f
 * Do **not** add a new member in the middle of a table, union or enum.
 * Do **not** reorder members in structs, enums, tabels or unions.
 * Do **not** change the type of any member in structs, enums, tabels or unions.
-* Do **not** toggle the flag on any none float member.
-* Do **not** toggle the inline flag on any member.
+* Do **not** toggle the flag *optional* on any none float member.
+* Do **not** toggle the flag *inplace* on any member.
 * Do **not** change the *magic* on a table.
 
 When making a breaking change to a table it is advised to change its *magic* number to error out early with a reasonable exception, when reading a new message with an old schema or vice versa.
