@@ -14,16 +14,16 @@ from util import cescape, ucamel, snake
 TypeInfo = NamedTuple("TypeInfo", [("n",str), ("p",str),("s",str),("w",int)])
 
 typeMap: Dict[TokenType, TypeInfo] = {
-	TokenType.INT8: TypeInfo("int8", "int", "b", 1),
-	TokenType.INT16: TypeInfo("int16", "int", "h", 2),
-	TokenType.INT32: TypeInfo("int32", "int", "i", 4),
-	TokenType.INT64: TypeInfo("int64", "int", "q", 8),
-	TokenType.UINT8: TypeInfo("uint8", "int", "B", 1),
-	TokenType.UINT16: TypeInfo("uint16", "int", "H", 2),
-	TokenType.UINT32: TypeInfo("uint32", "int", "I", 4),
-	TokenType.UINT64: TypeInfo("uint64", "int", "Q", 8),
-	TokenType.FLOAT32: TypeInfo("float32", "float", "f", 4),
-	TokenType.FLOAT64: TypeInfo("float64", "float", "d", 8),
+	TokenType.I8: TypeInfo("int8", "int", "b", 1),
+	TokenType.I16: TypeInfo("int16", "int", "h", 2),
+	TokenType.I32: TypeInfo("int32", "int", "i", 4),
+	TokenType.I64: TypeInfo("int64", "int", "q", 8),
+	TokenType.U8: TypeInfo("uint8", "int", "B", 1),
+	TokenType.U16: TypeInfo("uint16", "int", "H", 2),
+	TokenType.UI32: TypeInfo("uint32", "int", "I", 4),
+	TokenType.UI64: TypeInfo("uint64", "int", "Q", 8),
+	TokenType.F32: TypeInfo("float32", "float", "f", 4),
+	TokenType.F64: TypeInfo("float64", "float", "d", 8),
 	TokenType.BOOL: TypeInfo("bool", "bool", "?", 1),
 }
 
@@ -55,7 +55,7 @@ class Generator:
 	def in_lish_help(self, node:Value, os:str) -> Tuple[str, str]:
 		if node.type_.type == TokenType.BOOL:
 			return ("bool", "\t\treturn self._reader._get_bool_list(%s)"%(os))
-		elif node.type_.type in (TokenType.FLOAT32, TokenType.FLOAT64):
+		elif node.type_.type in (TokenType.F32, TokenType.F64):
 			ti = typeMap[node.type_.type]
 			return (ti.p, "\t\treturn self._reader._get_float_list('%s', %d, %s)"%(ti.s, ti.w, os))
 		elif node.type_.type in typeMap:
@@ -194,7 +194,7 @@ class Generator:
 		ti = typeMap[node.type_.type]
 		if node.optional:
 			self.o("\t@property")
-			if node.type_.type in (TokenType.FLOAT32, TokenType.FLOAT64):
+			if node.type_.type in (TokenType.F32, TokenType.F64):
 				self.o("\tdef has_%s(self) -> bool: return not math_.isnan(self._get_%s(%d, math_.nan))"%(uname, ti.n, node.offset))
 			else:
 				self.o("\tdef has_%s(self) -> bool: return self._get_bit(%d, %s, 0)"%(uname, node.has_offset, node.has_bit))
@@ -212,7 +212,7 @@ class Generator:
 		self.o("\t@scalgoproto.Adder")
 		self.o("\tdef %s(self, value: %s) -> None:"%(uname, ti.p))
 		self.output_doc(node, "\t\t")
-		if node.optional and node.type_.type not in (TokenType.FLOAT32, TokenType.FLOAT64):
+		if node.optional and node.type_.type not in (TokenType.F32, TokenType.F64):
 			self.o("\t\tself._set_bit(%d, %d)"%(node.has_offset, node.has_bit))
 		self.o("\t\tself._set_%s(%d, value)"%(ti.n, node.offset))
 		self.o("\t")
@@ -563,7 +563,7 @@ class Generator:
 			slots.append("'%s'"%n)
 			if v.type_.type in typeMap:
 				ti = typeMap[v.type_.type]
-				if v.type_.type in (TokenType.FLOAT32 , TokenType.FLOAT64):
+				if v.type_.type in (TokenType.F32 , TokenType.F64):
 					init.append("%s: %s = 0.0"%(n, ti.p))
 				elif v.type_.type == TokenType.BOOL:
 					init.append("%s: %s = False"%(n, ti.p))

@@ -39,9 +39,9 @@ This is supported if and only if the modifications are in the list below:
 
     You are allowed to add a new table, struct, enum or union to a schema. This does not affect the encoding of existing items.
 
-* Toggle the optional flag on Float32 and Float64
+* Toggle the optional flag on F32 and F64
 
-    For float 32 and float 64 you may add or remove the optional flag. For Float32 and Float64 is optional is encoded as NaN. 
+    For float 32 and float 64 you may add or remove the optional flag. For F32 and F64 is optional is encoded as NaN. 
     So removing an optional flag on a float will case a unset float to be read as NaN.
     Adding an optional flag on a float will case it to be read as unset if it happened to have the value NaN.
 

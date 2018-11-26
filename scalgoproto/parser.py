@@ -197,9 +197,9 @@ class Parser:
 				type_ = self.token
 				self.check_token(self.token,[
 					TokenType.BOOL, TokenType.TEXT, TokenType.IDENTIFIER, TokenType.BYTES,
-					TokenType.INT8, TokenType.INT16, TokenType.INT32, TokenType.INT64,
-					TokenType.UINT8, TokenType.UINT16, TokenType.UINT32, TokenType.UINT64,
-					TokenType.FLOAT32, TokenType.FLOAT64, TokenType.UNION, TokenType.TABLE,
+					TokenType.I8, TokenType.I16, TokenType.I32, TokenType.I64,
+					TokenType.U8, TokenType.U16, TokenType.UI32, TokenType.UI64,
+					TokenType.F32, TokenType.F64, TokenType.UNION, TokenType.TABLE,
 					TokenType.LBRACE, TokenType.ENUM, TokenType.STRUCT])
 				if type_.type == TokenType.LBRACE:
 					direct_table = Table(type_, None, None, self.parse_content(), doccomment)

@@ -8,8 +8,8 @@ enum MyEnum {
  * Simple struct used for testing
  */
 struct MyStruct {
-	x: UInt32;
-	y: Float32;
+	x: U32;
+	y: F32;
 	z: Bool;
 }
 
@@ -17,16 +17,16 @@ struct FullStruct {
 	e: MyEnum;
 	s: MyStruct;
 	b: Bool;
-	u8: UInt8;
-	u16: UInt16;
-	u32: UInt32;
-	u64: UInt64;
-	i8: Int8;
-	i16: Int16;
-	i32: Int32;
-	i64: Int64;
-	f: Float32;
-	d: Float64;
+	u8: U8;
+	u16: U16;
+	u32: U32;
+	u64: U64;
+	i8: I8;
+	i16: I16;
+	i32: I32;
+	i64: I64;
+	f: F32;
+	d: F64;
 }
 
 /**
@@ -39,47 +39,47 @@ table Simple @F0606B0B {
 	e: MyEnum;
 	s: FullStruct;
 	b: Bool;
-	u8: UInt8 = 2;
-	u16: UInt16 = 3;
-	u32: UInt32 = 4;
-	u64: UInt64 = 5;
-	i8: Int8 = 6;
-	i16: Int16 = 7;
-	i32: Int32 = 8;
-	i64: Int64 = 9;
-	f: Float32 = 10;
-	d: Float64 = 11;
+	u8: U8 = 2;
+	u16: U16 = 3;
+	u32: U32 = 4;
+	u64: U64 = 5;
+	i8: I8 = 6;
+	i16: I16 = 7;
+	i32: I32 = 8;
+	i64: I64 = 9;
+	f: F32 = 10;
+	d: F64 = 11;
 
 	os: optional MyStruct;
 	ob: optional Bool;
-	ou8: optional UInt8;
-	ou16: optional UInt16;
-	ou32: optional UInt32;
-	ou64: optional UInt64;
-	oi8: optional Int8;
-	oi16: optional Int16;
-	oi32: optional Int32;
-	oi64: optional Int64;
-	of: optional Float32;
-	od: optional Float64;
+	ou8: optional U8;
+	ou16: optional U16;
+	ou32: optional U32;
+	ou64: optional U64;
+	oi8: optional I8;
+	oi16: optional I16;
+	oi32: optional I32;
+	oi64: optional I64;
+	of: optional F32;
+	od: optional F64;
 
 	ne: MyEnum;
 	ns: optional MyStruct;
 	nb: optional Bool;
-	nu8: optional UInt8;
-	nu16: optional UInt16;
-	nu32: optional UInt32;
-	nu64: optional UInt64;
-	ni8: optional Int8;
-	ni16: optional Int16;
-	ni32: optional Int32;
-	ni64: optional Int64;
-	nf: optional Float32;
-	nd: optional Float64;
+	nu8: optional U8;
+	nu16: optional U16;
+	nu32: optional U32;
+	nu64: optional U64;
+	ni8: optional I8;
+	ni16: optional I16;
+	ni32: optional I32;
+	ni64: optional I64;
+	nf: optional F32;
+	nd: optional F64;
 }
 
 table Member @836DE498 {
-	id: Int16;
+	id: I16;
 }
 
 table Complex @CCDD589C {
@@ -89,36 +89,36 @@ table Complex @CCDD589C {
 	myBytes: Bytes;
 	ntext: Text;
 	nbytes: Bytes;
-	intList: list Int32;
-	nintList: list Int32;
+	intList: list I32;
+	nintList: list I32;
 	enumList: list MyEnum;
 	structList: list MyStruct;
 	textList: list Text;
 	bytesList: list Bytes;
 	memberList: list Member;
-	f32list: list Float32;
-	f64list: list Float64;
-	u8list: list UInt8;
+	f32list: list F32;
+	f64list: list F64;
+	u8list: list U8;
 	blist: list Bool;
 }
 
 table VLList @793045DD {
-	id: Int32;
-	l: inplace list Int32;
+	id: I32;
+	l: inplace list I32;
 }
 
 table VLText @DC784D79 {
-	id: Int32;
+	id: I32;
 	t: inplace Text;
 }
 
 table VLBytes @259A2E79 {
-	id: Int32;
+	id: I32;
 	b: inplace Bytes;
 }
 
 table VLUnion @944099A8 {
-	id: Int32;
+	id: I32;
 	u: inplace union {
 		monkey {
 			name: Text;
@@ -137,54 +137,54 @@ table VLRoot @971A3362 {
 }
 
 table Gen1 @B4957DF9 {
-	aa: Int32;
+	aa: I32;
 }
 
 table Gen2 @B4957DF9 {
-	aa: Int32;
-	bb: Int32 = 42;
+	aa: I32;
+	bb: I32 = 42;
 	u : inplace union {
 		 monkey {},
-		cake {v:Int32},
+		cake {v:I32},
 	}
 }
 
 table Gen3 @B4957DF9 {
-	aa: Int32;
-	bb: Int32 = 42;
+	aa: I32;
+	bb: I32 = 42;
 
 	u: inplace union {
 		 monkey {},
-		 cake {v:Int32},
+		 cake {v:I32},
 		 bat {}
 	}
 
 	e: MyEnum = c;
 	s: MyStruct;
 	b: Bool;
-	u8: UInt8 = 2;
-	u16: UInt16 = 3;
-	u32: UInt32 = 4;
-	u64: UInt64 = 5;
-	i8: Int8 = 6;
-	i16: Int16 = 7;
-	i32: Int32 = 8;
-	i64: Int64 = 9;
-	f: Float32 = 10;
-	d: Float64 = 11;
+	u8: U8 = 2;
+	u16: U16 = 3;
+	u32: U32 = 4;
+	u64: U64 = 5;
+	i8: I8 = 6;
+	i16: I16 = 7;
+	i32: I32 = 8;
+	i64: I64 = 9;
+	f: F32 = 10;
+	d: F64 = 11;
 
 	os: optional MyStruct;
 	ob: optional Bool;
-	ou8: optional UInt8;
-	ou16: optional UInt16;
-	ou32: optional UInt32;
-	ou64: optional UInt64;
-	oi8: optional Int8;
-	oi16: optional Int16;
-	oi32: optional Int32;
-	oi64: optional Int64;
-	of: optional Float32;
-	od: optional Float64;
+	ou8: optional U8;
+	ou16: optional U16;
+	ou32: optional U32;
+	ou64: optional U64;
+	oi8: optional I8;
+	oi16: optional I16;
+	oi32: optional I32;
+	oi64: optional I64;
+	of: optional F32;
+	od: optional F64;
 
 	member: Member;
 	nmember: Member;
@@ -192,8 +192,8 @@ table Gen3 @B4957DF9 {
 	mbytes: Bytes;
 	ntext: Text;
 	nbytes: Bytes;
-	intList: list Int32;
-	nintList: list Int32;
+	intList: list I32;
+	nintList: list I32;
 	enumList: list MyEnum;
 	structList: list MyStruct;
 	textList: list Text;
@@ -217,10 +217,10 @@ table Complex2 @76AB8115 {
 		a: table @DBD93EF0 {};
 	}
 	hat: inplace table {
-		id: Int16;
+		id: I16;
 	};
 	l: list struct {
-		a: Int16;
+		a: I16;
 		b: Bool;
 	}
 	s: struct {
@@ -228,7 +228,7 @@ table Complex2 @76AB8115 {
 			p
 		};
 		y : struct {
-			z: UInt8;
+			z: U8;
 		}
 	}
 }

@@ -3,7 +3,7 @@
 Test that everything works
 """
 
-import subprocess, sys, tempfile
+import subprocess, sys, tempfile, os
 from typing import Callable 
 
 
@@ -69,17 +69,20 @@ def runNeg(name:str, base: str, bad:str, good:str) -> None:
 	print("SUCCESS")
 
 def main():
+	if not os.path.isdir('tmp'):
+		os.mkdir("tmp")
+
 	# Test names
 	for (bad, good) in ( ("monkey", "Monkey"), ("Monkey_Cat", "MonkeyCat")):
 		runNeg("bad table name %s"%bad, "table %s @8908828A {}", bad, good)
 	for (bad, good) in ( ("Cat", "cat"), ("type", "myType"), ("cat_dog", "catDog")):
-		runNeg("bad table member name %s"%bad, "table Monkey @8908828A {%s : UInt32}", bad, good)
+		runNeg("bad table member name %s"%bad, "table Monkey @8908828A {%s : U32}", bad, good)
 	# Test table types
-	for (bad, good) in ( ("Int", "Int32"), ("int32", "Int32"), ("bool", "Bool"), ("bytes", "Bytes"), ("text", "Text"), ("String", "Text")):
+	for (bad, good) in ( ("Int", "I32"), ("int32", "I32"), ("bool", "Bool"), ("bytes", "Bytes"), ("text", "Text"), ("String", "Text")):
 		runNeg("bad table member type %s"%bad, "table Monkey @8908828A {a: %s}", bad, good)
 
 	# Test struct types
-	for (bad, good) in ( ("optional UInt32", "UInt32"), ("UInt64 = 7", "UInt64"), ("list Bool", "Bool"), ("Bytes", "UInt8"), ("Text", "UInt16"), ("union {}", "Float32")):
+	for (bad, good) in ( ("optional U32", "U32"), ("U64 = 7", "U64"), ("list Bool", "Bool"), ("Bytes", "U8"), ("Text", "U16"), ("union {}", "F32")):
 		runNeg("bad struct member type %s"%bad, "struct Monkey {a: %s}", bad, good)
 
 	# Test table id

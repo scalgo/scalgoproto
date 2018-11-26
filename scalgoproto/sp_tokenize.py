@@ -11,10 +11,10 @@ class TokenType(Enum):
 	EOF = 6
 	EQUAL = 7
 	FALSE = 8
-	INT16 = 9
-	INT32 = 10
-	INT64 = 11
-	INT8 = 12
+	I16 = 9
+	I32 = 10
+	I64 = 11
+	I8 = 12
 	LBRACE = 13
 	LIST = 14
 	NUMBER = 15
@@ -25,14 +25,14 @@ class TokenType(Enum):
 	TABLE = 23
 	TEXT = 24
 	TRUE = 25
-	UINT16 = 26
-	UINT32 = 27
-	UINT64 = 28
-	UINT8 = 29
+	U16 = 26
+	UI32 = 27
+	UI64 = 28
+	U8 = 29
 	UNION = 30
 	IDENTIFIER = 31
-	FLOAT32 = 32
-	FLOAT64 = 64
+	F32 = 32
+	F64 = 64
 	ID = 65
 	NAMESPACE = 66
 	COLONCOLON = 67
@@ -56,19 +56,19 @@ def tokenize(data:str) -> ty.Iterator[Token]:
 	keywords : ty.Dict[str, TokenType]= {
 		'Bool': TokenType.BOOL,
 		'Bytes': TokenType.BYTES,
-		'Float32': TokenType.FLOAT32,
-		'Float64': TokenType.FLOAT64, 
-		'Int16': TokenType.INT16,
-		'Int32': TokenType.INT32,
-		'Int64': TokenType.INT64,
-		'Int8': TokenType.INT8,
+		'F32': TokenType.F32,
+		'F64': TokenType.F64, 
+		'I16': TokenType.I16,
+		'I32': TokenType.I32,
+		'I64': TokenType.I64,
+		'I8': TokenType.I8,
 		'list': TokenType.LIST,
 		'optional': TokenType.OPTIONAL,
 		'Text': TokenType.TEXT,
-		'UInt16': TokenType.UINT16,
-		'UInt32': TokenType.UINT32,
-		'UInt64': TokenType.UINT64,
-		'UInt8': TokenType.UINT8,
+		'U16': TokenType.U16,
+		'U32': TokenType.UI32,
+		'U64': TokenType.UI64,
+		'U8': TokenType.U8,
 		'enum': TokenType.ENUM,
 		'false': TokenType.FALSE,
 		'struct': TokenType.STRUCT,

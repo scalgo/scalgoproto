@@ -182,8 +182,8 @@ class Annotater:
 				inplace = v
 
 			if v.optional and v.type_.type in (
-							TokenType.UINT8, TokenType.UINT16, TokenType.UINT32, TokenType.UINT64,
-							TokenType.INT8, TokenType.INT16, TokenType.INT32, TokenType.INT64,
+							TokenType.U8, TokenType.U16, TokenType.UI32, TokenType.UI64,
+							TokenType.I8, TokenType.I16, TokenType.I32, TokenType.I64,
 							TokenType.BOOL):
 				if bool_bit == 8:
 					bool_bit = 0
@@ -224,9 +224,9 @@ class Annotater:
 				v.bytes = 4
 				v.offset = bytes
 			elif t == ContentType.UNION and v.type_.type in (
-				TokenType.BOOL, TokenType.UINT8, TokenType.INT8, TokenType.UINT8, TokenType.INT8,
-				TokenType.UINT32, TokenType.INT32, TokenType.FLOAT32,
-				TokenType.UINT64, TokenType.INT64, TokenType.FLOAT64):
+				TokenType.BOOL, TokenType.U8, TokenType.I8, TokenType.U8, TokenType.I8,
+				TokenType.UI32, TokenType.I32, TokenType.F32,
+				TokenType.UI64, TokenType.I64, TokenType.F64):
 				self.error(v.type_, "Not allowed in unions")
 				v.bytes = 0
 				v.offset = bytes
@@ -239,13 +239,13 @@ class Annotater:
 				v.offset = bool_offset
 				v.bit = bool_bit
 				bool_bit += 1
-			elif v.type_.type in (TokenType.UINT8, TokenType.INT8, TokenType.BOOL):
+			elif v.type_.type in (TokenType.U8, TokenType.I8, TokenType.BOOL):
 				if v.inplace:
 					self.error(v.inplace, "Basic types may not be implace")
-				if v.type_.type == TokenType.UINT8:
+				if v.type_.type == TokenType.U8:
 					v.parsed_value = self.get_int(v.value, 0, 255, 0)
 					default.append(struct.pack("<B", v.parsed_value))
-				elif v.type_.type == TokenType.INT8:
+				elif v.type_.type == TokenType.I8:
 					v.parsed_value = self.get_int(v.value, -128, 127, 0)
 					default.append(struct.pack("<b", v.parsed_value))
 				elif v.type_.type == TokenType.BOOL:
@@ -254,45 +254,45 @@ class Annotater:
 					self.error(v.type_.type, "Internal error")
 				v.bytes = 1
 				v.offset = bytes
-			elif v.type_.type in (TokenType.UINT16, TokenType.INT16):
+			elif v.type_.type in (TokenType.U16, TokenType.I16):
 				if v.inplace:
 					self.error(v.inplace, "Basic types may not be implace")
-				if v.type_.type == TokenType.UINT16:
+				if v.type_.type == TokenType.U16:
 					v.parsed_value = self.get_int(v.value, 0, 2**16-1, 0)
 					default.append(struct.pack("<H", v.parsed_value))
-				elif v.type_.type == TokenType.INT16:
+				elif v.type_.type == TokenType.I16:
 					v.parsed_value = self.get_int(v.value, -2**15, 2**15-1, 0)
 					default.append(struct.pack("<h", v.parsed_value))
 				else:
 					self.error(v.type_.type, "Internal error")
 				v.bytes = 2
 				v.offset = bytes
-			elif v.type_.type in (TokenType.UINT32, TokenType.INT32, TokenType.FLOAT32):
+			elif v.type_.type in (TokenType.UI32, TokenType.I32, TokenType.F32):
 				if v.inplace:
 					self.error(v.inplace, "Basic types may not be implace")
-				if v.type_.type == TokenType.UINT32:
+				if v.type_.type == TokenType.UI32:
 					v.parsed_value = self.get_int(v.value, 0, 2**32-1, 0)
 					default.append(struct.pack("<I", v.parsed_value))
-				elif v.type_.type == TokenType.INT32:
+				elif v.type_.type == TokenType.I32:
 					v.parsed_value = self.get_int(v.value, -2**31, 2**31-1, 0)
 					default.append(struct.pack("<i", v.parsed_value))
-				elif v.type_.type == TokenType.FLOAT32:
+				elif v.type_.type == TokenType.F32:
 					v.parsed_value = self.get_float(v.value, float('nan') if v.optional else 0.0)
 					default.append(struct.pack("<f", v.parsed_value))
 				else:
 					self.error(v.type_.type, "Internal error")
 				v.bytes = 4
 				v.offset = bytes
-			elif v.type_.type in (TokenType.UINT64, TokenType.INT64, TokenType.FLOAT64):
+			elif v.type_.type in (TokenType.UI64, TokenType.I64, TokenType.F64):
 				if v.inplace:
 					self.error(v.inplace, "Basic types may not be implace")
-				if v.type_.type == TokenType.UINT64:
+				if v.type_.type == TokenType.UI64:
 					v.parsed_value = self.get_int(v.value, 0, 2**64-1, 0)
 					default.append(struct.pack("<Q", v.parsed_value))
-				elif v.type_.type == TokenType.INT64:
+				elif v.type_.type == TokenType.I64:
 					v.parsed_value = self.get_int(v.value, -2**64, 2**64-1, 0)
 					default.append(struct.pack("<q", v.parsed_value))
-				elif v.type_.type == TokenType.FLOAT64:
+				elif v.type_.type == TokenType.F64:
 					v.parsed_value = self.get_float(v.value, float('nan') if v.optional else 0.0)
 					default.append(struct.pack("<d", v.parsed_value))
 				else:
@@ -374,7 +374,7 @@ class Annotater:
 				elif v.value.type in (TokenType.TRUE, TokenType.FALSE):
 					self.error(v.value, "Booleans cannot have default values")
 				elif v.value.type == TokenType.NUMBER:
-					if v.type_.type not in (TokenType.UINT8, TokenType.UINT16, TokenType.UINT32, TokenType.UINT64, TokenType.INT8, TokenType.INT16, TokenType.INT32, TokenType.INT64,  TokenType.FLOAT32,  TokenType.FLOAT64):
+					if v.type_.type not in (TokenType.U8, TokenType.U16, TokenType.UI32, TokenType.UI64, TokenType.I8, TokenType.I16, TokenType.I32, TokenType.I64,  TokenType.F32,  TokenType.F64):
 						self.error(v.value, "Only allowed for number types")
 				elif v.value.type == TokenType.IDENTIFIER:
 					if not v.enum:

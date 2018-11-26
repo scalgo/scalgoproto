@@ -12,16 +12,16 @@ import math
 from util import ucamel, cescape, lcamel
 
 typeMap = {
-	TokenType.INT8: "std::int8_t",
-	TokenType.INT16: "std::int16_t",
-	TokenType.INT32: "std::int32_t",
-	TokenType.INT64: "std::int64_t",
-	TokenType.UINT8: "std::uint8_t",
-	TokenType.UINT16: "std::uint16_t",
-	TokenType.UINT32: "std::uint32_t",
-	TokenType.UINT64: "std::uint64_t",
-	TokenType.FLOAT32: "float",
-	TokenType.FLOAT64: "double",
+	TokenType.I8: "std::int8_t",
+	TokenType.I16: "std::int16_t",
+	TokenType.I32: "std::int32_t",
+	TokenType.I64: "std::int64_t",
+	TokenType.U8: "std::uint8_t",
+	TokenType.U16: "std::uint16_t",
+	TokenType.UI32: "std::uint32_t",
+	TokenType.UI64: "std::uint64_t",
+	TokenType.F32: "float",
+	TokenType.F64: "double",
 }
 
 class Generator:
@@ -180,7 +180,7 @@ class Generator:
 		typeName = typeMap[node.type_.type]
 		if node.optional:
 			self.o("\tbool has%s() const noexcept {"%( uname))
-			if node.type_.type in (TokenType.FLOAT32, TokenType.FLOAT64):
+			if node.type_.type in (TokenType.F32, TokenType.F64):
 				self.o("\t\treturn !std::isnan(getInner_<%s, %s>(std::numeric_limits<%s>::quiet_NaN()));"%(typeName, node.offset, typeName))
 			else:
 				self.o("\t\treturn getBit_<%d, %s, 0>();"%(node.has_offset, node.has_bit))
@@ -197,7 +197,7 @@ class Generator:
 		assert not node.inplace
 		typeName = typeMap[node.type_.type]
 		self.o("\tvoid add%s(%s value) noexcept {"%(uname, typeName))
-		if node.optional and node.type_.type not in (TokenType.FLOAT32, TokenType.FLOAT64):
+		if node.optional and node.type_.type not in (TokenType.F32, TokenType.F64):
 			self.o("\t\tsetBit_<%d, %d>();"%(node.has_offset, node.has_bit))
 		self.o("\t\tsetInner_<%s, %d>(value);"%(typeName, node.offset))
 		self.o("\t}")
@@ -533,16 +533,16 @@ class Generator:
 		for v in node.members:
 			assert isinstance(v, Value)
 			typeName = ""
-			if v.type_.type == TokenType.UINT8: typeName = "std::uint8_t"
-			elif v.type_.type == TokenType.UINT16: typeName = "std::uint16_t"
-			elif v.type_.type == TokenType.UINT32: typeName = "std::uint32_t"
-			elif v.type_.type == TokenType.UINT64: typeName = "std::uint64_t"
-			elif v.type_.type == TokenType.INT8: typeName = "std::int8_t"
-			elif v.type_.type == TokenType.INT16: typeName = "std::int16_t"
-			elif v.type_.type == TokenType.INT32: typeName = "std::int32_t"
-			elif v.type_.type == TokenType.INT64: typeName = "std::int64_t"
-			elif v.type_.type == TokenType.FLOAT32: typeName = "float"
-			elif v.type_.type == TokenType.FLOAT64: typeName = "double"
+			if v.type_.type == TokenType.U8: typeName = "std::uint8_t"
+			elif v.type_.type == TokenType.U16: typeName = "std::uint16_t"
+			elif v.type_.type == TokenType.UI32: typeName = "std::uint32_t"
+			elif v.type_.type == TokenType.UI64: typeName = "std::uint64_t"
+			elif v.type_.type == TokenType.I8: typeName = "std::int8_t"
+			elif v.type_.type == TokenType.I16: typeName = "std::int16_t"
+			elif v.type_.type == TokenType.I32: typeName = "std::int32_t"
+			elif v.type_.type == TokenType.I64: typeName = "std::int64_t"
+			elif v.type_.type == TokenType.F32: typeName = "float"
+			elif v.type_.type == TokenType.F64: typeName = "double"
 			elif v.type_.type == TokenType.BOOL: typeName = "bool"
 			elif v.struct: typeName = v.struct.name
 			elif v.enum: typeName = v.enum.name
