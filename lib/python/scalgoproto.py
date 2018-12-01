@@ -50,6 +50,20 @@ class ListIn(Sequence[B]):
 	def __getitem__(self, idx) -> B:
 		return self._getter(self._reader, self._offset, idx)
 
+class UnionIn(object):
+	__slots__ = ['_reader', '_type', '_offset', '_size']
+	def __init__(self, reader: 'Reader', type:int, offset:int, size:int=None):
+		"""Private constructor. Use the accessor methods on tables or the root method on Reader to get an instance"""
+		self._reader = reader
+		self._type = type
+		self._offset = offset
+		self._size = size
+
+	def _get_ptr(self, magic:int) -> Tuple[int,int]:
+		if self._size: return (self._offset, self._size)
+		return (self._offset + 8, self._reader._read_size(self._offset, magic))
+		
+
 class TableIn(object):
 	"""Base class for reading a table"""
 
@@ -74,31 +88,13 @@ class TableIn(object):
 	def _get_float32(self, o:int, d:float) -> float: return struct.unpack("<f", self._reader._data[self._offset+o:self._offset+o+4])[0] if o < self._size else d
 	def _get_float64(self, o:int, d:float) -> float: return struct.unpack("<d", self._reader._data[self._offset+o:self._offset+o+8])[0] if o < self._size else d
 	def _get_bit(self, o:int, b:int, d:bool) -> bool: return self._reader._data[self._offset+o] & (1 << b) != 0 if o < self._size else d
-	def _get_text(self, o:int) -> str:
+	def _get_ptr(self, o:int, magic:int) -> Tuple[int, int]:
 		off = self._get_uint32_f(o)
-		size = self._reader._read_size(off, _TEXT_MAGIC)
-		return self._reader._data[off+8: off+8+size].decode('utf-8')
-	def _get_bytes(self, o:int) -> bytes:
-		off = self._get_uint32_f(o)
-		size = self._reader._read_size(off, _BYTES_MAGIC)
-		return self._reader._data[off+8: off+8+size]
-	def _get_table(self, t:Type[TI], o:int) -> TI:
-		off = self._get_uint32_f(o)
-		size = self._reader._read_size(off, t._MAGIC)
-		return t(self._reader, off+8, size)
-	def _get_list(self, o:int) -> Tuple[int, int]:
-		off = self._get_uint32_f(o)
-		size = self._reader._read_size(off, _LIST_MAGIC)
+		size = self._reader._read_size(off, magic)
 		return (off+8, size)
-	def _get_vl_table(self, t:Type[TI], o:int) -> TI:
+	def _get_ptr_vl(self, o:int, magic:int) -> Tuple[int, int]:
 		size = self._get_uint32_f(o)
-		return t(self._reader, self._offset+self._size, size)
-	def _get_vl_text(self, o:int) -> str:
-		size = self._get_uint32_f(o)
-		return self._reader._data[self._offset+self._size:self._offset+self._size+size].decode("utf-8")
-	def _get_vl_bytes(self, o:int) -> str:
-		size = self._get_uint32_f(o)
-		return self._reader._data[self._offset+self._size:self._offset+self._size+size]
+		return (self._offset+self._size, size)
 
 class Reader(object):
 	"""Responsible for reading a message"""

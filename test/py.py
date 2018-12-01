@@ -405,18 +405,18 @@ def test_in_complex2(path:str) -> bool:
 	r = scalgoproto.Reader(read_in(path))
 
 	s = r.root(base.Complex2In)
-	if require(s.u1_is_member, True): return False
-	if require(s.u1_member.id, 42): return False
-	if require(s.u2_is_text, True): return False
-	if require(s.u2_text, "text"): return False
-	if require(s.u3_is_my_bytes, True): return False
-	if require(s.u3_my_bytes, b"bytes"): return False
-	if require(s.u4_is_enum_list, True): return False
-	l = s.u4_enum_list
+	if require(s.u1.is_member, True): return False
+	if require(s.u1.member.id, 42): return False
+	if require(s.u2.is_text, True): return False
+	if require(s.u2.text, "text"): return False
+	if require(s.u3.is_my_bytes, True): return False
+	if require(s.u3.my_bytes, b"bytes"): return False
+	if require(s.u4.is_enum_list, True): return False
+	l = s.u4.enum_list
 	if require(len(l), 2): return False
 	if require(l[0], base.NamedUnionEnumList.x): return False
 	if require(l[1], base.NamedUnionEnumList.z): return False
-	if require(s.u5_is_a, True): return False
+	if require(s.u5.is_a, True): return False
 	if require(s.has_hat, True): return False
 	if require(s.hat.id, 43): return False
 	if require(s.has_l, True): return False
@@ -469,15 +469,15 @@ def test_in_vl(path:str) -> bool:
 
 	if require(s.has_u, True): return False
 	u = s.u
-	if require(u.u_is_monkey, True): return False
-	monkey = u.u_monkey
+	if require(u.u.is_monkey, True): return False
+	monkey = u.u.monkey
 	if require(monkey.has_name, True): return False
 	if require(monkey.name, "nilson"): return False
 
 	if require(s.has_u2, True): return False
 	u2 = s.u2
-	if require(u2.u_is_text, True): return False
-	u2t = u2.u_text
+	if require(u2.u.is_text, True): return False
+	u2t = u2.u.text
 	if require(u2t.has_t, True): return False
 	if require(u2t.t, "foobar"): return False
 	
@@ -535,8 +535,8 @@ def test_in_extend2(path:str) -> bool:
 	s = r.root(base.Gen3In)
 	if require(s.aa, 80): return False
 	if require(s.bb, 81): return False
-	if require(s.u_is_cake, True): return False
-	if require(s.u_cake.v, 45): return False
+	if require(s.u.is_cake, True): return False
+	if require(s.u.cake.v, 45): return False
 	if require(s.e, base.MyEnum.c): return False
 	if require(s.s.x, 0): return False
 	if require(s.s.y, 0): return False
