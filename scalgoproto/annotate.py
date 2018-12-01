@@ -150,7 +150,7 @@ class Annotater:
 				ip = v.inplace != None if t == ContentType.TABLE else inplace_context
 				self.assign_magic(v.direct_table, not ip)
 				v.direct_table.default = self.visit_content(v.direct_table.name, v.direct_table.members, ContentType.TABLE, ip)
-
+				v.direct_table.bytes = len(v.direct_table.default)
 			if v.direct_union:
 				v.direct_union.name = name + ucamel(val)
 				self.visit_content(v.direct_union.name, v.direct_union.members, ContentType.UNION, v.inplace != None)
@@ -421,6 +421,7 @@ class Annotater:
 				node.name = name
 				self.assign_magic(node, True)
 				node.default = self.visit_content(name, node.members, ContentType.TABLE, False)
+				node.bytes = len(node.default)
 				self.tables[name] = node
 				print("table %s of size >= %d"%(name, len(node.default)+8), file=sys.stderr)
 			elif isinstance(node, Union):

@@ -189,8 +189,6 @@ class TableOut(object):
 	def _set_bytes(self, o:int, v:BytesOut) -> None: self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", v._offset-8)
 	def _set_list(self, o:int, v:"OutList") -> None: self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", v._offset-8)
 	def _get_uint16(self, o:int) -> int: return struct.unpack("<H", self._writer._data[self._offset+o:self._offset+o+2])[0]
-	def _construct_union_member(self, t:Type[TO])->TO:
-		return t(self._writer, False)
 	def _add_vl_text(self, o:int, t:str) -> None:
 		tt = t.encode('utf-8')
 		self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", len(tt))
@@ -203,6 +201,17 @@ class TableOut(object):
 		self._writer._write(t)
 	def _set_vl_list(self, o:int, size:int) -> None:
 		self._writer._data[self._offset+o:self._offset+o+4] = struct.pack("<I", size)
+
+class UnionOut(object):
+	__slots__ = ['_writer', '_offset', '_end']
+
+	def __init__(self, writer: 'Writer', offset:int, end:int) -> None:
+		self._writer = writer
+		self._offset = offset
+		self._end = end
+
+	def _set(self, idx:int, offset:int) -> None:
+		self._writer._data[self._offset:self._offset+6] = struct.pack("<HI", idx, offset)	
 
 class OutList:
 	_offset: int = 0
@@ -326,6 +335,16 @@ class Writer:
 		self._write(tt)
 		self._write(b"\0")
 		return TextOut(o)
+
+	def _add_vl_text(self, o:int, t:str) -> None:
+		tt = t.encode('utf-8')
+		self._writer._reserve(len(tt)+1)
+		self._writer._write(tt)
+		self._writer._write(b"\0")
+
+	def _add_vl_bytes(self, o:int, t:bytes) -> None:
+		self._writer._reserve(len(t))
+		self._writer._write(t)
 
 	def finalize(self, root: TableOut) -> bytes:
 		"""Return finalized message given root object"""

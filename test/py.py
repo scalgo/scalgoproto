@@ -386,11 +386,11 @@ def test_out_complex2(path:str) -> bool:
 	l2[0] = base.Complex2L(2, True)
 
 	r = w.construct_table(base.Complex2Out)
-	r.u1_member = m
-	r.u2_text = t
-	r.u3_my_bytes = b
-	r.u4_enum_list = l
-	r.u5_add_a()
+	r.u1.member = m
+	r.u2.text = t
+	r.u3.my_bytes = b
+	r.u4.enum_list = l
+	r.u5.add_a()
 
 	m2 = r.add_hat()
 	m2.id = 43
@@ -434,10 +434,10 @@ def test_out_vl(path:str) -> bool:
 	w = scalgoproto.Writer()
 	name = w.construct_text("nilson")
 	u = w.construct_table(base.VLUnionOut)
-	u.u_add_monkey().name = name
+	u.u.add_monkey().name = name
 
 	u2 = w.construct_table(base.VLUnionOut)
-	u2.u_add_text().t = "foobar"
+	u2.u.add_text().t = "foobar"
 
 	t = w.construct_table(base.VLTextOut)
 	t.id = 45
@@ -524,7 +524,7 @@ def test_out_extend2(path:str) -> bool:
 	root = w.construct_table(base.Gen2Out)
 	root.aa = 80
 	root.bb = 81
-	cake = root.u_add_cake()
+	cake = root.u.add_cake()
 	cake.v = 45
 	data = w.finalize(root)
 	return validate_out(data, path)
