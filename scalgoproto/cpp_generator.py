@@ -24,6 +24,9 @@ typeMap = {
 	TokenType.F64: "double",
 }
 
+def bs(v:bool):
+	return "true" if v else "false"
+
 class Generator:
 	out: TextIO = None
 
@@ -103,32 +106,32 @@ class Generator:
 		self.output_doc(node, "\t")
 		self.o("\tscalgoproto::ListIn<%s> get%s() const {"%(typeName, uname))
 		self.o("\t\tassert(has%s());"%uname)
-		if node.inplace: self.o("\t\treturn getVLList_<%s, %d>();"%(typeName, node.offset))
-		else: self.o("\t\treturn getList_<%s, %d>();"%(typeName, node.offset))
+		self.o("\t\treturn getObject_<scalgoproto::ListIn<%s> >(reader_, getPtr_<%s, scalgoproto::LISTMAGIC, %d, scalgoproto::ListAccess<%s>::mult>());"%(
+			typeName, bs(node.inplace), node.offset, typeName ))
 		self.o("\t}")
 		if rawType:
 			self.o("\t")
 			self.output_doc(node, "\t", [], ["\\note accessing this is undefined behaivour"])
 			self.o("\tstd::pair<const %s *, size_t> get%sRaw() const {"%(rawType, uname))
 			self.o("\t\tassert(has%s());"%uname)
-			if node.inplace: self.o("\t\treturn getVLListRaw_<%s, %d>();"%(rawType, node.offset))
-			else: self.o("\t\treturn getListRaw_<%s, %d>();"%(rawType, node.offset))
+			self.o("\t\treturn getListRaw_<%s>(getPtr_<%s, scalgoproto::LISTMAGIC, %d, scalgoproto::ListAccess<%s>::mult>());"%(
+				rawType, bs(node.inplace), node.offset, typeName ))
 			self.o("\t}")
 	
 	def generate_union_list_in(self, node: Value, member:Value, uname:str, uuname:str) -> None:
 		typeName, rawType = self.in_list_types(member)
 		self.o("\tscalgoproto::ListIn<%s> %sGet%s() const {"%(typeName, uname, uuname))
 		self.o("\t\tassert(%sIs%s());"%(uname, uuname))
-		if node.inplace: self.o("\t\treturn getVLList_<%s, %d>();"%(typeName, node.offset+2))
-		else: self.o("\t\treturn getList_<%s, %d>();"%(typeName, node.offset+2))
+		self.o("\t\treturn getObject_<scalgoproto::ListIn<%s> >(reader_, getPtr_<%s, scalgoproto::LISTMAGIC, %d, scalgoproto::ListAccess<%s>::mult>());"%(
+			typeName, bs(node.inplace), node.offset+2, typeName ))
 		self.o("\t}")
 		if rawType:
 			self.o("\t")
 			self.output_doc(node, "\t", [], ["\\note accessing this is undefined behaivour"])
 			self.o("\tstd::pair<const %s *, size_t> %sGet%sRaw() const {"%(rawType, uname, uuname))
 			self.o("\t\tassert(%sIs%s());"%(uname, uuname))
-			if node.inplace: self.o("\t\treturn getVLListRaw_<%s, %d>();"%(rawType, node.offset+2))
-			else: self.o("\t\treturn getListRaw_<%s, %d>();"%(rawType, node.offset+2))
+			self.o("\t\treturn getListRaw_<%s>(getPtr_<%s, scalgoproto::LISTMAGIC, %d, scalgoproto::ListAccess<%s>::mult>());"%(
+				rawType, bs(node.inplace), node.offset+2, typeName ))
 			self.o("\t}")
 		
 	def generate_list_out(self, node: Value, uname:str) -> None:
@@ -250,8 +253,8 @@ class Generator:
 		self.output_doc(node, "\t")
 		self.o("\t%sIn get%s() const {"%(node.table.name, uname))
 		self.o("\t\tassert(has%s());"%uname)
-		if node.inplace: self.o("\t\treturn getVLTable_<%sIn, %d>();"%(node.table.name, node.offset))
-		else: self.o("\t\treturn getTable_<%sIn, %d>();"%(node.table.name, node.offset))
+		self.o("\t\treturn getObject_<%sIn>(reader_, getPtr_<%s, %sIn::MAGIC, %d>());"%(
+			node.table.name, bs(node.inplace), node.table.name, node.offset))
 		self.o("\t}")
 
 	def generate_union_table_in(self, node: Value, member: Value, uname:str, uuname:str) -> None:
@@ -259,8 +262,8 @@ class Generator:
 			self.output_doc(node, "\t")
 			self.o("\t%sIn %sGet%s() const noexcept {"%(member.table.name, uname, uuname))
 			self.o("\t\tassert(%sIs%s());"%(uname, uuname))
-			if node.inplace: self.o("\t\treturn getVLTable_<%sIn, %d>();"%(member.table.name, node.offset+2))
-			else: self.o("\t\treturn getTable_<%sIn, %d>();"%(member.table.name, node.offset+2))
+			self.o("\t\treturn getObject_<%sIn>(reader_, getPtr_<%s, %sIn::MAGIC, %d>());"%(
+				member.table.name, bs(node.inplace), member.table.name, node.offset+2))
 			self.o("\t}")
 
 	def generate_table_out(self, node:Value, uname:str) -> None:
@@ -309,15 +312,13 @@ class Generator:
 		self.o("\t")
 		self.output_doc(node, "\t")
 		self.o("\tstd::string_view get%s() {"%(uname))
-		if node.inplace: self.o("\t\treturn getVLText_<%d>();"%(node.offset))
-		else: self.o("\t\treturn getText_<%d>();"%(node.offset))
+		self.o("\t\treturn getText_(reader_, getPtr_<%s, scalgoproto::TEXTMAGIC, %d,  1, 1>());"%(bs(node.inplace), node.offset))
 		self.o("\t}")
 	
 	def generate_union_text_in(self, node: Value, member: Value, uname:str, uuname:str) -> None:
 		self.output_doc(node, "\t")
 		self.o("\tstd::string_view %sGet%s() {"%(uname, uuname))
-		if node.inplace: self.o("\t\treturn getVLText_<%d>();"%(node.offset+2))
-		else: self.o("\t\treturn getText_<%d>();"%(node.offset+2))
+		self.o("\t\treturn getText_(reader_, getPtr_<%s, scalgoproto::TEXTMAGIC, %d, 1, 1>());"%(bs(node.inplace), node.offset+2))
 		self.o("\t}")
 
 	def generate_text_out(self, node:Value, uname:str) -> None:
@@ -347,15 +348,13 @@ class Generator:
 		self.o("\t")
 		self.output_doc(node, "\t")
 		self.o("\tstd::pair<const void*, size_t> get%s()  {"%(uname))
-		if node.inplace: self.o("\t\treturn getVLBytes_<%d>();"%(node.offset))
-		else: self.o("\t\treturn getBytes_<%d>();"%(node.offset))
+		self.o("\t\treturn getBytes_(getPtr_<%s, scalgoproto::BYTESMAGIC, %d>());"%(bs(node.inplace), node.offset))
 		self.o("\t}")
 
 	def generate_union_bytes_in(self, node: Value, member: Value, uname:str, uuname:str) -> None:
 		self.output_doc(node, "\t")
 		self.o("\tstd::pair<const void*, size_t> %sGet%s()  {"%(uname, uuname))
-		if node.inplace: self.o("\t\treturn getVLBytes_<%d>();"%(node.offset+2))
-		else: self.o("\t\treturn getBytes_<%d>();"%(node.offset+2))
+		self.o("\t\treturn getBytes_(getPtr_<%s, scalgoproto::BYTESMAGIC, %d>());"%(bs(node.inplace), node.offset+2))
 		self.o("\t}")
 
 	def generate_bytes_out(self, node:Value, uname:str) -> None:
@@ -496,14 +495,16 @@ class Generator:
 			if value.direct_struct: self.generate_struct(value.direct_struct)
 
 		self.output_doc(table)
-		self.o("class %sIn: public scalgoproto::In {"%table.name)
+		self.o("class %sIn: public scalgoproto::TableIn {"%table.name)
 		self.o("\tfriend class scalgoproto::In;")
+		self.o("\tfriend class scalgoproto::TableIn;")
 		self.o("\tfriend class scalgoproto::Reader;")
 		self.o("\ttemplate <typename, typename> friend class scalgoproto::ListAccessHelp;")
 		self.o("protected:")
-		self.o("\t%sIn(const scalgoproto::Reader & reader, const char * start, std::uint32_t size): scalgoproto::In(reader, start, size) {}"%table.name)
-		self.o("\tstatic uint32_t readSize_(const scalgoproto::Reader & reader, std::uint32_t offset) { return In::readObjectSize_<0x%08X>(reader, offset); }"%(table.magic))
+		self.o("\t%sIn(const scalgoproto::Reader & reader, scalgoproto::Ptr p): scalgoproto::TableIn(reader, p) {}"%table.name)
+		#self.o("\tstatic uint32_t readSize_(const scalgoproto::Reader & reader, std::uint32_t offset) { return In::readObjectSize_<0x%08X>(reader, offset); }"%(table.magic))
 		self.o("public:")
+		self.o("\tstatic constexpr std::uint32_t MAGIC = 0x%08x;"%(table.magic))
 		for node in table.members:
 			self.generate_value_in(node)
 		self.o("};")
@@ -590,6 +591,7 @@ def run(args) -> int:
 			print("Invalid schema is valid")
 			return 1
 		g = Generator(data, out)
+		print("//THIS FILE IS GENERATED DO NOT EDIT", file=out)
 		print("#include \"scalgoproto.hh\"", file=out)
 		g.generate(ast)
 		return 0

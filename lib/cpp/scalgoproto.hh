@@ -10,9 +10,14 @@
 
 namespace scalgoproto {
 
+static constexpr uint32_t LISTMAGIC = 0x3400BB46;
+static constexpr uint32_t TEXTMAGIC = 0xD812C8F5;
+static constexpr uint32_t BYTESMAGIC = 0xDCDBBE10;
+
 class Out;
 class Writer;
 class In;
+class TableIn;
 class Reader;
 struct EnumTag;
 struct BoolTag;
@@ -71,9 +76,16 @@ uint64_t computeSize(uint64_t v) {
 };
 
 
+struct Ptr {
+	const char * start;
+	uint32_t size;
+};
+
+
 class Reader {
 private:
 	friend class In;
+	friend class TableIn;
 	template <typename, typename>
 	friend class ListAccessHelp;
 
@@ -81,7 +93,7 @@ private:
 	size_t size;
 
 	template <uint32_t magic, uint32_t mult=1, uint32_t add=0>
-	uint32_t readObjectSize_(uint32_t offset) const {
+	Ptr getPtr_(uint32_t offset) const {
 		// Validate that the offset is within the reader boundary
 		if ( uint64_t(offset) + 8 >= size) throw Error();
 		// Check that we have the right magic
@@ -91,7 +103,18 @@ private:
 		// Read size and check that the object is within the reader boundary
 		memcpy(&word, data+offset+4, 4);
 		if (computeSize<mult>(word) + offset + 8 + add> size) throw Error();
-		return word;
+		return Ptr{data+offset+8, word};
+	}
+
+	template <uint32_t mult=1, uint32_t add=0>
+	Ptr getPtrVl_(const char * start, uint32_t s) const {
+		if (start + computeSize<mult>(s) + add > data + size) throw Error();
+		return Ptr{start, s};
+	}
+
+	void validateTextPtr_(Ptr p) const {
+		if (p.start[p.size] != '\0') throw Error();
+
 	}
 public:
 	Reader(const char * data, size_t size) noexcept : data(data), size(size) {};
@@ -102,14 +125,29 @@ public:
 		memcpy(&magic, data, 4);
 		memcpy(&offset, data+4, 4);
 		if (magic != 0xB5C0C4B3) throw Error();
-		std::uint32_t size = T::readSize_(*this, offset);
-		return T(*this, data+offset+8, size);
+		return T(*this, getPtr_<T::MAGIC>(offset));
 	}
+};
+
+class In {
+protected:
+	template <typename T>
+	static T getObject_(const Reader & reader, Ptr p) noexcept {return T(reader, p);}
+
+	static std::string_view getText_(const Reader & reader, Ptr p) noexcept {
+		reader.validateTextPtr_(p);
+		return std::string_view(p.start, p.size);
+	}
+
+	static std::pair<const void *, size_t> getBytes_(Ptr p) noexcept {return {(void*)p.start, (size_t)p.size};}
+
+	template <typename T>
+	static std::pair<const T *, size_t> getListRaw_(Ptr p) noexcept {return {reinterpret_cast<const T *>(p.start), (size_t)p.size};}
 };
 
 
 template <typename T>
-struct ListAccessHelp<BoolTag, T> {
+struct ListAccessHelp<BoolTag, T> : public In {
 	static constexpr bool optional = false;
 	static constexpr size_t mult = 0;
 	static constexpr int def = 0;
@@ -131,7 +169,7 @@ struct ListAccessHelp<BoolTag, T> {
 };
 
 template <typename T>
-struct ListAccessHelp<PodTag, T> {
+struct ListAccessHelp<PodTag, T>: public In {
 	static constexpr bool optional = false;
 	static constexpr size_t mult = sizeof(T);
 	static constexpr int def = 0;
@@ -146,7 +184,7 @@ struct ListAccessHelp<PodTag, T> {
 };
 
 template <typename T>
-struct ListAccessHelp<EnumTag, T> {
+struct ListAccessHelp<EnumTag, T>: public In {
 	static constexpr bool optional = true;
 	static constexpr size_t mult = 1;
 	static constexpr int def = 255;
@@ -164,7 +202,7 @@ struct ListAccessHelp<EnumTag, T> {
 };
 
 template <typename T>
-struct ListAccessHelp<TextTag, T> {
+struct ListAccessHelp<TextTag, T>: public In {
 	static constexpr bool optional = true;
 	static constexpr size_t mult = 4;
 	static constexpr int def = 0;
@@ -177,9 +215,8 @@ struct ListAccessHelp<TextTag, T> {
 		std::uint32_t off;
 		memcpy(&off, start + index * 4, 4);
 		assert(off != 0);
-		const std::uint32_t size = reader.readObjectSize_<0xD812C8F5, 1, 1>(off);
-		if (reader.data[off+8+size] != 0) throw Error();
-		return std::string_view(reader.data+off+8, size);
+		Ptr p = reader.getPtr_<TEXTMAGIC, 1, 1>(off);
+		return getText_(reader, p);
 	}
 	static void set(char * data, std::uint32_t offset, std::uint32_t index, const TextOut & value) noexcept {
 		memcpy(data + offset + index * 4, &value.offset, 4);
@@ -187,7 +224,7 @@ struct ListAccessHelp<TextTag, T> {
 };
 
 template <typename T>
-struct ListAccessHelp<BytesTag, T> {
+struct ListAccessHelp<BytesTag, T>: public In {
 	static constexpr bool optional = true;
 	static constexpr size_t mult = 4;
 	static constexpr int def = 0;
@@ -200,8 +237,7 @@ struct ListAccessHelp<BytesTag, T> {
 		std::uint32_t off;
 		memcpy(&off, start + index * 4, 4);
 		assert(off != 0);
-		const std::uint32_t size = reader.readObjectSize_<0xDCDBBE10>(off);
-		return std::make_pair(reader.data+off+8, size);
+		return getBytes_(reader.getPtr_<BYTESMAGIC>(off));
 	}
 	static void set(char * data, std::uint32_t offset, std::uint32_t index, const BytesOut & value) noexcept {
 		memcpy(data + offset + index * 4, &value.offset, 4);
@@ -210,7 +246,7 @@ struct ListAccessHelp<BytesTag, T> {
 
 
 template <typename T>
-struct ListAccessHelp<TableTag, T> {
+struct ListAccessHelp<TableTag, T>: public In {
 	static constexpr bool optional = true;
 	static constexpr size_t mult = 4;
 	static constexpr int def = 0;
@@ -224,8 +260,7 @@ struct ListAccessHelp<TableTag, T> {
 		std::uint32_t off;
 		memcpy(&off, start + index * 4, 4);
 		assert(off != 0);
-		const std::uint32_t size = T::readSize_(reader, off);
-		return T(reader, reader.data + off+8, size);
+		return getObject_<T>(reader, reader.getPtr_<T::MAGIC>(off));
 	}
 
 	static void set(char * data, std::uint32_t offset, std::uint32_t index, T v) noexcept {
@@ -293,13 +328,13 @@ public:
 
 
 template <typename T>
-class ListIn {
+class ListIn : public In {
 	friend class In;
-	const Reader & reader;
-	const char * start;
+	const Reader & reader_;
+	const char * start_;
 	const std::uint32_t size_;
 
- 	ListIn(const Reader & reader, const char * start, std::uint32_t size) noexcept : reader(reader), start(start), size_(size) {}
+	ListIn(const Reader & reader, Ptr p) noexcept : reader_(reader), start_(p.start), size_(p.size) {}
 	using A = ListAccess<T>;
 public:
 	static constexpr bool noexceptGet = noexcept(A::get(std::declval<const Reader&>(), std::declval<const char *>(), 0));
@@ -309,49 +344,49 @@ public:
 	using iterator = ListInIterator<T>;
 
 	bool hasFront() const noexcept {return !empty() && has(0);}
-	value_type front() const noexcept(noexceptGet) {assert(hasFront()); return A::get(reader, start, 0);}
+	value_type front() const noexcept(noexceptGet) {assert(hasFront()); return A::get(reader_, start_, 0);}
 	bool hasBack() const noexcept {return !empty() && has(size_-1);}
-	value_type back() const noexcept(noexceptGet) {assert(hasBack()); return A::get(reader, start, size_-1);}
+	value_type back() const noexcept(noexceptGet) {assert(hasBack()); return A::get(reader_, start_, size_-1);}
 	size_type size() const noexcept {return size_;}
 	bool empty() const noexcept {return size_ == 0;}
-	iterator begin() const noexcept {return ListInIterator(reader, start, 0);}
-	iterator end() const noexcept {return ListInIterator(reader, start, size_);}
+	iterator begin() const noexcept {return ListInIterator(reader_, start_, 0);}
+	iterator end() const noexcept {return ListInIterator(reader_, start_, size_);}
 	value_type at(size_type pos) const {
 		if (pos >= size_) throw std::out_of_range("out of range");
 		if (!has(pos)) throw std::out_of_range("unset member");
-		return A::get(reader, start, pos);
+		return A::get(reader_, start_, pos);
 	};
 	value_type operator[] (size_type pos) const noexcept(noexceptGet) {
 		assert(pos < size_ && has(pos)); 
-		return A::get(reader, start, pos);
+		return A::get(reader_, start_, pos);
 	}
 
 	bool has(size_type pos) const noexcept {
 		(void) pos;
-		if constexpr (A::optional) return A::has(start, pos);
+		if constexpr (A::optional) return A::has(start_, pos);
 		return true;
 	}
 };
 
-class In {
+class TableIn: public In {
 protected:
-	const Reader & reader;
-	const char * start;
-	const uint32_t size;
+	const Reader & reader_;
+	const char * start_;
+	const uint32_t size_;
 
-	In(const Reader & reader, const char * start, uint32_t size) noexcept : reader(reader), start(start), size(size) {}
+	TableIn(const Reader & reader, Ptr p): reader_(reader), start_(p.start), size_(p.size) {}
 
 	template <typename T, uint32_t o>
 	T getInnerUnchecked_() const noexcept {
 		T ans;
-		assert(o + sizeof(T) <= size);
-		memcpy(&ans, start+ o, sizeof(T));
+		assert(o + sizeof(T) <= size_);
+		memcpy(&ans, start_+ o, sizeof(T));
 		return ans;
 	}
 
 	template <typename T, uint32_t o>
 	T getInner_(T def) const noexcept {
-		if (o + sizeof(T) > size) return def;
+		if (o + sizeof(T) > size_) return def;
 		return getInnerUnchecked_<T, o>();
 	}
 
@@ -359,97 +394,28 @@ protected:
 	template <typename T, uint32_t o>
 	T getInner_() const noexcept {
 		T ans;
-		if (o + sizeof(T) > size)
+		if (o + sizeof(T) > size_)
 			memset(&ans, 0, sizeof(T));
 		else
-			memcpy(&ans, start+ o, sizeof(T));
+			memcpy(&ans, start_+ o, sizeof(T));
 		return ans;
 	}
 
-	template <typename T, uint32_t o>
-	T getTable_() const {
-		const uint32_t off = getInnerUnchecked_<std::uint32_t, o>();
-		const uint32_t size = T::readSize_(reader, off);
-		return T(reader, reader.data+off+8, size);
+	template <bool vl, uint32_t magic, uint32_t o, uint32_t mult=1, uint32_t add=0>
+	Ptr getPtr_() const {
+		if constexpr (vl)
+			return reader_.getPtrVl_<mult, add>(start_+size_, getInnerUnchecked_<std::uint32_t, o>());
+		else
+			return reader_.getPtr_<magic, mult, add>(getInnerUnchecked_<std::uint32_t, o>());
 	}
-
-	template <typename T, uint32_t o>
-	ListIn<T> getList_() const {
-		const uint32_t off = getInnerUnchecked_<std::uint32_t, o>();
-		uint32_t size = reader.readObjectSize_<0x3400BB46, ListAccess<T>::mult>(off);
-		return ListIn<T>(reader, reader.data+off+8, size);
-	}
-
-	template <typename T, uint32_t o>
-	std::pair<const T *, size_t> getListRaw_() const {
-		const uint32_t off = getInnerUnchecked_<std::uint32_t, o>();
-		const uint32_t size = reader.readObjectSize_<0x3400BB46, sizeof(T)>(off);
-		return std::make_pair(reinterpret_cast<const T *>(reader.data+off+8), size);
-	}	
-
 
 	template <uint32_t o, uint8_t bit, uint8_t def>
 	uint8_t getBit_() const noexcept {
-		if (o < size)
-			return *(const uint8_t *)(start + o) & 1 << bit;
+		if (o < size_)
+			return *(const uint8_t *)(start_ + o) & 1 << bit;
 		return def;
 	}
-
-	template <uint32_t o>
-	std::string_view getText_() const {
-		const uint32_t off = getInnerUnchecked_<std::uint32_t, o>();
-		const uint32_t size = reader.readObjectSize_<0xD812C8F5>(off);
-		return std::string_view(reader.data+off+8, size);
-	}
-
-	template <uint32_t o>
-	std::pair<const void *, size_t> getBytes_() const {
-		const uint32_t off = getInnerUnchecked_<std::uint32_t, o>();
-		const uint32_t size = reader.readObjectSize_<0xDCDBBE10>(off);
-		return std::make_pair(reader.data+off+8, size);
-	}
-
-	template <uint32_t o, uint32_t mult=1, uint32_t add=0>
-	uint32_t getVLSize_() const {
-		//Get the size of a vl object making throwing if it does not fit within the reader
-		const uint32_t s = getInnerUnchecked_<std::uint32_t, o>();
-		if (start + size + uint64_t(s)*mult + add > reader.data + reader.size) throw Error();
-		return s;
-	}
-
-	template <typename T, uint32_t o>
-	ListIn<T> getVLList_() const {
-		return ListIn<T>(reader, start+size, getVLSize_<o, ListAccess<T>::mult>());
-	}
-
-	template <typename T, uint32_t o>
-	std::pair<const T *, size_t> getVLListRaw_() const {
-		return std::make_pair(reinterpret_cast<const T *>(start+size), getVLSize_<o, sizeof(T)>());
-	}	
-
-	template <typename T, uint32_t o>
-	T getVLTable_() const {
-		return T(reader, start+size, getVLSize_<o>());
-	}
-
-	template <uint32_t o>
-	std::string_view getVLText_() const {
-		const uint32_t s = getVLSize_<o, 1, 1>();
-		if (start[size+s] != 0) throw Error(); //Check that the string is null terminated
-		return std::string_view(start + size, s);
-	}
-
-	template <uint32_t o>
-	std::pair<const void *, size_t> getVLBytes_() const {
-		return std::make_pair(start + size, getVLSize_<o>());
-	}
-
-	template <uint32_t magic, uint32_t mult=1, uint32_t add=0>
-	static uint32_t readObjectSize_(const Reader & reader, uint32_t offset) {
-		return reader.readObjectSize_<magic, mult, add>(offset);
-	}
 };
-
 
 template <>
 struct MetaMagic<TextOut> {using t=TextTag;};
