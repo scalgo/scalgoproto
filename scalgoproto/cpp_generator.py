@@ -118,20 +118,20 @@ class Generator:
 				rawType, bs(node.inplace), node.offset, typeName ))
 			self.o("\t}")
 	
-	def generate_union_list_in(self, node: Value, member:Value, uname:str, uuname:str) -> None:
-		typeName, rawType = self.in_list_types(member)
-		self.o("\tscalgoproto::ListIn<%s> %sGet%s() const {"%(typeName, uname, uuname))
-		self.o("\t\tassert(%sIs%s());"%(uname, uuname))
-		self.o("\t\treturn getObject_<scalgoproto::ListIn<%s> >(reader_, getPtr_<%s, scalgoproto::LISTMAGIC, %d, scalgoproto::ListAccess<%s>::mult>());"%(
-			typeName, bs(node.inplace), node.offset+2, typeName ))
+	def generate_union_list_in(self, node: Value, uname:str,) -> None:
+		typeName, rawType = self.in_list_types(node)
+		self.o("\tscalgoproto::ListIn<%s> get%s() const {"%(typeName, uname))
+		self.o("\t\tassert(is%s());"%(uname))
+		self.o("\t\treturn scalgoproto::In::getObject_<scalgoproto::ListIn<%s>>(this->reader_, this->template getPtr_<scalgoproto::LISTMAGIC, scalgoproto::ListAccess<%s>::mult>());"%(
+				typeName, typeName))
 		self.o("\t}")
 		if rawType:
 			self.o("\t")
-			self.output_doc(node, "\t", [], ["\\note accessing this is undefined behaivour"])
-			self.o("\tstd::pair<const %s *, size_t> %sGet%sRaw() const {"%(rawType, uname, uuname))
-			self.o("\t\tassert(%sIs%s());"%(uname, uuname))
-			self.o("\t\treturn getListRaw_<%s>(getPtr_<%s, scalgoproto::LISTMAGIC, %d, scalgoproto::ListAccess<%s>::mult>());"%(
-				rawType, bs(node.inplace), node.offset+2, typeName ))
+			self.output_doc(node, "\t", [], ["\\note accessing this is undefined behavior"])
+			self.o("\tstd::pair<const %s *, size_t> get%sRaw() const {"%(rawType, uname))
+			self.o("\t\tassert(is%s());"%(uname))
+			self.o("\t\treturn scalgoproto::In::getListRaw_<%s>(this->reader_, this->template getPtr_<scalgoproto::LISTMAGIC, scalgoproto::ListAccess<%s>::mult>());"%(
+				rawType, typeName))
 			self.o("\t}")
 		
 	def generate_list_out(self, node: Value, uname:str) -> None:
@@ -257,13 +257,13 @@ class Generator:
 			node.table.name, bs(node.inplace), node.table.name, node.offset))
 		self.o("\t}")
 
-	def generate_union_table_in(self, node: Value, member: Value, uname:str, uuname:str) -> None:
-		if member.table.members:
+	def generate_union_table_in(self, node: Value, uname:str) -> None:
+		if node.table.members:
 			self.output_doc(node, "\t")
-			self.o("\t%sIn %sGet%s() const noexcept {"%(member.table.name, uname, uuname))
-			self.o("\t\tassert(%sIs%s());"%(uname, uuname))
-			self.o("\t\treturn getObject_<%sIn>(reader_, getPtr_<%s, %sIn::MAGIC, %d>());"%(
-				member.table.name, bs(node.inplace), member.table.name, node.offset+2))
+			self.o("\t%sIn get%s() const noexcept {"%(node.table.name, uname))
+			self.o("\t\tassert(is%s());"%(uname))
+			self.o("\t\treturn scalgoproto::In::getObject_<%sIn>(this->reader_, this->template getPtr_<%sIn::MAGIC>());"%(
+				node.table.name, node.table.name))
 			self.o("\t}")
 
 	def generate_table_out(self, node:Value, uname:str) -> None:
@@ -315,10 +315,10 @@ class Generator:
 		self.o("\t\treturn getText_(reader_, getPtr_<%s, scalgoproto::TEXTMAGIC, %d,  1, 1>());"%(bs(node.inplace), node.offset))
 		self.o("\t}")
 	
-	def generate_union_text_in(self, node: Value, member: Value, uname:str, uuname:str) -> None:
+	def generate_union_text_in(self, node: Value, uname:str) -> None:
 		self.output_doc(node, "\t")
-		self.o("\tstd::string_view %sGet%s() {"%(uname, uuname))
-		self.o("\t\treturn getText_(reader_, getPtr_<%s, scalgoproto::TEXTMAGIC, %d, 1, 1>());"%(bs(node.inplace), node.offset+2))
+		self.o("\tstd::string_view get%s() {"%(uname))
+		self.o("\t\treturn scalgoproto::In::getText_(this->reader_, this->template getPtr_<scalgoproto::TEXTMAGIC, 1, 1>());")
 		self.o("\t}")
 
 	def generate_text_out(self, node:Value, uname:str) -> None:
@@ -351,10 +351,10 @@ class Generator:
 		self.o("\t\treturn getBytes_(getPtr_<%s, scalgoproto::BYTESMAGIC, %d>());"%(bs(node.inplace), node.offset))
 		self.o("\t}")
 
-	def generate_union_bytes_in(self, node: Value, member: Value, uname:str, uuname:str) -> None:
+	def generate_union_bytes_in(self, node: Value, uname:str) -> None:
 		self.output_doc(node, "\t")
-		self.o("\tstd::pair<const void*, size_t> %sGet%s()  {"%(uname, uuname))
-		self.o("\t\treturn getBytes_(getPtr_<%s, scalgoproto::BYTESMAGIC, %d>());"%(bs(node.inplace), node.offset+2))
+		self.o("\tstd::pair<const void*, size_t> get%s() {"%(uname))
+		self.o("\t\treturn scalgoproto::In::getBytes_(this->template getPtr_<scalgoproto::BYTESMAGIC>());")
 		self.o("\t}")
 
 	def generate_bytes_out(self, node:Value, uname:str) -> None:
@@ -378,36 +378,13 @@ class Generator:
 		self.o("\t}")
 
 	def generate_union_in(self, node:Value, uname:str) -> None:
-		uname = lcamel(uname)
-		tn = "%sType"%ucamel(uname)
-		self.o("\tenum class %s {"%(tn))
-		self.o("\t\tNONE,")
-		for member in node.union.members:
-			assert isinstance(member, (Table, Value))
-			self.o("\t\t%s,"%self.value(member.identifier).upper())
-		self.o("\t};")
-		self.o("\t")
+		self.o("\tbool has%s() const noexcept {return getInner_<std::uint16_t, %d>() != 0;}"%(uname, node.offset))
 		self.output_doc(node, "\t")
-		self.o("\t%s %sGetType() const noexcept {"%(tn, uname))
-		self.o("\t\treturn (%s)getInner_<std::uint16_t, %d>();"%(tn, node.offset))
+		self.o("\t%sIn<%s> get%s() {"%(node.union.name, bs(node.inplace), uname))
+		self.o("\t\tassert(has%s());"%(uname))
+		if node.inplace: self.o("\t\treturn getObject_<%sIn<true>>(reader_, getInner_<std::uint16_t, %d>(), start_ + size_, getInner_<std::uint32_t, %d>());"%(node.union.name, node.offset, node.offset+2))
+		else: self.o("\t\treturn getObject_<%sIn<false>>(reader_, getInner_<std::uint16_t, %d>(), getInner_<std::uint32_t, %d>());"%(node.union.name, node.offset, node.offset+2))
 		self.o("\t}")
-		self.o("\tbool has%s() const noexcept {return %sGetType() != %s::NONE;}"%(ucamel(uname), uname, tn))
-		for member in node.union.members:
-			assert isinstance(member, (Table, Value))
-			n = self.value(member.identifier)
-			uuname = ucamel(n)
-			self.o("\tbool %sIs%s() const noexcept {return %sGetType() == %s::%s;}"%(uname, uuname,  uname, tn, n.upper()))
-			self.o("\t")
-			if member.table:
-				self.generate_union_table_in(node, member, uname, uuname)
-			elif member.list_:			
-				self.generate_union_list_in(node, member, uname, uuname)
-			elif member.type_.type == TokenType.BYTES:
-				self.generate_union_bytes_in(node, member, uname, uuname)
-			elif member.type_.type == TokenType.TEXT:
-				self.generate_union_text_in(node, member, uname, uuname)
-			else:
-				assert False
 
 	def generate_union_out(self, node:Value, uname:str) -> None:
 		self.o("\tbool has%s() const noexcept {"%(uname))
@@ -478,19 +455,51 @@ class Generator:
 		else:
 			assert False
 
-	def visit_union(self, union:Union) -> None:
+	def generate_union(self, union:Union) -> None:
 		# Recursively generate direct contained members
 		for value in union.members:
 			if value.direct_table: self.generate_table(value.direct_table)
-			if value.direct_union: self.visit_union(value.direct_union)
+			if value.direct_union: self.generate_union(value.direct_union)
 			if value.direct_enum: self.generate_enum(value.direct_enum)
 			if value.direct_struct: self.generate_struct(value.direct_struct)
+		self.output_doc(union)
+		self.o("enum class %sType : std::uint16_t {"%union.name)
+		self.o("\tnone,")
+		for member in union.members:
+			assert isinstance(member, (Table, Value))
+			self.o("\t%s,"%(self.value(member.identifier)))
+		self.o("};")
+		self.o("")
+		self.output_doc(union)
+		self.o("template <bool inplace>")
+		self.o("class %sIn: public scalgoproto::UnionIn<inplace> {"%union.name)
+		self.o("protected:")
+		self.o("\tusing scalgoproto::UnionIn<inplace>::UnionIn;")
+		self.o("public:")
+		self.o("\tusing Type = %sType;"%union.name)
+		self.o("\tType type() const noexcept {return (Type)this->type_;}")
+		for member in union.members:
+			n = self.value(member.identifier)
+			uname = ucamel(n)
+			self.o("\tbool is%s() const noexcept {return type() == Type::%s;}"%(uname, n))
+			if member.table:
+				self.generate_union_table_in(member, uname)
+			elif member.list_:			
+				self.generate_union_list_in(member, uname)
+			elif member.type_.type == TokenType.BYTES:
+				self.generate_union_bytes_in(member, uname)
+			elif member.type_.type == TokenType.TEXT:
+				self.generate_union_text_in(member, uname)
+			else:
+				assert False
+		self.o("};")
+		self.o("")
 
 	def generate_table(self, table:Table) -> None:
 		# Recursively generate direct contained members
 		for value in table.members:
 			if value.direct_table: self.generate_table(value.direct_table)
-			if value.direct_union: self.visit_union(value.direct_union)
+			if value.direct_union: self.generate_union(value.direct_union)
 			if value.direct_enum: self.generate_enum(value.direct_enum)
 			if value.direct_struct: self.generate_struct(value.direct_struct)
 
@@ -502,7 +511,6 @@ class Generator:
 		self.o("\ttemplate <typename, typename> friend class scalgoproto::ListAccessHelp;")
 		self.o("protected:")
 		self.o("\t%sIn(const scalgoproto::Reader & reader, scalgoproto::Ptr p): scalgoproto::TableIn(reader, p) {}"%table.name)
-		#self.o("\tstatic uint32_t readSize_(const scalgoproto::Reader & reader, std::uint32_t offset) { return In::readObjectSize_<0x%08X>(reader, offset); }"%(table.magic))
 		self.o("public:")
 		self.o("\tstatic constexpr std::uint32_t MAGIC = 0x%08x;"%(table.magic))
 		for node in table.members:
@@ -574,7 +582,7 @@ class Generator:
 			elif isinstance(node, Table):
 				self.generate_table(node)
 			elif isinstance(node, Union):
-				self.visit_union(node)
+				self.generate_union(node)
 			elif isinstance(node, Namespace):
 				# TODO handle namespace
 				pass

@@ -19,6 +19,8 @@ class Writer;
 class In;
 class TableIn;
 class Reader;
+template <bool>
+class UnionIn;
 struct EnumTag;
 struct BoolTag;
 struct PodTag;
@@ -88,6 +90,8 @@ private:
 	friend class TableIn;
 	template <typename, typename>
 	friend class ListAccessHelp;
+	template <bool>
+	friend class UnionIn;
 
 	const char * data;
 	size_t size;
@@ -131,8 +135,8 @@ public:
 
 class In {
 protected:
-	template <typename T>
-	static T getObject_(const Reader & reader, Ptr p) noexcept {return T(reader, p);}
+	template <typename T, typename ... TT>
+	static T getObject_(TT && ... tt) noexcept {return T(std::forward<TT>(tt)...);}
 
 	static std::string_view getText_(const Reader & reader, Ptr p) noexcept {
 		reader.validateTextPtr_(p);
@@ -415,6 +419,44 @@ protected:
 			return *(const uint8_t *)(start_ + o) & 1 << bit;
 		return def;
 	}
+};
+
+template <bool inplace>
+class UnionIn : public In {
+protected:
+	friend class In;
+
+	const Reader & reader_;
+	const std::uint16_t type_;
+	const std::uint32_t offset_;
+
+	UnionIn(const Reader & reader, std::uint16_t type, std::uint32_t offset_)
+		: reader_(reader)
+		, type_(type)
+		, offset_(offset_) {}
+
+	template <uint32_t magic, uint32_t mult=1, uint32_t add=0>
+	Ptr getPtr_() const {return reader_.getPtr_<magic, mult, add>(offset_);}
+};
+
+template <>
+class UnionIn<true> : public In {
+protected:
+	friend class In;
+
+	const Reader & reader_;
+	const std::uint16_t type_;
+	const char * start_;
+	const uint32_t size_;
+
+	UnionIn(const Reader & reader, std::uint16_t type, const char * start, std::uint32_t size)
+		: reader_(reader)
+		, type_(type)
+		, start_(start)
+		, size_(size) {}
+
+	template <uint32_t magic, uint32_t mult=1, uint32_t add=0>
+	Ptr getPtr_() const {return reader_.getPtrVl_<mult, add>(start_, size_);}
 };
 
 template <>

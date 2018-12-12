@@ -388,19 +388,19 @@ int main(int, char ** argv) {
 		auto o = readIn(argv[2]);
 		scalgoproto::Reader r(o.data(), o.size());
 		auto s = r.root<Complex2In>();
-		REQUIRE(s.u1IsMember(), true);
-		REQUIRE(s.u1GetMember().getId(), 42);
-		REQUIRE(s.u2IsText(), true);
-		REQUIRE(s.u2GetText(), "text");
-		REQUIRE(s.u3IsMyBytes(), true);
-		REQUIRE(s.u3GetMyBytes().second, 5);
-		REQUIRE(memcmp(s.u3GetMyBytes().first, "bytes", 5), 0);
-		REQUIRE(s.u4IsEnumList(), true);
-		auto l = s.u4GetEnumList();
+		REQUIRE(s.getU1().isMember(), true);
+		REQUIRE(s.getU1().getMember().getId(), 42);
+		REQUIRE(s.getU2().isText(), true);
+		REQUIRE(s.getU2().getText(), "text");
+		REQUIRE(s.getU3().isMyBytes(), true);
+		REQUIRE(s.getU3().getMyBytes().second, 5);
+		REQUIRE(memcmp(s.getU3().getMyBytes().first, "bytes", 5), 0);
+		REQUIRE(s.getU4().isEnumList(), true);
+		auto l = s.getU4().getEnumList();
 		REQUIRE(l.size(), 2);
 		REQUIREQ(l[0], NamedUnionEnumList::x);
 		REQUIREQ(l[1], NamedUnionEnumList::z);
-		REQUIRE(s.u5IsA(), true);
+		REQUIRE(s.getU5().isA(), true);
 		REQUIRE(s.hasHat(), true);
 		REQUIRE(s.getHat().getId(), 43);
 
@@ -449,15 +449,15 @@ int main(int, char ** argv) {
 
 		REQUIRE(s.hasU(), true);
 		auto u = s.getU();
-		REQUIRE(u.uIsMonkey(), true);
-		auto monkey = u.uGetMonkey();
+		REQUIRE(u.getU().isMonkey(), true);
+		auto monkey = u.getU().getMonkey();
 		REQUIRE(monkey.hasName(), true);
 		REQUIRE(monkey.getName(), "nilson");
 
 		REQUIRE(s.hasU2(), true);
 		auto u2 = s.getU2();
-		REQUIRE(u2.uIsText(), true);
-		auto u2t = u2.uGetText();
+		REQUIRE(u2.getU().isText(), true);
+		auto u2t = u2.getU().getText();
 		REQUIRE(u2t.hasT(), true);
 		REQUIRE(u2t.getT(), "foobar");
 		
@@ -512,8 +512,8 @@ int main(int, char ** argv) {
 		auto s = r.root<Gen3In>();
 		REQUIRE(s.getAa(), 80);
 		REQUIRE(s.getBb(), 81);
-		REQUIRE(s.uIsCake(), true);
-		REQUIRE(s.uGetCake().getV(), 45);
+		REQUIRE(s.getU().isCake(), true);
+		REQUIRE(s.getU().getCake().getV(), 45);
 		REQUIREQ(s.getE(), MyEnum::c);
 		REQUIRE(s.getS().x, 0);
 		REQUIRE(s.getS().y, 0);
