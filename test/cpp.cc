@@ -370,11 +370,11 @@ int main(int, char ** argv) {
 		l2.add(0, {2, true});
 
 		auto r = w.construct<Complex2Out>();
-		r.u1AddMember(m);
-		r.u2AddText(t);
-		r.u3AddMyBytes(b);
-		r.u4AddEnumList(l);
-		r.u5AddA();
+		r.getU1().addMember(m);
+		r.getU2().addText(t);
+		r.getU3().addMyBytes(b);
+		r.getU4().addEnumList(l);
+		r.getU5().addA();
 
 		auto m2 = r.addHat();
 		m2.addId(43);
@@ -415,10 +415,10 @@ int main(int, char ** argv) {
 		scalgoproto::Writer w;
 		auto name = w.constructText("nilson");
 		auto u = w.construct<VLUnionOut>();
-		u.uAddMonkey().addName(name);
+		u.getU().addMonkey().addName(name);
 
 		auto u2 = w.construct<VLUnionOut>();
-		u2.uAddText().addT("foobar");
+		u2.getU().addText().addT("foobar");
 
 		auto t = w.construct<VLTextOut>();
 		t.addId(45);
@@ -502,7 +502,7 @@ int main(int, char ** argv) {
 		auto root = w.construct<Gen2Out>();
 		root.addAa(80);
 		root.addBb(81);
-		auto cake = root.uAddCake();
+		auto cake = root.getU().addCake();
 		cake.addV(45);
 		auto [data, size] = w.finalize(root);
 		return !validateOut(data, size, argv[2]);

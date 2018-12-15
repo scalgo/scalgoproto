@@ -15,6 +15,9 @@ static constexpr uint32_t TEXTMAGIC = 0xD812C8F5;
 static constexpr uint32_t BYTESMAGIC = 0xDCDBBE10;
 
 class Out;
+class UnionOut;
+class TableOut;
+class InplaceUnionOut;
 class Writer;
 class In;
 class TableIn;
@@ -43,7 +46,7 @@ class TextOut {
 	friend class Out;
 	template <typename, typename> friend class ListAccessHelp;
 protected:
-	std::uint32_t offset;
+	std::uint32_t offset_;
 };
 
 class BytesOut {
@@ -51,7 +54,7 @@ class BytesOut {
 	friend class Out;
 	template <typename, typename> friend class ListAccessHelp;
 protected:
-	std::uint32_t offset;
+	std::uint32_t offset_;
 };
 
 
@@ -223,7 +226,7 @@ struct ListAccessHelp<TextTag, T>: public In {
 		return getText_(reader, p);
 	}
 	static void set(char * data, std::uint32_t offset, std::uint32_t index, const TextOut & value) noexcept {
-		memcpy(data + offset + index * 4, &value.offset, 4);
+		memcpy(data + offset + index * 4, &value.offset_, 4);
 	}
 };
 
@@ -244,7 +247,7 @@ struct ListAccessHelp<BytesTag, T>: public In {
 		return getBytes_(reader.getPtr_<BYTESMAGIC>(off));
 	}
 	static void set(char * data, std::uint32_t offset, std::uint32_t index, const BytesOut & value) noexcept {
-		memcpy(data + offset + index * 4, &value.offset, 4);
+		memcpy(data + offset + index * 4, &value.offset_, 4);
 	}
 };
 
@@ -268,7 +271,7 @@ struct ListAccessHelp<TableTag, T>: public In {
 	}
 
 	static void set(char * data, std::uint32_t offset, std::uint32_t index, T v) noexcept {
-		std::uint32_t o = v.offset - 8;
+		std::uint32_t o = v.offset_ - 8;
 		memcpy(data + offset + index * 4, &o, 4);
 	}
 };
@@ -474,11 +477,11 @@ class ListOut {
 protected:
 	friend class Writer;
 	friend class Out;
-	Writer & writer;
-	uint32_t offset;
+	Writer & writer_;
+	uint32_t offset_;
 	uint32_t size_;
 	using A=ListAccess<T>;
-	ListOut(Writer & writer, uint32_t offset, uint32_t size_): writer(writer), offset(offset), size_(size_) {}
+	ListOut(Writer & writer, uint32_t offset, uint32_t size_): writer_(writer), offset_(offset), size_(size_) {}
 public:
 	using value_type = T;
 	void add(uint32_t index, value_type value) noexcept;
@@ -494,6 +497,9 @@ private:
 	size_t size = 0;
 	size_t capacity = 0;
 	friend class Out;
+	friend class InplaceUnionOut;
+	friend class UnionOut;
+	friend class TableOut;
 	template <typename> friend class ListOut;
 	void reserve(size_t size) {
 		if (size <= capacity) return;
@@ -523,7 +529,7 @@ public:
 		size = 8;
 	}
   
-	inline std::pair<const char *, size_t> finalize(const Out & root);
+	inline std::pair<const char *, size_t> finalize(const TableOut & root);
 	
 	template <typename T>
 	T construct() {
@@ -532,22 +538,22 @@ public:
 
 	TextOut constructText(std::string_view text) {
 		TextOut o;
-		o.offset = size;
+		o.offset_ = size;
 		expand(text.size()+9);
-		write((uint32_t)0xD812C8F5, o.offset);
-		write((uint32_t)text.size(), o.offset+4);
-		memcpy(data+o.offset+8, text.data(), text.size());
-		data[o.offset+8+text.size()] = 0;
+		write((uint32_t)0xD812C8F5, o.offset_);
+		write((uint32_t)text.size(), o.offset_+4);
+		memcpy(data+o.offset_+8, text.data(), text.size());
+		data[o.offset_+8+text.size()] = 0;
 		return o;
 	}
 
 	BytesOut constructBytes(const void * data, size_t size) {
 		BytesOut o;
-		o.offset = this->size;
+		o.offset_ = this->size;
 		expand(size+8);
-		write((uint32_t)0xDCDBBE10, o.offset);
-		write((uint32_t)size, o.offset+4);
-		memcpy(this->data+o.offset+8, data, size);
+		write((uint32_t)0xDCDBBE10, o.offset_);
+		write((uint32_t)size, o.offset_+4);
+		memcpy(this->data+o.offset_+8, data, size);
 		return o;
 	}
 
@@ -556,10 +562,10 @@ public:
 		using A = ListAccess<T>;
 		ListOut<T> o(*this, this->size, size);
 		expand(computeSize<A::mult>(size)+8);
-		write((uint32_t)0x3400BB46, o.offset);
-		write((uint32_t)size, o.offset+4);
-		o.offset += 8;
-		memset(data+o.offset, A::def, computeSize<A::mult>(size));
+		write((uint32_t)0x3400BB46, o.offset_);
+		write((uint32_t)size, o.offset_+4);
+		o.offset_ += 8;
+		memset(data+o.offset_, A::def, computeSize<A::mult>(size));
 		return o;
 	}
 
@@ -570,108 +576,132 @@ public:
 template <typename T>
 void ListOut<T>::add(uint32_t index, value_type value) noexcept {
 	assert(index < size_);
-	A::set(writer.data, offset, index, value);
+	A::set(writer_.data, offset_, index, value);
 }
 
 class Out {
 protected:
 	friend class Writer;
-	template <typename, typename> friend class ListAccessHelp;
-
-	Writer & writer;
-	uint32_t offset;
-
-	Out(Writer & writer, bool withHeader, std::uint32_t magic, const char * def, std::uint32_t size): writer(writer), offset(writer.size) {
-		if (withHeader) {
-			writer.expand(8);
-			writer.write(magic, offset);
-			writer.write(size, offset+4);
-			offset += 8;
-		}
-		writer.expand(size);
-		memcpy(writer.data + offset, def, size);
-	}
-
-	template <typename T, uint32_t o>
-	void setInner_(const T & t) {
-		writer.write(t, offset + o);
-	}
-
-	template <uint32_t o, uint8_t b>
-	void setBit_() {
-		*(uint8_t *)(writer.data + offset + o) |= (1 << b);
-	}
-
-	template <uint32_t o, uint8_t b>
-	void unsetBit_() {
-		*(uint8_t *)(writer.data + offset + o) &= ~(1 << b);
-	}
-	
-	template <typename T, uint32_t offset>
-  	T getInner_() const noexcept {
-		T ans;
-		memcpy(&ans, writer.data + this->offset + offset , sizeof(T));
-		return ans;
-	}
-	
-	template <typename T, uint32_t offset>
-	void setTable_(T t) noexcept {
-		setInner_<std::uint32_t, offset>(t.offset-8);
-	}
-
-	template <typename T, uint32_t offset>
-	void setList_(ListOut<T> t) noexcept {
-		setInner_<std::uint32_t, offset>(t.offset-8);
-	}
-
-	template <uint32_t offset>
-	void setText_(TextOut t) noexcept {
-		setInner_<std::uint32_t, offset>(t.offset);
-	}
-
-	template <uint32_t offset>
-	void setBytes_(BytesOut t) noexcept {
-		setInner_<std::uint32_t, offset>(t.offset);
-	}
 
 	template <typename T>
-	T constructUnionMember_() const noexcept {
+	static uint32_t getOffset_(const T & t) noexcept {return t.offset_;}
+
+	template <typename T, typename ... TT>
+	static T construct_(TT && ... vv) noexcept {return T(std::forward<TT>(vv)...);}
+
+	template <typename T>
+	static T addInplaceTable_(Writer & writer, size_t start) noexcept {
+		assert(writer.size == start);
 		return T(writer, false);
 	}
 
-	template <uint32_t offset>
-	void addVLBytes_(const char *data, size_t size) noexcept {
-		setInner_<uint32_t, offset>(size);
-		auto start = writer.size;
+	static void addInplaceBytes_(Writer & writer, size_t start, const char *data, size_t size) noexcept {
+		assert(writer.size == start);
 		writer.expand(size);
 		memcpy(writer.data+start, data, size);
 	}
 
-	template <uint32_t offset>
-	void addVLText_(std::string_view str) noexcept {
-		setInner_<uint32_t, offset>(str.size());
-		auto start = writer.size;
+	static void addInplaceText_(Writer & writer, size_t start, std::string_view str) noexcept {
+		assert(writer.size == start);
 		writer.expand(str.size()+1);
 		memcpy(writer.data+start, str.data(), str.size());
 		writer.data[start+str.size()] = 0;
 	}
 
-	template <uint32_t offset, typename T>
-	ListOut<T> addVLList_(size_t size) noexcept {
-		setInner_<uint32_t, offset>(size);
+	template < typename T>
+	static ListOut<T> addInplaceList_(Writer & writer, size_t start, size_t size) noexcept {
+		assert(writer.size == start);
 		using A = ListAccess<T>;
-		ListOut<T> o(writer, writer.size, size);
+		ListOut<T> o(writer, start, size);
 		size_t bsize = computeSize<A::mult>(size);
 		writer.expand(bsize);
-		memset(writer.data+o.offset, A::def, bsize);
+		memset(writer.data+o.offset_, A::def, bsize);
 		return o;
 	}
 };
 
+class UnionOut: public Out {
+protected:
+	friend class Writer;
+	Writer & writer_;
+	uint32_t offset_;
 
-std::pair<const char *, size_t> Writer::finalize(const Out & root) {
+	void setType_(uint16_t type) noexcept {
+		writer_.write(type, offset_);
+	}
+
+	void setObject_(uint32_t p) noexcept {
+		writer_.write(p, offset_+2);
+	}
+
+	UnionOut(Writer & writer, uint32_t offset): writer_(writer), offset_(offset) {}
+};
+
+class InplaceUnionOut: public Out {
+protected:
+	friend class Writer;
+	Writer & writer_;
+	uint32_t offset_;
+	uint32_t next_;
+
+	void setType_(uint16_t type) noexcept {
+		writer_.write(type, offset_);
+	}
+
+	void setSize_(uint32_t size) noexcept {
+		writer_.write(size, offset_+2);
+	}
+
+	InplaceUnionOut(Writer & writer, uint32_t offset, uint32_t next): writer_(writer), offset_(offset), next_(next) {}
+};
+
+
+class TableOut : public Out {
+protected:
+	friend class Writer;
+	template <typename, typename> friend class ListAccessHelp;
+
+	Writer & writer_;
+	uint32_t offset_;
+
+	TableOut(Writer & writer, bool withHeader, std::uint32_t magic, const char * def, std::uint32_t size): writer_(writer), offset_(writer.size) {
+		if (withHeader) {
+			writer_.expand(8);
+			writer_.write(magic, offset_);
+			writer_.write(size, offset_+4);
+			offset_ += 8;
+		}
+		writer_.expand(size);
+		memcpy(writer_.data + offset_, def, size);
+	}
+
+	template <typename T, uint32_t o>
+	void setInner_(const T & t) {
+		writer_.write(t, offset_ + o);
+	}
+
+	template <uint32_t o, uint8_t b>
+	void setBit_() {
+		*(uint8_t *)(writer_.data + offset_ + o) |= (1 << b);
+	}
+
+	template <uint32_t o, uint8_t b>
+	void unsetBit_() {
+		*(uint8_t *)(writer_.data + offset_ + o) &= ~(1 << b);
+	}
+
+	template <typename T, uint32_t offset>
+	T getInner_() const noexcept {
+		T ans;
+		memcpy(&ans, writer_.data + offset_ + offset , sizeof(T));
+		return ans;
+	}
+};
+
+
+std::pair<const char *, size_t> Writer::finalize(const TableOut & root) {
 	write((std::uint32_t)0xB5C0C4B3, 0);
-	write(root.offset - 8, 4);
+	write(root.offset_ - 8, 4);
 	return std::make_pair(data, size);
 }
 

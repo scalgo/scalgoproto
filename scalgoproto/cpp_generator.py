@@ -138,22 +138,24 @@ class Generator:
 		typeName = self.out_list_type(node)
 		if node.inplace:
 			self.o("\tscalgoproto::ListOut<%s> add%s(size_t size) noexcept {"%(typeName, uname))
-			self.o("\t\treturn addVLList_<%d, %s>(size);"%(node.offset, typeName))
+			self.o("\t\tsetInner_<std::uint32_t, %d>(size);"%(node.offset))
+			self.o("\t\treturn addInplaceList_<%s>(writer_, offset_ + SIZE, size);"%(typeName))
 		else:
 			self.o("\tvoid add%s(scalgoproto::ListOut<%s> value) noexcept {"%(uname, typeName))
-			self.o("\t\tsetList_<%s, %d>(value);"%(typeName, node.offset))
+			self.o("\t\tsetInner_<std::uint32_t, %d>(getOffset_(value)-8);"%(node.offset))
 		self.o("\t}")
 
-	def generate_union_list_out(self, node:Value, member:Value, uname:str, uuname:str, idx:int) -> None:
-		typeName = self.out_list_type(member)
-		if node.inplace:
-			self.o("\tscalgoproto::ListOut<%s> %sAdd%s(size_t size) noexcept {"%(typeName, uname, uuname))
-			self.o("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
-			self.o("\t\treturn addVLList_<%d, %s>(size);"%(node.offset+2, typeName))
+	def generate_union_list_out(self, node:Value, uname:str, inplace:bool, idx:int) -> None:
+		typeName = self.out_list_type(node)
+		if inplace:
+			self.o("\tscalgoproto::ListOut<%s> add%s(size_t size) noexcept {"%(typeName, uname))
+			self.o("\t\tsetType_(%d);"%(idx))
+			self.o("\t\tsetSize_(size);")
+			self.o("\t\treturn addInplaceList_<%s>(writer_, next_, size);"%(typeName))
 		else:
-			self.o("\tvoid %sAdd%s(scalgoproto::ListOut<%s> value) noexcept {"%(uname, uuname, typeName))
-			self.o("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
-			self.o("\t\tsetList_<%s, %d>(value);"%(typeName, node.offset+2))
+			self.o("\tvoid add%s(scalgoproto::ListOut<%s> value) noexcept {"%(uname, typeName))
+			self.o("\t\tsetType_(%d);"%(idx))
+			self.o("\t\tsetObject_(getOffset_(value)-8);")
 		self.o("\t}")
 
 	def generate_bool_in(self, node: Value, uname:str) -> None:
@@ -269,40 +271,36 @@ class Generator:
 	def generate_table_out(self, node:Value, uname:str) -> None:
 		if not node.inplace:
 			self.o("\tvoid add%s(%sOut value) noexcept {"%(uname, node.table.name))
-			self.o("\t\tsetTable_<%sOut, %d>(value);"%(node.table.name, node.offset))
+			self.o("\t\tsetInner_<std::uint32_t, %d>(getOffset_(value)-8);"%(node.offset))
 			self.o("\t}")
 		elif node.table.members:
 			self.o("\t%sOut add%s() noexcept {"%(node.table.name, uname))
-			self.o("\t\tsetInner_<std::uint32_t, %d>(%d);"%(node.offset, len(node.table.default)))
-			self.o("\t\treturn constructUnionMember_<%sOut>();"%node.table.name)
+			self.o("\t\tsetInner_<std::uint32_t, %d>(%sOut::SIZE);"%(node.offset, node.table.name))
+			self.o("\t\treturn addInplaceTable_<%sOut>(writer_, offset_+SIZE);"%node.table.name)
 			self.o("\t}")
 		else:
 			self.o("\tvoid add%s() noexcept {"%(uname))
 			self.o("\t\tassert(!has%s());"%(uname))
-			self.o("\t\tsetInner_<std::uint32_t, %d>(%d);"%(node.offset, 0))
+			self.o("\t\tsetInner_<std::uint32_t, %d>(0);"%(node.offset))
 			self.o("\t}")
 
-	def generate_union_table_out(self, node:Value, member:Value, uname:str, uuname:str, idx:int) -> None:
-		table = member.table
-		self.output_doc(member, "\t")
+	def generate_union_table_out(self, node:Value, uname:str, inplace:bool, idx:int) -> None:
+		table = node.table
+		self.output_doc(node, "\t")
 		if not table.members:
-			self.o("\tvoid %sAdd%s() noexcept {"%(uname, uuname))
-			self.o("\t\tassert(!has%s());"%(ucamel(uname)))
-			self.o("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
-			self.o("\t\tsetInner_<std::uint32_t, %d>(%d);"%(node.offset+2, 0))
+			self.o("\tvoid add%s() noexcept {"%(uname))
+			self.o("\t\tsetType_(%d);"%(idx))
 			self.o("\t}")
-		elif not node.inplace:
-			self.o("\tvoid %sAdd%s(%sOut value) noexcept {"%(uname, uuname, table.name))
-			self.o("\t\tassert(!has%s());"%(ucamel(uname)))
-			self.o("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
-			self.o("\t\tsetTable_<%sOut, %d>(value);"%(table.name, node.offset+2))
+		elif not inplace:
+			self.o("\tvoid add%s(%sOut value) noexcept {"%(uname, table.name))
+			self.o("\t\tsetType_(%d);"%(idx))
+			self.o("\t\tsetObject_(getOffset_(value)-8);")
 			self.o("\t}")
 		else:
-			self.o("\t%sOut %sAdd%s() noexcept {"%(table.name, uname, uuname))
-			self.o("\t\tassert(!has%s());"%(ucamel(uname)))
-			self.o("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
-			self.o("\t\tsetInner_<std::uint32_t, %d>(%d);"%(node.offset+2, len(table.default)))
-			self.o("\t\treturn constructUnionMember_<%sOut>();"%table.name)
+			self.o("\t%sOut add%s() noexcept {"%(table.name, uname))
+			self.o("\t\tsetType_(%d);"%(idx))
+			self.o("\t\tsetSize_(%sOut::SIZE);"%(table.name))
+			self.o("\t\treturn addInplaceTable_<%sOut>(writer_, next_);"%(table.name))
 			self.o("\t}")
 
 	def generate_text_in(self, node:Value, uname:str) -> None:
@@ -324,21 +322,23 @@ class Generator:
 	def generate_text_out(self, node:Value, uname:str) -> None:
 		if node.inplace:
 			self.o("\tvoid add%s(std::string_view text) noexcept {"%(uname))
-			self.o("\t\taddVLText_<%d>(text);"%(node.offset))
+			self.o("\t\tsetInner_<std::uint32_t, %d>(text.size());"%(node.offset))
+			self.o("\t\taddInplaceText_(writer_, offset_+SIZE, text);")
 		else:
 			self.o("\tvoid add%s(scalgoproto::TextOut t) noexcept {"%(uname))
-			self.o("\tsetText_<%d>(t);"%(node.offset))
+			self.o("\t\tsetInner_<std::uint32_t, %d>(getOffset_(t));"%(node.offset))
 		self.o("\t}")
 
-	def generate_union_text_out(self, node:Value, member:Value, uname:str, uuname:str, idx:int) -> None:
-		if node.inplace:
-			self.o("\tvoid %sAdd%s(std::string_view text) noexcept {"%(uname, uuname))
-			self.o("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
-			self.o("\t\taddVLText_<%d>(text);"%(node.offset+2))
+	def generate_union_text_out(self, node:Value, uname:str, inplace:bool, idx:int) -> None:
+		if inplace:
+			self.o("\tvoid add%s(std::string_view text) noexcept {"%(uname))
+			self.o("\t\tsetType_(%d);"%(idx))
+			self.o("\t\tsetSize_(text.size());")
+			self.o("\t\taddInplaceText_(writer_, next_, text);")
 		else:
-			self.o("\tvoid %sAdd%s(scalgoproto::TextOut t) noexcept {"%(uname, uuname))
-			self.o("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
-			self.o("\tsetText_<%d>(t);"%(node.offset+2))
+			self.o("\tvoid add%s(scalgoproto::TextOut t) noexcept {"%(uname))
+			self.o("\t\tsetType_(%d);"%(idx))
+			self.o("\t\tsetObject_(getOffset_(t));")
 		self.o("\t}")
 
 	def generate_bytes_in(self, node:Value, uname:str) -> None:
@@ -360,21 +360,23 @@ class Generator:
 	def generate_bytes_out(self, node:Value, uname:str) -> None:
 		if node.inplace:
 			self.o("\tvoid add%s(const char * data, size_t size) noexcept {"%(uname))
-			self.o("\t\taddVLBytes_<%d>(data, size);"%(node.offset))
+			self.o("\t\tsetInner_<std::uint32_t, %d>(size);"%(node.offset))
+			self.o("\t\taddInplaceBytes_(writer_, offset_+SIZE, data, size);")
 		else:
 			self.o("\tvoid add%s(scalgoproto::BytesOut b) noexcept {"%(uname))
-			self.o("\tsetBytes_<%d>(b);"%(node.offset))
+			self.o("\t\tsetInner_<std::uint32_t, %d>(getOffset_(b));"%(node.offset))
 		self.o("\t}")
 
-	def generate_union_bytes_out(self, node:Value, member:Value, uname:str, uuname:str, idx:int) -> None:
-		if node.inplace:
-			self.o("\tvoid %sAdd%s(const char * data, size_t size) noexcept {"%(uname, uuname))
-			self.o("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
-			self.o("\t\taddVLBytes_<%d>(data, size);"%(node.offset+2))
+	def generate_union_bytes_out(self, node:Value, uname:str, inplace:bool, idx:int) -> None:
+		if inplace:
+			self.o("\tvoid add%s(const char * data, size_t size) noexcept {"%(uname))
+			self.o("\t\tsetType_(%d);"%(idx))
+			self.o("\t\tsetSize_(size);")
+			self.o("\t\taddInplaceBytes_(writer_, next_, data, size);")
 		else:
-			self.o("\tvoid %sAdd%s(scalgoproto::BytesOut b) noexcept {"%(uname, uuname))
-			self.o("\t\tsetInner_<std::uint16_t, %d>(%d);"%(node.offset, idx))
-			self.o("\tsetBytes_<%d>(b);"%(node.offset+2))
+			self.o("\tvoid add%s(scalgoproto::BytesOut b) noexcept {"%(uname))
+			self.o("\t\tsetType_(%d);"%(idx))
+			self.o("\t\tsetObject_(getOffset_(b));")
 		self.o("\t}")
 
 	def generate_union_in(self, node:Value, uname:str) -> None:
@@ -387,24 +389,15 @@ class Generator:
 		self.o("\t}")
 
 	def generate_union_out(self, node:Value, uname:str) -> None:
-		self.o("\tbool has%s() const noexcept {"%(uname))
-		self.o("\t\treturn getInner_<std::uint16_t, %d>() != 0;"%(node.offset))
-		self.o("\t}")
-		uname = lcamel(uname)
-		idx = 1
-		for member in node.union.members:
-			uuname = ucamel(self.value(member.identifier))
-			if member.table:
-				self.generate_union_table_out(node, member, uname, uuname, idx)
-			elif member.list_:
-				self.generate_union_list_out(node, member, uname, uuname, idx)
-			elif member.type_.type == TokenType.BYTES:
-				self.generate_union_bytes_out(node, member, uname, uuname, idx)
-			elif member.type_.type == TokenType.TEXT:
-				self.generate_union_text_out(node, member, uname, uuname, idx)
-			else:
-				assert False
-			idx += 1
+		if node.inplace:
+			self.o("\t%sInplaceOut get%s() const noexcept {"%(node.union.name, uname))
+			self.o("\t\treturn construct_<%sInplaceOut>(writer_, offset_ + %d, offset_ + SIZE);"%(node.union.name, node.offset, ))
+			self.o("\t}")
+		else:
+			self.o("\t%sOut get%s() const noexcept {"%(node.union.name, uname))
+			self.o("\t\treturn construct_<%sOut>(writer_, offset_ + %d);"%(node.union.name, node.offset))
+			self.o("\t}")
+		self.o("\t")
 	
 	def generate_value_in(self, node:Value) -> None:
 		n = self.value(node.identifier)
@@ -494,6 +487,29 @@ class Generator:
 				assert False
 		self.o("};")
 		self.o("")
+		for (inplace, prefix) in ((False, ""), (True, "Inplace")):
+			self.o("class %s%sOut: public scalgoproto::%sUnionOut {"%(union.name, prefix, prefix))
+			self.o("\tfriend class Out;")
+			self.o("protected:")
+			self.o("\tusing scalgoproto::%sUnionOut::%sUnionOut;"%(prefix, prefix))
+			self.o("public:")
+			idx = 1
+			for member in union.members:
+				n = self.value(member.identifier)
+				uname = ucamel(n)
+				if member.table:
+					self.generate_union_table_out(member, uname, inplace, idx)
+				elif member.list_:
+					self.generate_union_list_out(member, uname, inplace, idx)
+				elif member.type_.type == TokenType.BYTES:
+					self.generate_union_bytes_out(member, uname, inplace, idx)
+				elif member.type_.type == TokenType.TEXT:
+					self.generate_union_text_out(member, uname, inplace, idx)
+				else:
+					assert False
+				idx += 1
+			self.o("};")
+			self.o("")		
 
 	def generate_table(self, table:Table) -> None:
 		# Recursively generate direct contained members
@@ -519,11 +535,14 @@ class Generator:
 		self.o("namespace scalgoproto {template <> struct MetaMagic<%sIn> {using t=TableTag;};}"%table.name)
 		self.o("")
 		self.output_doc(table)
-		self.o("class %sOut: public scalgoproto::Out {"%table.name)
+		self.o("class %sOut: public scalgoproto::TableOut {"%table.name)
 		self.o("\tfriend class scalgoproto::Out;")
 		self.o("\tfriend class scalgoproto::Writer;")
+		self.o("public:")
+		self.o("\tstatic constexpr std::uint32_t SIZE = %d;"%(len(table.default)))
+		self.o("\tstatic constexpr std::uint32_t MAGIC = 0x%08x;"%(table.magic))
 		self.o("protected:")
-		self.o("\t%sOut(scalgoproto::Writer & writer, bool withHeader): scalgoproto::Out(writer, withHeader, 0x%08X, \"%s\", %d) {}"%(table.name, table.magic, cescape(table.default), len(table.default)))
+		self.o("\t%sOut(scalgoproto::Writer & writer, bool withHeader): scalgoproto::TableOut(writer, withHeader, MAGIC, \"%s\", SIZE) {}"%(table.name, cescape(table.default)))
 		self.o("public:")
 		for node in table.members:
 			self.generate_value_out(node)
