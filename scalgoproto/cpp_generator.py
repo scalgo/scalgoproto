@@ -49,6 +49,8 @@ class Generator:
 			typeName = rawType = node.struct.name
 		elif node.table:
 			typeName = "%sIn"%node.table.name
+		elif node.union:
+			typeName = "%sIn<false>"%node.union.name
 		elif node.type_.type == TokenType.TEXT:
 			typeName = "std::string_view"
 		elif node.type_.type == TokenType.BYTES:
@@ -69,10 +71,14 @@ class Generator:
 			typeName = node.struct.name
 		elif node.table:
 			typeName = "%sOut"%node.table.name
+		elif node.union:
+			typeName = "%sOut"%node.union.name
 		elif node.type_.type == TokenType.TEXT:
 			typeName = "scalgoproto::TextOut"
 		elif node.type_.type == TokenType.BYTES:
 			typeName = "scalgoproto::BytesOut"
+		else:
+			assert False
 		return typeName
 
 	def o(self, text="") -> None:
@@ -486,6 +492,8 @@ class Generator:
 			else:
 				assert False
 		self.o("};")
+		self.o("namespace scalgoproto {template <bool inplace> struct MetaMagic<%sIn<inplace>> {using t=UnionTag;};}"%union.name)
+
 		self.o("")
 		for (inplace, prefix) in ((False, ""), (True, "Inplace")):
 			self.o("class %s%sOut: public scalgoproto::%sUnionOut {"%(union.name, prefix, prefix))
@@ -509,6 +517,7 @@ class Generator:
 					assert False
 				idx += 1
 			self.o("};")
+			self.o("namespace scalgoproto {template <> struct MetaMagic<%s%sOut> {using t=UnionTag;};}"%(union.name, prefix))
 			self.o("")		
 
 	def generate_table(self, table:Table) -> None:

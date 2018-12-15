@@ -231,5 +231,6 @@ table Complex2 @76AB8115 {
 			z: U8;
 		}
 	}
+	l2: list NamedUnion;
 }
 

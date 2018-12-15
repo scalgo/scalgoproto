@@ -209,35 +209,35 @@ int main(int, char ** argv) {
 		m.addId(42);
 		auto l = w.constructList<std::int32_t>(31);
 		for (size_t i=0; i < 31; ++i)
-			l.add(i, 100-2*i);
+			l[i] = 100-2*i;
 		auto l2 = w.constructList<MyEnum>(2);
-		l2.add(0, MyEnum::a);
+		l2[0] = MyEnum::a;
 		auto l3 = w.constructList<MyStruct>(1);
 		auto b = w.constructBytes("bytes", 5);
 		auto t = w.constructText("text");
 
 		auto l4 = w.constructTextList(2);
-		l4.add(0, t);
+		l4[0] = t;
 		auto l5 = w.constructBytesList(1);
-		l5.add(0, b);
+		l5[0] = b;
 
 		auto l6 = w.constructList<MemberOut>(3);
-		l6.add(0, m);
-		l6.add(2, m);
+		l6[0] = m;
+		l6[2] = m;
 
 		auto l7 = w.constructList<float>(2);
-		l7.add(1, 98.0);
+		l7[1] = 98.0;
 
 		auto l8 = w.constructList<double>(3);
-		l8.add(2, 78.0);
+		l8[2] = 78.0;
 
 		auto l9 = w.constructList<uint8_t>(2);
-		l9.add(0, 4);
+		l9[0] = 4;
 
 		auto l10 = w.constructList<bool>(10);
-		l10.add(0, true);
-		l10.add(2, true);
-		l10.add(8, true);
+		l10[0] = true;
+		l10[2] = true;
+		l10[8] = true;
 
 		auto s = w.construct<ComplexOut>();
 		s.addMember(m);
@@ -363,11 +363,15 @@ int main(int, char ** argv) {
 		auto t = w.constructText("text");
 
 		auto l = w.constructList<NamedUnionEnumList>(2);
-		l.add(0, NamedUnionEnumList::x);
-		l.add(1, NamedUnionEnumList::z);
+		l[0] = NamedUnionEnumList::x;
+		l[1] = NamedUnionEnumList::z;
 
 		auto l2 = w.constructList<Complex2L>(1);
-		l2.add(0, {2, true});
+		l2[0] = {2, true};
+
+		auto l3 = w.constructList<NamedUnionOut>(2);
+		l3[0].addText(t);
+		l3[1].addMyBytes(b);
 
 		auto r = w.construct<Complex2Out>();
 		r.getU1().addMember(m);
@@ -381,6 +385,7 @@ int main(int, char ** argv) {
 
 		r.addL(l2);
 		r.addS({Complex2SX::p, {8}});
+		r.addL2(l3);
 
 		auto [data, size] = w.finalize(r);
 		return !validateOut(data, size, argv[2]);
@@ -411,6 +416,14 @@ int main(int, char ** argv) {
 		REQUIRE(l2[0].b, true);
 		REQUIREQ(s.getS().x, Complex2SX::p)
 		REQUIRE(s.getS().y.z, 8);
+
+		REQUIRE(s.hasL2(), true);
+		auto l3 = s.getL2();
+		REQUIRE(l3[0].isText(), true);
+		REQUIRE(l3[0].getText(), "text");
+		REQUIRE(l3[1].isMyBytes(), true);
+		REQUIRE(l3[1].getMyBytes().second, 5);
+		REQUIRE(memcmp(l3[1].getMyBytes().first, "bytes", 5), 0);
 	} else if (!strcmp(argv[1], "out_vl")) {
 		scalgoproto::Writer w;
 		auto name = w.constructText("nilson");
@@ -431,8 +444,8 @@ int main(int, char ** argv) {
 		auto l = w.construct<VLListOut>();
 		l.addId(47);
 		auto ll = l.addL(2);
-		ll.add(0, 24);
-		ll.add(1, 99);
+		ll[0] = 24;
+		ll[1] = 99;
 
 		auto root = w.construct<VLRootOut>();
 		root.addU(u);
