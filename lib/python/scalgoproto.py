@@ -18,6 +18,7 @@ class StructType(Generic[B]):
 
 TI = TypeVar('TI', bound='TableIn')
 TO = TypeVar('TO', bound='TableOut')
+UO = TypeVar('UO', bound='UnionOut')
 E = TypeVar('E', bound=enum.IntEnum)
 S = TypeVar('S', bound=StructType)
 
@@ -283,6 +284,15 @@ class ObjectListOut(OutList, Generic[B]):
 		assert 0 <= index < self._size
 		self._writer._data[self._offset + index*4: self._offset + index*4 + 1] = struct.pack("I", value._offset-8)
 
+class UnionListOut(OutList, Generic[UO]):
+	def __init__(self, writer: "Writer", u:Type[UO], size:int, with_header:bool = True) -> None:
+		"""Private constructor. Use factory methods on writer"""
+		super().__init__(writer, b'\0\0\0\0\0\0'*size, size, with_header)
+		self._u = u
+
+	def __getitem__(self, index:int) -> B:
+		return self._u(self._writer, self._offset + index*6)
+
 class Writer:
 	_data: bytearray = None
 	_used: int = 0
@@ -319,7 +329,7 @@ class Writer:
 	def construct_text_list(self, size:int) -> ObjectListOut[TextOut]: return ObjectListOut[TextOut](self, size)
 	def construct_bytes_list(self, size:int) -> ObjectListOut[BytesOut]: return ObjectListOut[BytesOut](self, size)
 	def construct_bool_list(self, size:int) -> BoolListOut: return BoolListOut(self, size)
-		
+	def construct_union_list(self, u:Type[UO], size:int) -> UnionListOut[UO]: return UnionListOut[UO](self, u, size)
 	def construct_bytes(self, b:bytes) -> BytesOut:
 		self._reserve(len(b) + 8)
 		self._write(struct.pack("<II", _BYTES_MAGIC, len(b)))

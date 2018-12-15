@@ -45,6 +45,8 @@ class Generator:
 			return "scalgoproto.EnumListOut[%s]"%(node.enum.name)
 		elif node.table:
 			return "scalgoproto.ObjectListOut[%sOut]"%(node.table.name)
+		elif node.union:
+			return "scalgoproto.UnionListOut[%sOut]"%(node.union.name)
 		elif node.type_.type == TokenType.TEXT:
 			return "scalgoproto.ObjectListOut[scalgoproto.TextOut]"
 		elif node.type_.type == TokenType.BYTES:
@@ -67,6 +69,8 @@ class Generator:
 			return (node.enum.name, "\t\treturn self._reader._get_enum_list(%s, %s)"%(node.enum.name, os))
 		elif node.table:
 			return (node.table.name+"In", "\t\treturn self._reader._get_table_list(%sIn, %s)"%(node.table.name, os))
+		elif node.union:
+			return (node.union.name+"In", "\t\treturn self._reader._get_union_list(%sIn, %s)"%(node.union.name, os))
 		elif node.type_.type == TokenType.TEXT:
 			return ("str", "\t\treturn self._reader._get_text_list(%s)"%(os))
 		elif node.type_.type == TokenType.BYTES:

@@ -385,6 +385,10 @@ def test_out_complex2(path:str) -> bool:
 	l2 = w.construct_struct_list(base.Complex2L, 1)
 	l2[0] = base.Complex2L(2, True)
 
+	l3 = w.construct_union_list(base.NamedUnionOut, 2)
+	l3[0].text = t
+	l3[1].my_bytes = b
+
 	r = w.construct_table(base.Complex2Out)
 	r.u1.member = m
 	r.u2.text = t
@@ -397,7 +401,7 @@ def test_out_complex2(path:str) -> bool:
 
 	r.l = l2
 	r.s = base.Complex2S(base.Complex2SX.p, base.Complex2SY(8))
-
+	r.l2 = l3
 	data = w.finalize(r)
 	return validate_out(data, path)
 
