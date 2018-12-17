@@ -104,13 +104,14 @@ class Generator:
 		self.o("%s */"%indent)
 
 	def generate_list_in(self, node: Value, uname:str) -> None:
+		lname = lcamel(uname)
 		typeName, rawType = self.in_list_types(node)
 		self.o("\tbool has%s() const noexcept {"%(uname))
 		self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;"%(node.offset))
 		self.o("\t}")
 		self.o("\t")
 		self.output_doc(node, "\t")
-		self.o("\tscalgoproto::ListIn<%s> get%s() const {"%(typeName, uname))
+		self.o("\tscalgoproto::ListIn<%s> %s() const {"%(typeName, lname))
 		self.o("\t\tassert(has%s());"%uname)
 		self.o("\t\treturn getObject_<scalgoproto::ListIn<%s> >(reader_, getPtr_<%s, scalgoproto::LISTMAGIC, %d, scalgoproto::ListAccess<%s>::mult>());"%(
 			typeName, bs(node.inplace), node.offset, typeName ))
@@ -118,15 +119,16 @@ class Generator:
 		if rawType:
 			self.o("\t")
 			self.output_doc(node, "\t", [], ["\\note accessing this is undefined behaivour"])
-			self.o("\tstd::pair<const %s *, size_t> get%sRaw() const {"%(rawType, uname))
+			self.o("\tstd::pair<const %s *, size_t> %sRaw() const {"%(rawType, lname))
 			self.o("\t\tassert(has%s());"%uname)
 			self.o("\t\treturn getListRaw_<%s>(getPtr_<%s, scalgoproto::LISTMAGIC, %d, scalgoproto::ListAccess<%s>::mult>());"%(
 				rawType, bs(node.inplace), node.offset, typeName ))
 			self.o("\t}")
 	
-	def generate_union_list_in(self, node: Value, uname:str,) -> None:
+	def generate_union_list_in(self, node: Value, uname:str) -> None:
+		lname = lcamel(uname)
 		typeName, rawType = self.in_list_types(node)
-		self.o("\tscalgoproto::ListIn<%s> get%s() const {"%(typeName, uname))
+		self.o("\tscalgoproto::ListIn<%s> %s() const {"%(typeName, lname))
 		self.o("\t\tassert(is%s());"%(uname))
 		self.o("\t\treturn scalgoproto::In::getObject_<scalgoproto::ListIn<%s>>(this->reader_, this->template getPtr_<scalgoproto::LISTMAGIC, scalgoproto::ListAccess<%s>::mult>());"%(
 				typeName, typeName))
@@ -134,7 +136,7 @@ class Generator:
 		if rawType:
 			self.o("\t")
 			self.output_doc(node, "\t", [], ["\\note accessing this is undefined behavior"])
-			self.o("\tstd::pair<const %s *, size_t> get%sRaw() const {"%(rawType, uname))
+			self.o("\tstd::pair<const %s *, size_t> %sRaw() const {"%(rawType, lname))
 			self.o("\t\tassert(is%s());"%(uname))
 			self.o("\t\treturn scalgoproto::In::getListRaw_<%s>(this->reader_, this->template getPtr_<scalgoproto::LISTMAGIC, scalgoproto::ListAccess<%s>::mult>());"%(
 				rawType, typeName))
@@ -172,7 +174,7 @@ class Generator:
 			self.o("\t}")
 		self.o("\t")
 		self.output_doc(node, "\t")
-		self.o("\tbool get%s() const noexcept {"%(uname))
+		self.o("\tbool %s() const noexcept {"%(lcamel(uname)))
 		if node.optional:
 			self.o("\t\tassert(has%s());"%uname)
 		self.o("\t\treturn getBit_<%d, %s, 0>();"%(node.offset, node.bit))
@@ -190,7 +192,7 @@ class Generator:
 		assert not node.inplace
 		typeName = typeMap[node.type_.type]
 		if node.optional:
-			self.o("\tbool has%s() const noexcept {"%( uname))
+			self.o("\tbool has%s() const noexcept {"%(uname))
 			if node.type_.type in (TokenType.F32, TokenType.F64):
 				self.o("\t\treturn !std::isnan(getInner_<%s, %s>(std::numeric_limits<%s>::quiet_NaN()));"%(typeName, node.offset, typeName))
 			else:
@@ -198,7 +200,7 @@ class Generator:
 			self.o("\t}")
 		self.o("\t")
 		self.output_doc(node, "\t")
-		self.o("\t%s get%s() const noexcept {"%(typeName, uname))
+		self.o("\t%s %s() const noexcept {"%(typeName, lcamel(uname)))
 		if node.optional:
 			self.o("\t\tassert(has%s());"%uname)
 		self.o("\t\treturn getInner_<%s, %d>(%s);"%(typeName, node.offset, node.parsed_value if not math.isnan(node.parsed_value) else "NAN"))
@@ -220,7 +222,7 @@ class Generator:
 		self.o("\t}")
 		self.o("\t")
 		self.output_doc(node, "\t")
-		self.o("\t%s get%s() const noexcept {"%(node.enum.name, uname))
+		self.o("\t%s %s() const noexcept {"%(node.enum.name, lcamel(uname)))
 		self.o("\t\tassert(has%s());"%uname)
 		self.o("\t\treturn (%s)getInner_<std::uint8_t, %d>(%s);"%(node.enum.name, node.offset, node.parsed_value))
 		self.o("\t}")
@@ -239,7 +241,7 @@ class Generator:
 			self.o("\t}")
 		self.o("\t")
 		self.output_doc(node, "\t")
-		self.o("\t%s get%s() const noexcept {"%(node.struct.name, uname))
+		self.o("\t%s %s() const noexcept {"%(node.struct.name, lcamel(uname)))
 		if node.optional:
 			self.o("\t\tassert(has%s());"%uname)
 		self.o("\t\treturn getInner_<%s, %d>();"%(node.struct.name, node.offset))
@@ -259,7 +261,7 @@ class Generator:
 		self.o("\t}")
 		self.o("\t")
 		self.output_doc(node, "\t")
-		self.o("\t%sIn get%s() const {"%(node.table.name, uname))
+		self.o("\t%sIn %s() const {"%(node.table.name, lcamel(uname)))
 		self.o("\t\tassert(has%s());"%uname)
 		self.o("\t\treturn getObject_<%sIn>(reader_, getPtr_<%s, %sIn::MAGIC, %d>());"%(
 			node.table.name, bs(node.inplace), node.table.name, node.offset))
@@ -268,7 +270,7 @@ class Generator:
 	def generate_union_table_in(self, node: Value, uname:str) -> None:
 		if node.table.members:
 			self.output_doc(node, "\t")
-			self.o("\t%sIn get%s() const noexcept {"%(node.table.name, uname))
+			self.o("\t%sIn %s() const noexcept {"%(node.table.name, lcamel(uname)))
 			self.o("\t\tassert(is%s());"%(uname))
 			self.o("\t\treturn scalgoproto::In::getObject_<%sIn>(this->reader_, this->template getPtr_<%sIn::MAGIC>());"%(
 				node.table.name, node.table.name))
@@ -315,13 +317,13 @@ class Generator:
 		self.o("\t}")
 		self.o("\t")
 		self.output_doc(node, "\t")
-		self.o("\tstd::string_view get%s() {"%(uname))
+		self.o("\tstd::string_view %s() {"%(lcamel(uname)))
 		self.o("\t\treturn getText_(reader_, getPtr_<%s, scalgoproto::TEXTMAGIC, %d,  1, 1>());"%(bs(node.inplace), node.offset))
 		self.o("\t}")
 	
 	def generate_union_text_in(self, node: Value, uname:str) -> None:
 		self.output_doc(node, "\t")
-		self.o("\tstd::string_view get%s() {"%(uname))
+		self.o("\tstd::string_view %s() {"%(lcamel(uname)))
 		self.o("\t\treturn scalgoproto::In::getText_(this->reader_, this->template getPtr_<scalgoproto::TEXTMAGIC, 1, 1>());")
 		self.o("\t}")
 
@@ -353,13 +355,13 @@ class Generator:
 		self.o("\t}")
 		self.o("\t")
 		self.output_doc(node, "\t")
-		self.o("\tstd::pair<const void*, size_t> get%s()  {"%(uname))
+		self.o("\tstd::pair<const void*, size_t> %s()  {"%(lcamel(uname)))
 		self.o("\t\treturn getBytes_(getPtr_<%s, scalgoproto::BYTESMAGIC, %d>());"%(bs(node.inplace), node.offset))
 		self.o("\t}")
 
 	def generate_union_bytes_in(self, node: Value, uname:str) -> None:
 		self.output_doc(node, "\t")
-		self.o("\tstd::pair<const void*, size_t> get%s() {"%(uname))
+		self.o("\tstd::pair<const void*, size_t> %s() {"%(lcamel(uname)))
 		self.o("\t\treturn scalgoproto::In::getBytes_(this->template getPtr_<scalgoproto::BYTESMAGIC>());")
 		self.o("\t}")
 
@@ -388,7 +390,7 @@ class Generator:
 	def generate_union_in(self, node:Value, uname:str) -> None:
 		self.o("\tbool has%s() const noexcept {return getInner_<std::uint16_t, %d>() != 0;}"%(uname, node.offset))
 		self.output_doc(node, "\t")
-		self.o("\t%sIn<%s> get%s() {"%(node.union.name, bs(node.inplace), uname))
+		self.o("\t%sIn<%s> %s() {"%(node.union.name, bs(node.inplace), lcamel(uname)))
 		self.o("\t\tassert(has%s());"%(uname))
 		if node.inplace: self.o("\t\treturn getObject_<%sIn<true>>(reader_, getInner_<std::uint16_t, %d>(), start_ + size_, getInner_<std::uint32_t, %d>());"%(node.union.name, node.offset, node.offset+2))
 		else: self.o("\t\treturn getObject_<%sIn<false>>(reader_, getInner_<std::uint16_t, %d>(), getInner_<std::uint32_t, %d>());"%(node.union.name, node.offset, node.offset+2))
@@ -396,11 +398,11 @@ class Generator:
 
 	def generate_union_out(self, node:Value, uname:str) -> None:
 		if node.inplace:
-			self.o("\t%sInplaceOut get%s() const noexcept {"%(node.union.name, uname))
+			self.o("\t%sInplaceOut %s() const noexcept {"%(node.union.name, lcamel(uname)))
 			self.o("\t\treturn construct_<%sInplaceOut>(writer_, offset_ + %d, offset_ + SIZE);"%(node.union.name, node.offset, ))
 			self.o("\t}")
 		else:
-			self.o("\t%sOut get%s() const noexcept {"%(node.union.name, uname))
+			self.o("\t%sOut %s() const noexcept {"%(node.union.name, lcamel(uname)))
 			self.o("\t\treturn construct_<%sOut>(writer_, offset_ + %d);"%(node.union.name, node.offset))
 			self.o("\t}")
 		self.o("\t")
