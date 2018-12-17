@@ -2,12 +2,17 @@
 """
 Perform validation of the ast, and assign offsets and such
 """
-from .parser import TokenType, Token, Struct, AstNode, Value, Enum, Table, Union, Namespace
-from typing import Set, Dict, List
-import sys, struct, enum
-from .keywords import keywords
+import enum
+import struct
+import sys
+from typing import Dict, List, Set
+
 from .error import error
+from .keywords import keywords
+from .parser import (AstNode, Enum, Namespace, Struct, Table, Token, TokenType,
+                     Union, Value)
 from .util import ucamel
+
 
 class ContentType(enum.Enum):
 	TABLE = 0

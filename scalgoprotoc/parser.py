@@ -4,8 +4,10 @@ Parse a protocol description and generate an ast
 """
 import enum
 import typing as ty
+
 from .error import error
-from .sp_tokenize import TokenType, tokenize, Token
+from .sp_tokenize import Token, TokenType, tokenize
+
 
 class AstNode(object):
 	__slots__ = ['token', 'docccomment', 'bytes', 'offset', 'docstring']
@@ -289,4 +291,3 @@ class Parser:
 			if self.token.type in [TokenType.COMMA, TokenType.SEMICOLON]:
 				self.next_token()
 		return ans
-

@@ -4,6 +4,7 @@ Generate magic values
 """
 import random
 
+
 def run(args) -> int:
 	rng = random.SystemRandom()
 	for x in range(10):
@@ -13,4 +14,3 @@ def run(args) -> int:
 def setup(subparsers) -> None:
 	cmd = subparsers.add_parser('magic', help='Generate magic')
 	cmd.set_defaults(func=run)
-

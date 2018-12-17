@@ -1,7 +1,10 @@
 # -*- mode: python; tab-width: 4; indent-tabs-mode: t; python-indent-offset: 4; coding: utf-8 -*-
-from typing import TypeVar, Type, Generic, Sequence, Callable, Tuple, ClassVar
-import struct, enum, math
+import enum
+import math
+import struct
 from abc import abstractmethod
+from typing import Callable, ClassVar, Generic, Sequence, Tuple, Type, TypeVar
+
 MESSAGE_MAGIC = 0xB5C0C4B3
 TEXT_MAGIC = 0xD812C8F5
 BYTES_MAGIC = 0xDCDBBE10

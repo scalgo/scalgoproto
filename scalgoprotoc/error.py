@@ -1,5 +1,6 @@
-from tokenize import Token
 import sys
+from tokenize import Token
+
 
 def error(data:str, context: str, token: Token, message: str, error:str = "Error") -> None:
     cnt = 1

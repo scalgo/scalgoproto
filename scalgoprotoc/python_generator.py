@@ -2,14 +2,16 @@
 """
 Generate python reader/wirter
 """
-from .parser import Parser, ParseError
-from .annotate import annotate
-from .sp_tokenize import TokenType, Token
-from .parser import Struct, Union, Enum, Table, Value, Namespace, AstNode
-from typing import Set, Dict, List, TextIO, Tuple, NamedTuple
+import math
+import typing
 from types import SimpleNamespace
-import math, typing
-from .util import cescape, ucamel, snake
+from typing import Dict, List, NamedTuple, Set, TextIO, Tuple
+
+from .annotate import annotate
+from .parser import (AstNode, Enum, Namespace, ParseError, Parser, Struct,
+                     Table, Union, Value)
+from .sp_tokenize import Token, TokenType
+from .util import cescape, snake, ucamel
 
 TypeInfo = NamedTuple("TypeInfo", [("n",str), ("p",str),("s",str),("w",int)])
 
@@ -695,5 +697,3 @@ def setup(subparsers) -> None:
 	cmd.add_argument('schema', help='schema to generate things from')
 	cmd.add_argument('output', help="where do we store the output")
 	cmd.set_defaults(func=run)
-
-

@@ -2,14 +2,15 @@
 """
 Validate a schema
 """
-from .parser import Parser, ParseError
-from .annotate import annotate
-from .sp_tokenize import TokenType, Token
-from .parser import Struct, AstNode, Value, Enum, Table, Union, Namespace
-from typing import Set, Dict, List, TextIO, Tuple
-from types import SimpleNamespace
 import math
-from .util import ucamel, cescape, lcamel
+from types import SimpleNamespace
+from typing import Dict, List, Set, TextIO, Tuple
+
+from .annotate import annotate
+from .parser import (AstNode, Enum, Namespace, ParseError, Parser, Struct,
+                     Table, Union, Value)
+from .sp_tokenize import Token, TokenType
+from .util import cescape, lcamel, ucamel
 
 typeMap = {
 	TokenType.I8: "std::int8_t",
@@ -642,5 +643,3 @@ def setup(subparsers) -> None:
 	cmd.add_argument('schema', help='schema to generate things from')
 	cmd.add_argument('output', help="where do we store the output")
 	cmd.set_defaults(func=run)
-
-

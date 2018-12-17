@@ -3,9 +3,11 @@
 Test that everything works
 """
 
-import subprocess, sys, tempfile, os
-from typing import Callable 
-
+import os
+import subprocess
+import sys
+import tempfile
+from typing import Callable
 
 failures=[]
 

@@ -1,6 +1,7 @@
 # -*- mode: python; tab-width: 4; indent-tabs-mode: t; python-indent-offset: 4; coding: utf-8 -*-
 from typing import List
 
+
 def cescape(v:bytes) -> str:
 	ans = []
 	cmap = {

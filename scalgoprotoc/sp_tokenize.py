@@ -1,5 +1,6 @@
-from enum import Enum
 import typing as ty
+from enum import Enum
+
 
 class TokenType(Enum):
 	BAD = 0
