@@ -116,9 +116,9 @@ class Annotater:
         return d
 
     def create_doc_string(self, node: AstNode) -> None:
-        if not node.docccomment:
+        if not node.doc_comment:
             return
-        v = self.value(node.docccomment)
+        v = self.value(node.doc_comment)
         node.docstring = []
         for line in v.split("\n"):
             line = line.strip()

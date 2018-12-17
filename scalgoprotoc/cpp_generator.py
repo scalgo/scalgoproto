@@ -799,7 +799,7 @@ def run(args) -> int:
     p = Parser(data)
     out = open(args.output, "w")
     try:
-        ast = p.parseDocument()
+        ast = p.parse_document()
         if not annotate(data, ast):
             print("Invalid schema is valid")
             return 1

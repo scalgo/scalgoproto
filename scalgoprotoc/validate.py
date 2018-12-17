@@ -10,7 +10,7 @@ def run(args) -> int:
     data = open(args.schema).read()
     p = Parser(data)
     try:
-        ast = p.parseDocument()
+        ast = p.parse_document()
         if annotate(data, ast):
             print("Schema is valid")
             return 0

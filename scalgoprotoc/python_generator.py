@@ -604,7 +604,6 @@ class Generator:
             self.generate_table_in(node, uname)
         elif node.union:
             self.generate_union_in(node, uname, table)
-            pass
         elif node.type_.type == TokenType.TEXT:
             self.generate_text_in(node, uname)
         elif node.type_.type == TokenType.BYTES:
@@ -754,7 +753,7 @@ class Generator:
             if value.direct_struct:
                 self.generate_struct(value.direct_struct)
 
-            # Generate table reader
+        # Generate table reader
         self.o("class %sIn(scalgoproto.TableIn):" % table.name)
         self.output_doc(table, "\t")
         self.o("\t__slots__ = []")
@@ -888,9 +887,9 @@ def run(args) -> int:
     p = Parser(data)
     out = open(args.output, "w")
     try:
-        ast = p.parseDocument()
+        ast = p.parse_document()
         if not annotate(data, ast):
-            print("Invalid schema is valid")
+            print("Schema is invalid")
             return 1
         g = Generator(data, out)
         print(
