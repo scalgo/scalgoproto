@@ -424,30 +424,30 @@ int main(int, char ** argv) {
 		REQUIRE(l3[1].isMyBytes(), true);
 		REQUIRE(l3[1].myBytes().second, 5);
 		REQUIRE(memcmp(l3[1].myBytes().first, "bytes", 5), 0);
-	} else if (!strcmp(argv[1], "out_vl")) {
+	} else if (!strcmp(argv[1], "out_inplace")) {
 		scalgoproto::Writer w;
 		auto name = w.constructText("nilson");
-		auto u = w.construct<VLUnionOut>();
+		auto u = w.construct<InplaceUnionOut>();
 		u.u().addMonkey().addName(name);
 
-		auto u2 = w.construct<VLUnionOut>();
+		auto u2 = w.construct<InplaceUnionOut>();
 		u2.u().addText().addT("foobar");
 
-		auto t = w.construct<VLTextOut>();
+		auto t = w.construct<InplaceTextOut>();
 		t.addId(45);
 		t.addT("cake");
 
-		auto b = w.construct<VLBytesOut>();
+		auto b = w.construct<InplaceBytesOut>();
 		b.addId(46);
 		b.addB("hi", 2);
 
-		auto l = w.construct<VLListOut>();
+		auto l = w.construct<InplaceListOut>();
 		l.addId(47);
 		auto ll = l.addL(2);
 		ll[0] = 24;
 		ll[1] = 99;
 
-		auto root = w.construct<VLRootOut>();
+		auto root = w.construct<InplaceRootOut>();
 		root.addU(u);
 		root.addU2(u2);
 		root.addT(t);
@@ -455,10 +455,10 @@ int main(int, char ** argv) {
 		root.addL(l);
 		auto [data, size] = w.finalize(root);
 		return !validateOut(data, size, argv[2]);
-	} else if (!strcmp(argv[1], "in_vl")) {
+	} else if (!strcmp(argv[1], "in_inplace")) {
 		auto o = readIn(argv[2]);
 		scalgoproto::Reader r(o.data(), o.size());
-		auto s = r.root<VLRootIn>();
+		auto s = r.root<InplaceRootIn>();
 
 		REQUIRE(s.hasU(), true);
 		auto u = s.u();

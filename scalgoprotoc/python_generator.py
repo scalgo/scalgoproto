@@ -151,7 +151,7 @@ class Generator:
         (tn, acc) = self.in_list_help(
             node,
             "*self._get_ptr%s(%d, scalgoproto.LIST_MAGIC)"
-            % ("_vl" if node.inplace else "", node.offset),
+            % ("_inplace" if node.inplace else "", node.offset),
         )
         self.o("\t@property")
         self.o("\tdef %s(self) -> scalgoproto.ListIn[%s]:" % (uname, tn))
@@ -169,7 +169,7 @@ class Generator:
         self.o(acc)
         self.o("\t")
 
-    def generate_vl_list_constructor(self, node: Value) -> None:
+    def generate_inplace_list_constructor(self, node: Value) -> None:
         if node.type_.type in typeMap:
             ti = typeMap[node.type_.type]
             self.o(
@@ -213,8 +213,8 @@ class Generator:
                 % (uname, self.out_list_type(node))
             )
             self.output_doc(node, "\t\t")
-            self.generate_vl_list_constructor(node)
-            self.o("\t\tself._set_vl_list(%d, size)" % (node.offset))
+            self.generate_inplace_list_constructor(node)
+            self.o("\t\tself._set_inplace_list(%d, size)" % (node.offset))
             self.o("\t\treturn l")
             self.o("\t")
 
@@ -234,7 +234,7 @@ class Generator:
             )
             self.output_doc(node, "\t\t")
             self.o("\t\tself._set(%d, size)" % (idx))
-            self.generate_vl_list_constructor(node)
+            self.generate_inplace_list_constructor(node)
             self.o("\t\treturn l")
             self.o("\t")
 
@@ -378,7 +378,7 @@ class Generator:
                 "\t\treturn %sIn(self._reader, *self._get_ptr%s(%d, %sIn._MAGIC))"
                 % (
                     node.table.name,
-                    "_vl" if node.inplace else "",
+                    "_inplace" if node.inplace else "",
                     node.offset,
                     node.table.name,
                 )
@@ -453,7 +453,7 @@ class Generator:
         self.o("\t\tassert self.has_%s" % (uname))
         self.o(
             "\t\t(o, s) = self._get_ptr%s(%d, scalgoproto.TEXT_MAGIC)"
-            % ("_vl" if node.inplace else "", node.offset)
+            % ("_inplace" if node.inplace else "", node.offset)
         )
         self.o("\t\treturn self._reader._data[o: o+s].decode('utf-8')")
         self.o("\t")
@@ -475,7 +475,7 @@ class Generator:
             self.o("\tdef %s(self, t: scalgoproto.TextOut) -> None:" % (uname))
         self.output_doc(node, "\t\t")
         if node.inplace:
-            self.o("\t\tself._add_vl_text(%d, text)" % (node.offset))
+            self.o("\t\tself._add_inplace_text(%d, text)" % (node.offset))
         else:
             self.o("\t\tself._set_text(%d, t)" % (node.offset))
         self.o("\t")
@@ -491,7 +491,7 @@ class Generator:
         self.output_doc(node, "\t\t")
         if node.inplace:
             self.o("\t\tself._set(%d, len(value))" % (idx))
-            self.o("\t\twriter._add_vl_text(value)")
+            self.o("\t\twriter._add_inplace_text(value)")
         else:
             self.o("\t\tself._set(%d, b._offset-8)" % (idx))
         self.o("\t")
@@ -508,7 +508,7 @@ class Generator:
         self.o("\t\tassert self.has_%s" % (uname))
         self.o(
             "\t\t(o, s) = self._get_ptr%s(%d, scalgoproto.BYTES_MAGIC)"
-            % ("_vl" if node.inplace else "", node.offset)
+            % ("_inplace" if node.inplace else "", node.offset)
         )
         self.o("\t\treturn self._reader._data[o: o+s]")
         self.o("\t")
@@ -530,7 +530,7 @@ class Generator:
             self.o("\tdef %s(self, b: scalgoproto.BytesOut) -> None:" % (uname))
         self.output_doc(node, "\t\t")
         if node.inplace:
-            self.o("\t\tself._add_vl_bytes(%d, value)" % (node.offset))
+            self.o("\t\tself._add_inplace_bytes(%d, value)" % (node.offset))
         else:
             self.o("\t\tself._set_bytes(%d, b)" % (node.offset))
         self.o("\t")
@@ -546,7 +546,7 @@ class Generator:
         self.output_doc(node, "\t\t")
         if node.inplace:
             self.o("\t\tself._set(%d, len(value))" % (idx))
-            self.o("\t\twriter._add_vl_bytes(value)")
+            self.o("\t\twriter._add_inplace_bytes(value)")
         else:
             self.o("\t\tself._set(%d, b._offset-8)" % (idx))
         self.o("\t")
@@ -581,9 +581,9 @@ class Generator:
             % (
                 uname,
                 node.union.name,
-                "Vl" if node.inplace else "",
+                "Inplace" if node.inplace else "",
                 node.union.name,
-                "Vl" if node.inplace else "",
+                "Inplace" if node.inplace else "",
                 node.offset,
                 table.bytes,
             )
@@ -717,7 +717,7 @@ class Generator:
                 assert False
             idx += 1
 
-        self.o("class %sVlOut(scalgoproto.UnionOut):" % union.name)
+        self.o("class %sInplaceOut(scalgoproto.UnionOut):" % union.name)
         self.o("\t__slots__ = []")
         self.o(
             "\tdef __init__(self, writer: scalgoproto.Writer, offset:int, end:int=0):"

@@ -29,7 +29,7 @@ Tables are encoded as follows. First the magic U32 id of the table is encoded. T
 * Bools and Struct: If marked as optional a boolean is encoded to represent if we have a value or not. Next the integer or struct is encoded.
 * Floats: The float is encoded as a basic type. If it is marked optional NAN is used to signal that it has no value.
 * Bytes, Texts, Lists and tables: Are encoded as a U32 offset of the magic of object in the message.  A zero offset denotes that there is no value.
-* VLList, VLBytes, VLText: The length of the list, bytes or text is encoded as a U32, the special length 0 indicates that we have no value. The content is encoded as Lists, Bytes and Text but without magic and length immediately after the table. That is at the location table.offset+table.length+8.
+* InplaceList, InplaceBytes, InplaceText: The length of the list, bytes or text is encoded as a U32, the special length 0 indicates that we have no value. The content is encoded as Lists, Bytes and Text but without magic and length immediately after the table. That is at the location table.offset+table.length+8.
 * Union: The choice of union member is encoded as a U16. Where zero indicates no member and other members are numbered as they appear in the specification from 1. Next the length of the member is encoded as a U32. The content of the member is encoded as a Table, List, Bytes or Text but without the magic and length immediately after the table. That is at the location table.offset+table.length+8.
 
 ### Message

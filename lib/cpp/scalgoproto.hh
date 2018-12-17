@@ -115,7 +115,7 @@ private:
 	}
 
 	template <uint32_t mult=1, uint32_t add=0>
-	Ptr getPtrVl_(const char * start, uint32_t s) const {
+	Ptr getPtrInplace_(const char * start, uint32_t s) const {
 		if (start + computeSize<mult>(s) + add > data + size) throw Error();
 		return Ptr{start, s};
 	}
@@ -460,10 +460,10 @@ protected:
 		return ans;
 	}
 
-	template <bool vl, uint32_t magic, uint32_t o, uint32_t mult=1, uint32_t add=0>
+	template <bool inplace, uint32_t magic, uint32_t o, uint32_t mult=1, uint32_t add=0>
 	Ptr getPtr_() const {
-		if constexpr (vl)
-			return reader_.getPtrVl_<mult, add>(start_+size_, getInnerUnchecked_<std::uint32_t, o>());
+		if constexpr (inplace)
+			return reader_.getPtrInplace_<mult, add>(start_+size_, getInnerUnchecked_<std::uint32_t, o>());
 		else
 			return reader_.getPtr_<magic, mult, add>(getInnerUnchecked_<std::uint32_t, o>());
 	}
@@ -511,7 +511,7 @@ protected:
 		, size_(size) {}
 
 	template <uint32_t magic, uint32_t mult=1, uint32_t add=0>
-	Ptr getPtr_() const {return reader_.getPtrVl_<mult, add>(start_, size_);}
+	Ptr getPtr_() const {return reader_.getPtrInplace_<mult, add>(start_, size_);}
 };
 
 template <>

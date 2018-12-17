@@ -687,30 +687,30 @@ def test_in_complex2(path: str) -> bool:
     return True
 
 
-def test_out_vl(path: str) -> bool:
+def test_out_inplace(path: str) -> bool:
     w = scalgoproto.Writer()
     name = w.construct_text("nilson")
-    u = w.construct_table(base.VLUnionOut)
+    u = w.construct_table(base.InplaceUnionOut)
     u.u.add_monkey().name = name
 
-    u2 = w.construct_table(base.VLUnionOut)
+    u2 = w.construct_table(base.InplaceUnionOut)
     u2.u.add_text().t = "foobar"
 
-    t = w.construct_table(base.VLTextOut)
+    t = w.construct_table(base.InplaceTextOut)
     t.id = 45
     t.t = "cake"
 
-    b = w.construct_table(base.VLBytesOut)
+    b = w.construct_table(base.InplaceBytesOut)
     b.id = 46
     b.b = b"hi"
 
-    l = w.construct_table(base.VLListOut)
+    l = w.construct_table(base.InplaceListOut)
     l.id = 47
     ll = l.add_l(2)
     ll[0] = 24
     ll[1] = 99
 
-    root = w.construct_table(base.VLRootOut)
+    root = w.construct_table(base.InplaceRootOut)
     root.u = u
     root.u2 = u2
     root.t = t
@@ -720,10 +720,10 @@ def test_out_vl(path: str) -> bool:
     return validate_out(data, path)
 
 
-def test_in_vl(path: str) -> bool:
+def test_in_inplace(path: str) -> bool:
     o = read_in(path)
     r = scalgoproto.Reader(o)
-    s = r.root(base.VLRootIn)
+    s = r.root(base.InplaceRootIn)
 
     if require(s.has_u, True):
         return False
@@ -924,10 +924,10 @@ def main() -> None:
         ans = test_out_complex2(path)
     elif test == "in_complex2":
         ans = test_in_complex2(path)
-    elif test == "out_vl":
-        ans = test_out_vl(path)
-    elif test == "in_vl":
-        ans = test_in_vl(path)
+    elif test == "out_inplace":
+        ans = test_out_inplace(path)
+    elif test == "in_inplace":
+        ans = test_in_inplace(path)
     elif test == "out_extend1":
         ans = test_out_extend1(path)
     elif test == "in_extend1":

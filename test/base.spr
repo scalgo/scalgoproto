@@ -102,38 +102,38 @@ table Complex @CCDD589C {
 	blist: list Bool;
 }
 
-table VLList @793045DD {
+table InplaceList @793045DD {
 	id: I32;
 	l: inplace list I32;
 }
 
-table VLText @DC784D79 {
+table InplaceText @DC784D79 {
 	id: I32;
 	t: inplace Text;
 }
 
-table VLBytes @259A2E79 {
+table InplaceBytes @259A2E79 {
 	id: I32;
 	b: inplace Bytes;
 }
 
-table VLUnion @944099A8 {
+table InplaceUnion @944099A8 {
 	id: I32;
 	u: inplace union {
 		monkey {
 			name: Text;
 		};
-		text: VLText;
+		text: InplaceText;
 		empty {};
 	}
 }
 
-table VLRoot @971A3362 {
-	u: VLUnion;
-	u2: VLUnion;
-	l: VLList;
-	t: VLText;
-	b: VLBytes;
+table InplaceRoot @971A3362 {
+	u: InplaceUnion;
+	u2: InplaceUnion;
+	l: InplaceList;
+	t: InplaceText;
+	b: InplaceBytes;
 }
 
 table Gen1 @B4957DF9 {

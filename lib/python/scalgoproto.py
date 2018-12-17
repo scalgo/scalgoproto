@@ -204,7 +204,7 @@ class TableIn(object):
         size = self._reader._read_size(off, magic)
         return (off + 8, size)
 
-    def _get_ptr_vl(self, o: int, magic: int) -> Tuple[int, int]:
+    def _get_ptr_inplace(self, o: int, magic: int) -> Tuple[int, int]:
         size = self._get_uint32_f(o)
         return (self._offset + self._size, size)
 
@@ -431,7 +431,7 @@ class TableOut(object):
             "<H", self._writer._data[self._offset + o : self._offset + o + 2]
         )[0]
 
-    def _add_vl_text(self, o: int, t: str) -> None:
+    def _add_inplace_text(self, o: int, t: str) -> None:
         tt = t.encode("utf-8")
         self._writer._data[self._offset + o : self._offset + o + 4] = struct.pack(
             "<I", len(tt)
@@ -440,14 +440,14 @@ class TableOut(object):
         self._writer._write(tt)
         self._writer._write(b"\0")
 
-    def _add_vl_bytes(self, o: int, t: bytes) -> None:
+    def _add_inplace_bytes(self, o: int, t: bytes) -> None:
         self._writer._data[self._offset + o : self._offset + o + 4] = struct.pack(
             "<I", len(t)
         )
         self._writer._reserve(len(t))
         self._writer._write(t)
 
-    def _set_vl_list(self, o: int, size: int) -> None:
+    def _set_inplace_list(self, o: int, size: int) -> None:
         self._writer._data[self._offset + o : self._offset + o + 4] = struct.pack(
             "<I", size
         )
