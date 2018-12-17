@@ -2,12 +2,12 @@
 """
 Main executable
 """
-from parser import Parser, ParseError
+from .parser import Parser, ParseError
 import argparse
-import validate
-import cpp_generator
-import python_generator
-import magic
+from . import validate
+from . import cpp_generator
+from . import python_generator
+from . import magic
 import sys
 parser = argparse.ArgumentParser(description='Process schema.')
 subparsers = parser.add_subparsers(help='Subcommand to run')

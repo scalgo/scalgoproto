@@ -2,14 +2,14 @@
 """
 Generate python reader/wirter
 """
-from parser import Parser, ParseError
-from annotate import annotate
-from sp_tokenize import TokenType, Token
-from parser import Struct, Union, Enum, Table, Value, Namespace, AstNode
+from .parser import Parser, ParseError
+from .annotate import annotate
+from .sp_tokenize import TokenType, Token
+from .parser import Struct, Union, Enum, Table, Value, Namespace, AstNode
 from typing import Set, Dict, List, TextIO, Tuple, NamedTuple
 from types import SimpleNamespace
 import math, typing
-from util import cescape, ucamel, snake
+from .util import cescape, ucamel, snake
 
 TypeInfo = NamedTuple("TypeInfo", [("n",str), ("p",str),("s",str),("w",int)])
 

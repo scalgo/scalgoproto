@@ -2,14 +2,14 @@
 """
 Validate a schema
 """
-from parser import Parser, ParseError
-from annotate import annotate
-from sp_tokenize import TokenType, Token
-from parser import Struct, AstNode, Value, Enum, Table, Union, Namespace
+from .parser import Parser, ParseError
+from .annotate import annotate
+from .sp_tokenize import TokenType, Token
+from .parser import Struct, AstNode, Value, Enum, Table, Union, Namespace
 from typing import Set, Dict, List, TextIO, Tuple
 from types import SimpleNamespace
 import math
-from util import ucamel, cescape, lcamel
+from .util import ucamel, cescape, lcamel
 
 typeMap = {
 	TokenType.I8: "std::int8_t",

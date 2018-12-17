@@ -2,8 +2,8 @@
 """
 Validate a schema
 """
-from parser import Parser, ParseError
-from annotate import annotate
+from .parser import Parser, ParseError
+from .annotate import annotate
 
 def run(args) -> int:
 	data = open(args.schema).read()

@@ -4,8 +4,8 @@ Parse a protocol description and generate an ast
 """
 import enum
 import typing as ty
-from error import error
-from sp_tokenize import TokenType, tokenize, Token
+from .error import error
+from .sp_tokenize import TokenType, tokenize, Token
 
 class AstNode(object):
 	__slots__ = ['token', 'docccomment', 'bytes', 'offset', 'docstring']
