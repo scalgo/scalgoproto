@@ -757,7 +757,7 @@ class Generator:
         self.o("class %sIn(scalgoproto.TableIn):" % table.name)
         self.output_doc(table, "\t")
         self.o("\t__slots__ = []")
-        self.o("\t_MAGIC:typing_.ClassVar[int]=0x%08x" % table.magic)
+        self.o("\t_MAGIC:typing_.ClassVar[int]=0x%08X" % table.magic)
         self.o(
             "\tdef __init__(self, reader: scalgoproto.Reader, offset:int, size:int):"
         )
@@ -773,7 +773,7 @@ class Generator:
         self.o("class %sOut(scalgoproto.TableOut):" % table.name)
         self.output_doc(table, "\t")
         self.o("\t__slots__ = []")
-        self.o("\t_MAGIC:typing_.ClassVar[int]=0x%08x" % table.magic)
+        self.o("\t_MAGIC:typing_.ClassVar[int]=0x%08X" % table.magic)
         self.o(
             "\tdef __init__(self, writer: scalgoproto.Writer, withHeader: bool) -> None:"
         )

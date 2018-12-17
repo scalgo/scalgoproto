@@ -682,7 +682,7 @@ class Generator:
             % table.name
         )
         self.o("public:")
-        self.o("\tstatic constexpr std::uint32_t MAGIC = 0x%08x;" % (table.magic))
+        self.o("\tstatic constexpr std::uint32_t MAGIC = 0x%08X;" % (table.magic))
         for node in table.members:
             self.generate_value_in(node)
         self.o("};")
@@ -697,7 +697,7 @@ class Generator:
         self.o("\tfriend class scalgoproto::Writer;")
         self.o("public:")
         self.o("\tstatic constexpr std::uint32_t SIZE = %d;" % (len(table.default)))
-        self.o("\tstatic constexpr std::uint32_t MAGIC = 0x%08x;" % (table.magic))
+        self.o("\tstatic constexpr std::uint32_t MAGIC = 0x%08X;" % (table.magic))
         self.o("protected:")
         self.o(
             '\t%sOut(scalgoproto::Writer & writer, bool withHeader): scalgoproto::TableOut(writer, withHeader, MAGIC, "%s", SIZE) {}'
