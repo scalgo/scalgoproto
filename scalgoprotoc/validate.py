@@ -4,22 +4,26 @@ Validate a schema
 """
 from .annotate import annotate
 from .parser import ParseError, Parser
+from .documents import Documents, addDocumentsParams
 
 
 def run(args) -> int:
-    data = open(args.schema).read()
-    p = Parser(data)
+    documents = Documents()
+    documents.read_root(args.schema)
+    p = Parser(documents)
     try:
         ast = p.parse_document()
-        if annotate(data, ast):
+        if annotate(documents, ast):
             print("Schema is valid")
             return 0
     except ParseError as err:
-        err.describe(data)
+        err.describe(documents)
+        pass
     return 1
 
 
 def setup(subparsers) -> None:
     cmd = subparsers.add_parser("validate", help="Validate schema")
     cmd.add_argument("schema", help="schema to validate")
+    addDocumentsParams(cmd)
     cmd.set_defaults(func=run)

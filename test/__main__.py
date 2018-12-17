@@ -45,10 +45,9 @@ def runCpp(name: str, bin: str) -> bool:
     return True
 
 
-def runPySetup(schema: str) -> bool:
-    subprocess.check_call(
-        ["python3", "-m", "scalgoprotoc", "py", schema, "tmp/base.py"]
-    )
+def runPySetup(schemas: [str, str]) -> bool:
+    for schema in schemas:
+        subprocess.check_call(["python3", "-m", "scalgoprotoc", "py", schema, "tmp"])
     return True
 
 
@@ -185,7 +184,8 @@ def main():
     )
 
     runTest("validate base", lambda: runValidate("test/base.spr"))
-    if runTest("cpp setup", lambda: runCppSetup("test/base.spr", "test/cpp.cc")):
+    runTest("validate complex2", lambda: runValidate("test/complex2.spr"))
+    if runTest("cpp setup", lambda: runCppSetup(["test/base.spr", "test/complex2.spr"], "test/cpp.cc")):
         runTest(
             "cpp out default simple",
             lambda: runCpp("out_default", "test/simple_default.bin"),
@@ -198,15 +198,16 @@ def main():
         runTest("cpp in simple", lambda: runCpp("in", "test/simple.bin"))
         runTest("cpp out complex", lambda: runCpp("out_complex", "test/complex.bin"))
         runTest("cpp in complex", lambda: runCpp("in_complex", "test/complex.bin"))
-        runTest("cpp out complex2", lambda: runCpp("out_complex2", "test/complex2.bin"))
-        runTest("cpp in complex2", lambda: runCpp("in_complex2", "test/complex2.bin"))
+
         runTest("cpp out inplace", lambda: runCpp("out_inplace", "test/inplace.bin"))
         runTest("cpp in inplace", lambda: runCpp("in_inplace", "test/inplace.bin"))
         runTest("cpp out extend1", lambda: runCpp("out_extend1", "test/extend1.bin"))
         runTest("cpp in extend1", lambda: runCpp("in_extend1", "test/extend1.bin"))
         runTest("cpp out extend2", lambda: runCpp("out_extend2", "test/extend2.bin"))
         runTest("cpp in extend2", lambda: runCpp("in_extend2", "test/extend2.bin"))
-    if runTest("py setup", lambda: runPySetup("test/base.spr")):
+        runTest("cpp out complex2", lambda: runCpp("out_complex2", "test/complex2.bin"))
+        runTest("cpp in complex2", lambda: runCpp("in_complex2", "test/complex2.bin"))
+    if runTest("py setup", lambda: runPySetup(["test/base.spr", "test/complex2.spr"])):
         runTest(
             "py out default simple",
             lambda: runPy("out_default", "test/simple_default.bin"),

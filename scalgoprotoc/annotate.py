@@ -7,6 +7,7 @@ import struct
 import sys
 from typing import Dict, List, Set
 
+from .documents import Documents
 from .error import error
 from .keywords import keywords
 from .parser import (
@@ -36,16 +37,16 @@ class Annotater:
     tables: Dict[str, Table]
     unions: Dict[str, Union]
 
-    def __init__(self, data: str) -> None:
-        self.data = data
+    def __init__(self, documents: Documents) -> None:
+        self.documents = documents
         self.errors = 0
 
     def value(self, t: Token) -> str:
-        return self.data[t.index : t.index + t.length]
+        return self.documents.by_id[t.document].content[t.index : t.index + t.length]
 
     def error(self, token: Token, message: str) -> None:
         self.errors += 1
-        error(self.data, self.context, token, message)
+        error(self.documents, self.context, token, message)
 
     def validate_uname(self, t: Token) -> str:
         name = self.value(t)
@@ -541,7 +542,7 @@ class Annotater:
                 continue
 
 
-def annotate(data: str, ast: List[AstNode]) -> bool:
-    a = Annotater(data)
+def annotate(documents: Documents, ast: List[AstNode]) -> bool:
+    a = Annotater(documents)
     a.annotate(ast)
     return a.errors == 0

@@ -832,4 +832,5 @@ def setup(subparsers) -> None:
     cmd = subparsers.add_parser("cpp", help="Generate cpp code for windows")
     cmd.add_argument("schema", help="schema to generate things from")
     cmd.add_argument("output", help="where do we store the output")
+    cmd.add_argument("single", action="store_true")
     cmd.set_defaults(func=run)

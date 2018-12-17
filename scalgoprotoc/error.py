@@ -1,10 +1,12 @@
 import sys
 from tokenize import Token
+from .documents import Documents
 
 
 def error(
-    data: str, context: str, token: Token, message: str, error: str = "Error"
+    documents: Documents, context: str, token: Token, message: str, error: str = "Error"
 ) -> None:
+    data = documents.by_id[token.document].content
     cnt = 1
     idx = 0
     start = 0
@@ -17,7 +19,11 @@ def error(
         if data[idx] == "\t":
             t += 1
         idx += 1
-    print("Error in %s on line %d: %s" % (context, cnt, message), file=sys.stderr)
+    print(
+        "%s: Error in %s on line %d: %s"
+        % (documents.by_id[token.document].path, context, cnt, message),
+        file=sys.stderr,
+    )
     end = start
     while end < len(data) and data[end] != "\n":
         end += 1

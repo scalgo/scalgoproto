@@ -4,8 +4,10 @@ Generate python reader/wirter
 """
 import math
 import typing
+import os
 from types import SimpleNamespace
 from typing import Dict, List, NamedTuple, Set, TextIO, Tuple
+from .documents import Documents, addDocumentsParams
 
 from .annotate import annotate
 from .parser import (
@@ -43,8 +45,8 @@ typeMap: Dict[TokenType, TypeInfo] = {
 class Generator:
     out: TextIO = None
 
-    def __init__(self, data: str, out: TextIO) -> None:
-        self.data = data
+    def __init__(self, documents: Documents, out: TextIO) -> None:
+        self.documents = documents
         self.out = out
 
     def out_list_type(self, node: Value) -> str:
@@ -119,7 +121,7 @@ class Generator:
         print(text, file=self.out)
 
     def value(self, t: Token) -> str:
-        return self.data[t.index : t.index + t.length]
+        return self.documents.by_id[t.document].content[t.index : t.index + t.length]
 
     def output_doc(
         self,
@@ -669,7 +671,7 @@ class Generator:
         self.o("    __slots__ = []")
         self.o()
         self.o(
-            "    def __init__(self, reader: scalgoproto.Reader, type: int, offset: int, size: int = None):"
+            "    def __init__(self, reader: scalgoproto.Reader, type: int, offset: int, size: int = None) -> None:"
         )
         self.o(
             '        """Private constructor. Call factory methods on scalgoproto.Reader to construct instances"""'
@@ -713,7 +715,7 @@ class Generator:
         self.o("    __slots__ = []")
         self.o()
         self.o(
-            "    def __init__(self, writer: scalgoproto.Writer, offset: int, end: int = 0):"
+            "    def __init__(self, writer: scalgoproto.Writer, offset: int, end: int = 0) -> None:"
         )
         self.o(
             '        """Private constructor. Call factory methods on scalgoproto.Writer to construct instances"""'
@@ -904,7 +906,35 @@ class Generator:
         self.o()
 
     def generate(self, ast: List[AstNode]) -> None:
+        imports = {}
         for node in ast:
+            if node.document == 0:
+                continue
+            if not node.document in imports:
+                imports[node.document] = []
+            i = imports[node.document]
+            if isinstance(node, Struct):
+                i.append(node.name)
+            elif isinstance(node, Enum):
+                i.append(node.name)
+            elif isinstance(node, Table):
+                i.append("%sIn" % node.name)
+                i.append("%sOut" % node.name)
+            elif isinstance(node, Union):
+                i.append("%sIn" % node.name)
+                i.append("%sOut" % node.name)
+            elif isinstance(node, Namespace):
+                pass
+            else:
+                raise ICE()
+
+        for (d, imp) in imports.items():
+            doc = self.documents.by_id[d]
+            self.o("from %s import %s" % (doc.name, ", ".join(imp)))
+
+        for node in ast:
+            if node.document != 0:
+                continue
             if isinstance(node, Struct):
                 self.generate_struct(node)
             elif isinstance(node, Enum):
@@ -920,15 +950,16 @@ class Generator:
 
 
 def run(args) -> int:
-    data = open(args.schema, "r").read()
-    p = Parser(data)
-    out = open(args.output, "w")
+    documents = Documents()
+    documents.read_root(args.schema)
+    p = Parser(documents)
+    out = open(os.path.join(args.output, "%s.py" % documents.root.name), "w")
     try:
         ast = p.parse_document()
-        if not annotate(data, ast):
+        if not annotate(documents, ast):
             print("Schema is invalid")
             return 1
-        g = Generator(data, out)
+        g = Generator(documents, out)
         print(
             "# -*- mode: python; tab-width: 4; indent-tabs-mode: nil; python-indent-offset: 4; coding: utf-8 -*-",
             file=out,
@@ -937,10 +968,11 @@ def run(args) -> int:
         print("import scalgoproto, enum, struct", file=out)
         print("import math as math_", file=out)
         print("import typing as typing_", file=out)
+
         g.generate(ast)
         return 0
     except ParseError as err:
-        err.describe(data)
+        err.describe(documents)
     return 1
 
 

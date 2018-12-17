@@ -1,4 +1,4 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: t; python-indent-offset: 4; coding: utf-8 -*-
+# -*- mode: python; tab-width: 4; indent-tabs-mode: nil; python-indent-offset: 4; coding: utf-8 -*-
 """
 Parse a protocol description and generate an ast
 """
@@ -7,21 +7,24 @@ import typing as ty
 
 from .error import error
 from .sp_tokenize import Token, TokenType, tokenize
+from .documents import Documents, Document
 
 
 class AstNode(object):
-    __slots__ = ["token", "doc_comment", "bytes", "offset", "docstring"]
+    __slots__ = ["token", "doc_comment", "bytes", "offset", "docstring", "document"]
     token: Token
     doc_comment: Token
     bytes: int
     offset: int
     docstring: ty.List[str]
+    document: int
 
-    def __init__(self, token: Token, doc_comment: Token = None) -> None:
+    def __init__(self, token: Token, document: int, doc_comment: Token = None) -> None:
         self.token = token
         self.doc_comment = doc_comment
         self.bytes = 0
         self.offset = 0
+        self.document = document
         self.docstring = None
 
 
@@ -29,8 +32,8 @@ class Namespace(AstNode):
     __slots__ = ["namespace"]
     namespace: str
 
-    def __init__(self, token: Token, namespace: str) -> None:
-        super().__init__(token)
+    def __init__(self, token: Token, document: int, namespace: str) -> None:
+        super().__init__(token, document)
         self.namespace = namespace
 
 
@@ -43,11 +46,12 @@ class Struct(AstNode):
     def __init__(
         self,
         token: Token,
+        document: int,
         identifier: Token,
         members: ty.List["Value"],
         doc_comment: Token,
     ) -> None:
-        super().__init__(token, doc_comment)
+        super().__init__(token, document, doc_comment)
         self.identifier = identifier
         self.members = members
         self.name = None
@@ -63,11 +67,12 @@ class Enum(AstNode):
     def __init__(
         self,
         token: Token,
+        document: int,
         identifier: Token,
         members: ty.List["Value"],
         doc_comment: Token,
     ) -> None:
-        super().__init__(token, doc_comment)
+        super().__init__(token, document, doc_comment)
         self.identifier = identifier
         self.members = members
         self.name = None
@@ -87,12 +92,13 @@ class Table(AstNode):
     def __init__(
         self,
         token: Token,
+        document: int,
         identifier: Token,
         id_: Token,
         members: ty.List["Value"],
         doc_comment: Token,
     ) -> None:
-        super().__init__(token, doc_comment)
+        super().__init__(token, document, doc_comment)
         self.identifier = identifier
         self.id_ = id_
         self.members = members
@@ -111,11 +117,12 @@ class Union(AstNode):
     def __init__(
         self,
         token: Token,
+        document: int,
         identifier: Token,
         members: ty.List["Value"],
         doc_comment: Token,
     ) -> None:
-        super().__init__(token, doc_comment)
+        super().__init__(token, document, doc_comment)
         self.members = members
         self.identifier = identifier
         self.name = None
@@ -164,6 +171,7 @@ class Value(AstNode):
     def __init__(
         self,
         token: Token,
+        document: int,
         identifier: Token,
         value: Token,
         type_: Token,
@@ -176,7 +184,7 @@ class Value(AstNode):
         direct_struct: Struct,
         doc_comment: Token,
     ) -> None:
-        super().__init__(token, doc_comment)
+        super().__init__(token, document, doc_comment)
         self.identifier = identifier
         self.value = value
         self.type_ = type_
@@ -203,8 +211,8 @@ class ParseError(Exception):
         self.message = message
         self.context = context
 
-    def describe(self, data: str) -> None:
-        error(data, self.context, self.token, self.message, "Parse error")
+    def describe(self, documents: Documents) -> None:
+        error(documents, self.context, self.token, self.message, "Parse error")
 
 
 class ICE(Exception):
@@ -215,9 +223,11 @@ class ICE(Exception):
 class Parser:
     token: Token = None
 
-    def __init__(self, data: str) -> None:
-        self.data = data
-        self.tokenizer = tokenize(data)
+    def __init__(self, documents: Documents) -> None:
+        self.documents = documents
+        self.document = self.documents.root
+        self.tokenizer = tokenize(self.document.content, self.document.id)
+        self.docstack = [(self.document, self.tokenizer)]
         self.token = None
         self.next_token()
         self.context = ""
@@ -299,26 +309,46 @@ class Parser:
                 )
                 if type_.type == TokenType.LBRACE:
                     direct_table = Table(
-                        type_, None, None, self.parse_content(), doc_comment
+                        type_,
+                        self.document.id,
+                        None,
+                        None,
+                        self.parse_content(),
+                        doc_comment,
                     )
                 else:
                     self.next_token()
                     if type_.type == TokenType.UNION:
                         direct_union = Union(
-                            type_, None, self.parse_content(), doc_comment
+                            type_,
+                            self.document.id,
+                            None,
+                            self.parse_content(),
+                            doc_comment,
                         )
                     elif type_.type == TokenType.TABLE:
                         id_: Token = None
                         if self.token.type == TokenType.ID:
                             id_ = self.consume_token([TokenType.ID])
                         direct_table = Table(
-                            type_, None, id_, self.parse_content(), doc_comment
+                            type_,
+                            self.document.id,
+                            None,
+                            id_,
+                            self.parse_content(),
+                            doc_comment,
                         )
                     elif type_.type == TokenType.ENUM:
-                        direct_enum = Enum(t, None, self.parse_enum(), doc_comment)
+                        direct_enum = Enum(
+                            t, self.document.id, None, self.parse_enum(), doc_comment
+                        )
                     elif type_.type == TokenType.STRUCT:
                         direct_struct = Struct(
-                            type_, None, self.parse_content(), doc_comment
+                            type_,
+                            self.document.id,
+                            None,
+                            self.parse_content(),
+                            doc_comment,
                         )
                     if self.token.type == TokenType.EQUAL:
                         self.consume_token([TokenType.EQUAL])
@@ -333,6 +363,7 @@ class Parser:
                 members.append(
                     Value(
                         colon,
+                        self.document.id,
                         t,
                         value,
                         type_,
@@ -371,6 +402,7 @@ class Parser:
                 values.append(
                     Value(
                         ident,
+                        self.document.id,
                         ident,
                         None,
                         None,
@@ -391,7 +423,7 @@ class Parser:
         return values
 
     def value(self, t: Token) -> str:
-        return self.data[t.index : t.index + t.length]
+        return self.documents.by_id[t.document].content[t.index : t.index + t.length]
 
     def parse_document(self) -> ty.List[AstNode]:
         ans: ty.List[AstNode] = []
@@ -406,25 +438,45 @@ class Parser:
                     TokenType.NAMESPACE,
                     TokenType.UNION,
                     TokenType.DOCCOMMENT,
+                    TokenType.IMPORT,
                 ]
             )
-            if t.type == TokenType.DOCCOMMENT:
+            if t.type == TokenType.IMPORT:
+                self.context = ""
+                i = self.token
+                self.check_token(i, [TokenType.IDENTIFIER])
+                name = self.value(i)
+                if not name in self.documents.by_name:
+                    self.document = self.documents.read(name)
+                    self.tokenizer = tokenize(self.document.content, self.document.id)
+                    self.docstack.append((self.document, self.tokenizer))
+                    self.next_token()
+                    ans += self.parse_document()
+                    self.docstack.pop()
+                    self.document, self.tokenizer = self.docstack[-1]
+                    self.content = ""
+                self.next_token()
+            elif t.type == TokenType.DOCCOMMENT:
                 doc_comment = t
             elif t.type == TokenType.NAMESPACE:
                 namespace = ""
                 while True:
                     i = self.consume_token([TokenType.IDENTIFIER])
-                    namespace += self.data[i.index : i.index + i.length]
+                    namespace += self.documents.by_id[self.document.id].content[
+                        i.index : i.index + i.length
+                    ]
                     tt = self.consume_token([TokenType.COLONCOLON, TokenType.SEMICOLON])
                     if tt.type != TokenType.COLONCOLON:
                         break
                     namespace += "::"
-                ans.append(Namespace(t, namespace))
+                ans.append(Namespace(t, self.document.id, namespace))
                 doc_comment = None
             elif t.type == TokenType.STRUCT:
                 i = self.consume_token([TokenType.IDENTIFIER])
                 self.context = "struct %s" % self.value(i)
-                ans.append(Struct(t, i, self.parse_content(), doc_comment))
+                ans.append(
+                    Struct(t, self.document.id, i, self.parse_content(), doc_comment)
+                )
                 doc_comment = None
             elif t.type == TokenType.TABLE:
                 i = self.consume_token([TokenType.IDENTIFIER])
@@ -434,18 +486,26 @@ class Parser:
                     if self.token.type == TokenType.ID
                     else None
                 )
-                ans.append(Table(t, i, id_, self.parse_content(), doc_comment))
+                ans.append(
+                    Table(
+                        t, self.document.id, i, id_, self.parse_content(), doc_comment
+                    )
+                )
                 doc_comment = None
             elif t.type == TokenType.ENUM:
                 i = self.consume_token([TokenType.IDENTIFIER])
                 self.context = "enum %s" % self.value(i)
-                ans.append(Enum(t, i, self.parse_enum(), doc_comment))
+                ans.append(Enum(t, self.document.id, i, self.parse_enum(), doc_comment))
                 doc_comment = None
             elif t.type == TokenType.UNION:
                 i = self.consume_token([TokenType.IDENTIFIER])
                 self.context = "union %s" % self.value(i)
-                ans.append(Union(t, i, self.parse_content(), doc_comment))
+                ans.append(
+                    Union(t, self.document.id, i, self.parse_content(), doc_comment)
+                )
                 doc_comment = None
+            else:
+                raise ICE()
             if self.token.type in [TokenType.COMMA, TokenType.SEMICOLON]:
                 self.next_token()
         return ans

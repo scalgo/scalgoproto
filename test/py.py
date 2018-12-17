@@ -2,8 +2,8 @@
 import sys
 
 import scalgoproto
-
 import base
+import complex2
 
 
 def get_v(data: bytes, i: int) -> int:
@@ -615,14 +615,14 @@ def test_out_complex2(path: str) -> bool:
     l[0] = base.NamedUnionEnumList.x
     l[1] = base.NamedUnionEnumList.z
 
-    l2 = w.construct_struct_list(base.Complex2L, 1)
-    l2[0] = base.Complex2L(2, True)
+    l2 = w.construct_struct_list(complex2.Complex2L, 1)
+    l2[0] = complex2.Complex2L(2, True)
 
     l3 = w.construct_union_list(base.NamedUnionOut, 2)
     l3[0].text = t
     l3[1].my_bytes = b
 
-    r = w.construct_table(base.Complex2Out)
+    r = w.construct_table(complex2.Complex2Out)
     r.u1.member = m
     r.u2.text = t
     r.u3.my_bytes = b
@@ -633,7 +633,7 @@ def test_out_complex2(path: str) -> bool:
     m2.id = 43
 
     r.l = l2
-    r.s = base.Complex2S(base.Complex2SX.p, base.Complex2SY(8))
+    r.s = complex2.Complex2S(complex2.Complex2SX.p, complex2.Complex2SY(8))
     r.l2 = l3
     data = w.finalize(r)
     return validate_out(data, path)
@@ -642,7 +642,7 @@ def test_out_complex2(path: str) -> bool:
 def test_in_complex2(path: str) -> bool:
     r = scalgoproto.Reader(read_in(path))
 
-    s = r.root(base.Complex2In)
+    s = r.root(complex2.Complex2In)
     if require(s.u1.is_member, True):
         return False
     if require(s.u1.member.id, 42):
@@ -679,7 +679,7 @@ def test_in_complex2(path: str) -> bool:
         return False
     if require(l2[0].b, True):
         return False
-    if require(s.s.x, base.Complex2SX.p):
+    if require(s.s.x, complex2.Complex2SX.p):
         return False
     if require(s.s.y.z, 8):
         return False

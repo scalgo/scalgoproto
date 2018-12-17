@@ -39,12 +39,15 @@ class TokenType(Enum):
     COLONCOLON = 67
     DOCCOMMENT = 68
     INPLACE = 69
+    IMPORT = 70
 
 
-Token = ty.NamedTuple("Token", [("type", TokenType), ("index", int), ("length", int)])
+Token = ty.NamedTuple(
+    "Token", [("type", TokenType), ("index", int), ("length", int), ("document", int)]
+)
 
 
-def tokenize(data: str) -> ty.Iterator[Token]:
+def tokenize(data: str, document: int) -> ty.Iterator[Token]:
     cur: int = 0
     end: int = 0
     ops: ty.Dict[str, TokenType] = {
@@ -80,6 +83,7 @@ def tokenize(data: str) -> ty.Iterator[Token]:
         "union": TokenType.UNION,
         "namespace": TokenType.NAMESPACE,
         "inplace": TokenType.INPLACE,
+        "import": TokenType.IMPORT,
     }
 
     while cur < len(data):
@@ -88,12 +92,12 @@ def tokenize(data: str) -> ty.Iterator[Token]:
             continue
 
         if data[cur : cur + 2] == "::":
-            yield Token(TokenType.COLONCOLON, cur, 2)
+            yield Token(TokenType.COLONCOLON, cur, 2, document)
             cur += 2
             continue
 
         if data[cur] in ops:
-            yield Token(ops[data[cur]], cur, 1)
+            yield Token(ops[data[cur]], cur, 1, document)
             cur += 1
             continue
 
@@ -112,7 +116,7 @@ def tokenize(data: str) -> ty.Iterator[Token]:
                 cur += 1
                 while cur < len(data) and data[cur] != "\n":
                     cur += 1
-            yield Token(TokenType.DOCCOMMENT, start, cur - start)
+            yield Token(TokenType.DOCCOMMENT, start, cur - start, document)
             continue
 
         if data[cur : cur + 3] == "/**":
@@ -122,9 +126,9 @@ def tokenize(data: str) -> ty.Iterator[Token]:
                 cur += 1
             if data[cur : cur + 2] == "*/":
                 cur += 2
-                yield Token(TokenType.DOCCOMMENT, start, cur - start)
+                yield Token(TokenType.DOCCOMMENT, start, cur - start, document)
             else:
-                yield Token(TokenType.BAD, start, cur - start)
+                yield Token(TokenType.BAD, start, cur - start, document)
             continue
 
         if data[cur] == "#" or data[cur : cur + 2] == "//":
@@ -152,7 +156,7 @@ def tokenize(data: str) -> ty.Iterator[Token]:
             type: TokenType = TokenType.IDENTIFIER
             if data[cur:end] in keywords:
                 type = keywords[data[cur:end]]
-            yield Token(type, cur, end - cur)
+            yield Token(type, cur, end - cur, document)
             cur = end
             continue
 
@@ -160,7 +164,7 @@ def tokenize(data: str) -> ty.Iterator[Token]:
             end = cur + 1
             while end < len(data) and data[end] in "0123456789ABCDEFG":
                 end += 1
-            yield Token(TokenType.ID, cur, end - cur)
+            yield Token(TokenType.ID, cur, end - cur, document)
             cur = end
             continue
 
@@ -180,10 +184,10 @@ def tokenize(data: str) -> ty.Iterator[Token]:
                     end += 1
                 while end < len(data) and data[end] in "0123456789":
                     end += 1
-            yield Token(TokenType.NUMBER, cur, end - cur)
+            yield Token(TokenType.NUMBER, cur, end - cur, document)
             cur = end
             continue
 
-        yield Token(TokenType.BAD, cur, 1)
+        yield Token(TokenType.BAD, cur, 1, document)
         cur += 1
-    yield Token(TokenType.EOF, cur, 0)
+    yield Token(TokenType.EOF, cur, 0, document)
