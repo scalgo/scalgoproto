@@ -18,6 +18,7 @@ from .parser import (
     Table,
     Union,
     Value,
+    ICE,
 )
 from .sp_tokenize import Token, TokenType
 from .util import cescape, snake, ucamel
@@ -64,7 +65,7 @@ class Generator:
         elif node.type_.type == TokenType.BYTES:
             return "scalgoproto.ObjectListOut[scalgoproto.BytesOut]"
         else:
-            assert False
+            raise ICE()
 
     def in_list_help(self, node: Value, os: str) -> Tuple[str, str]:
         if node.type_.type == TokenType.BOOL:
@@ -111,7 +112,7 @@ class Generator:
         elif node.type_.type == TokenType.BYTES:
             return ("bytes", "\t\treturn self._reader._get_bytes_list(%s)" % (os))
         else:
-            assert False
+            raise ICE()
 
     def o(self, text="") -> None:
         print(text, file=self.out)
@@ -239,7 +240,8 @@ class Generator:
             self.o("\t")
 
     def generate_bool_in(self, node: Value, uname: str) -> None:
-        assert not node.inplace
+        if node.inplace:
+            raise ICE()
         if node.optional:
             self.o("\t@property")
             self.o(
@@ -255,7 +257,8 @@ class Generator:
         self.o("\t")
 
     def generate_bool_out(self, node: Value, uname: str) -> None:
-        assert not node.inplace
+        if node.inplace:
+            raise ICE()
         self.o("\t@scalgoproto.Adder")
         self.o("\tdef %s(self, value:bool) -> None:" % (uname))
         self.output_doc(node, "\t\t")
@@ -266,7 +269,8 @@ class Generator:
         self.o("\t")
 
     def generate_basic_in(self, node: Value, uname: str) -> None:
-        assert not node.inplace
+        if node.inplace:
+            raise ICE()
         ti = typeMap[node.type_.type]
         if node.optional:
             self.o("\t@property")
@@ -296,7 +300,8 @@ class Generator:
         self.o("\t")
 
     def generate_basic_out(self, node: Value, uname: str) -> None:
-        assert not node.inplace
+        if node.inplace:
+            raise ICE()
         ti = typeMap[node.type_.type]
         self.o("\t@scalgoproto.Adder")
         self.o("\tdef %s(self, value: %s) -> None:" % (uname, ti.p))
@@ -307,7 +312,8 @@ class Generator:
         self.o("\t")
 
     def generate_enum_in(self, node: Value, uname: str) -> None:
-        assert not node.inplace
+        if node.inplace:
+            raise ICE()
         self.o("\t@property")
         self.o(
             "\tdef has_%s(self) -> bool: return self._get_uint8(%d, %d) != 255"
@@ -324,7 +330,8 @@ class Generator:
         self.o("\t")
 
     def generate_enum_out(self, node: Value, uname: str) -> None:
-        assert not node.inplace
+        if node.inplace:
+            raise ICE()
         self.o("\t@scalgoproto.Adder")
         self.o("\tdef %s(self, value: %s) -> None:" % (uname, node.enum.name))
         self.output_doc(node, "\t\t")
@@ -332,7 +339,8 @@ class Generator:
         self.o("\t")
 
     def generate_struct_in(self, node: Value, uname: str) -> None:
-        assert not node.inplace
+        if node.inplace:
+            raise ICE()
         if node.optional:
             self.o("\t@property")
             self.o(
@@ -351,7 +359,8 @@ class Generator:
         self.o("\t")
 
     def generate_struct_out(self, node: Value, uname: str) -> None:
-        assert not node.inplace
+        if node.inplace:
+            raise ICE()
         self.o("\t@scalgoproto.Adder")
         self.o("\tdef %s(self, value: %s) -> None:" % (uname, node.struct.name))
         self.output_doc(node, "\t\t")
@@ -610,7 +619,7 @@ class Generator:
         elif node.type_.type == TokenType.BYTES:
             self.generate_bytes_in(node, uname)
         else:
-            assert False
+            raise ICE()
 
     def generate_value_out(self, table: Table, node: Value) -> None:
         uname = snake(self.value(node.identifier))
@@ -633,7 +642,7 @@ class Generator:
         elif node.type_.type == TokenType.BYTES:
             self.generate_bytes_out(node, uname)
         else:
-            assert False
+            raise ICE()
 
     def generate_union(self, union: Union) -> None:
         # Recursively generate direct contained members
@@ -662,7 +671,8 @@ class Generator:
         self.o("\t\tNONE = 0")
         idx = 1
         for member in union.members:
-            assert isinstance(member, (Table, Value))
+            if not isinstance(member, (Table, Value)):
+                raise ICE()
             self.o("\t\t%s = %d" % (self.value(member.identifier).upper(), idx))
             idx += 1
         self.o("\t")
@@ -689,7 +699,7 @@ class Generator:
             elif member.type_.type == TokenType.TEXT:
                 self.generate_union_text_in(member, uuname)
             else:
-                assert False
+                raise ICE()
         self.o("")
 
         self.o("class %sOut(scalgoproto.UnionOut):" % union.name)
@@ -714,7 +724,7 @@ class Generator:
             elif member.type_.type == TokenType.TEXT:
                 self.generate_union_text_out(member, uuname, idx, False)
             else:
-                assert False
+                raise ICE()
             idx += 1
 
         self.o("class %sInplaceOut(scalgoproto.UnionOut):" % union.name)
@@ -739,7 +749,7 @@ class Generator:
             elif member.type_.type == TokenType.TEXT:
                 self.generate_union_text_out(member, uuname, idx, True)
             else:
-                assert False
+                raise ICE()
             idx += 1
 
     def generate_table(self, table: Table) -> None:
@@ -838,7 +848,7 @@ class Generator:
                 )
                 read.append("%s._read(reader, offset+%d)" % (v.struct.name, v.offset))
             else:
-                assert False
+                raise ICE()
         self.o("\t__slots__ = [%s]" % ",".join(slots))
         self.o("\t_WIDTH: typing_.ClassVar[int] = %d" % node.bytes)
         self.o("\tdef __init__(self, %s) -> None:" % (", ".join(init)))
@@ -883,7 +893,7 @@ class Generator:
             elif isinstance(node, Namespace):
                 pass
             else:
-                assert False
+                raise ICE()
 
 
 def run(args) -> int:

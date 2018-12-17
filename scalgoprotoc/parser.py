@@ -207,6 +207,11 @@ class ParseError(Exception):
         error(data, self.context, self.token, self.message, "Parse error")
 
 
+class ICE(Exception):
+    def __init__(self):
+        super().__init__("Internal compiler error")
+
+
 class Parser:
     token: Token = None
 
@@ -343,7 +348,7 @@ class Parser:
                 )
                 doc_comment = None
             else:
-                raise AssertionError
+                raise ICE()
             if self.token.type in [TokenType.COMMA, TokenType.SEMICOLON]:
                 self.next_token()
         return members

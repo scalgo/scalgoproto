@@ -19,6 +19,7 @@ from .parser import (
     TokenType,
     Union,
     Value,
+    ICE,
 )
 from .util import ucamel
 
@@ -477,7 +478,8 @@ class Annotater:
             bytes += v.bytes
 
         default2 = b"".join(default)
-        assert len(default2) == bytes
+        if len(default2) != bytes:
+            raise ICE()
         return default2
 
     def annotate(self, ast: List[AstNode]) -> None:

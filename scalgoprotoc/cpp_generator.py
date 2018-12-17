@@ -17,6 +17,7 @@ from .parser import (
     Table,
     Union,
     Value,
+    ICE,
 )
 from .sp_tokenize import Token, TokenType
 from .util import cescape, lcamel, ucamel
@@ -68,7 +69,7 @@ class Generator:
         elif node.type_.type == TokenType.BYTES:
             typeName = "std::pair<const void *, size_t>"
         else:
-            assert False
+            raise ICE()
         return (typeName, rawType)
 
     def out_list_type(self, node: Value) -> str:
@@ -90,7 +91,7 @@ class Generator:
         elif node.type_.type == TokenType.BYTES:
             typeName = "scalgoproto::BytesOut"
         else:
-            assert False
+            raise ICE()
         return typeName
 
     def o(self, text="") -> None:
@@ -217,7 +218,8 @@ class Generator:
         self.o("\t}")
 
     def generate_bool_in(self, node: Value, uname: str) -> None:
-        assert not node.inplace
+        if node.inplace:
+            raise ICE()
         if node.optional:
             self.o("\tbool has%s() const noexcept {" % (uname))
             self.o("\t\treturn getBit_<%d, %s, 0>();" % (node.has_offset, node.has_bit))
@@ -231,7 +233,8 @@ class Generator:
         self.o("\t}")
 
     def generate_bool_out(self, node: Value, uname: str) -> None:
-        assert not node.inplace
+        if node.inplace:
+            raise ICE()
         self.o("\tvoid add%s(bool value) noexcept {" % (uname))
         if node.optional:
             self.o("\t\tsetBit_<%d, %d>();" % (node.has_offset, node.has_bit))
@@ -242,7 +245,8 @@ class Generator:
         self.o("\t}")
 
     def generate_basic_in(self, node: Value, uname: str) -> None:
-        assert not node.inplace
+        if node.inplace:
+            raise ICE()
         typeName = typeMap[node.type_.type]
         if node.optional:
             self.o("\tbool has%s() const noexcept {" % (uname))
@@ -272,7 +276,8 @@ class Generator:
         self.o("\t}")
 
     def generate_basic_out(self, node: Value, uname: str) -> None:
-        assert not node.inplace
+        if node.inplace:
+            raise ICE()
         typeName = typeMap[node.type_.type]
         self.o("\tvoid add%s(%s value) noexcept {" % (uname, typeName))
         if node.optional and node.type_.type not in (TokenType.F32, TokenType.F64):
@@ -281,7 +286,8 @@ class Generator:
         self.o("\t}")
 
     def generate_enum_in(self, node: Value, uname: str) -> None:
-        assert not node.inplace
+        if node.inplace:
+            raise ICE()
         self.o("\tbool has%s() const noexcept {" % (uname))
         self.o(
             "\t\treturn getInner_<std::uint8_t, %d>(%d) != 255;"
@@ -299,13 +305,15 @@ class Generator:
         self.o("\t}")
 
     def generate_enum_out(self, node: Value, uname: str) -> None:
-        assert not node.inplace
+        if node.inplace:
+            raise ICE()
         self.o("\tvoid add%s(%s value) noexcept {" % (uname, node.enum.name))
         self.o("\t\tsetInner_<%s, %d>(value);" % (node.enum.name, node.offset))
         self.o("\t}")
 
     def generate_struct_in(self, node: Value, uname: str) -> None:
-        assert not node.inplace
+        if node.inplace:
+            raise ICE()
         if node.optional:
             self.o("\tbool has%s() const noexcept {" % (uname))
             self.o("\t\treturn getBit_<%d, %s, 0>();" % (node.has_offset, node.has_bit))
@@ -319,7 +327,8 @@ class Generator:
         self.o("\t}")
 
     def generate_struct_out(self, node: Value, uname: str) -> None:
-        assert not node.inplace
+        if node.inplace:
+            raise ICE()
         self.o("\tvoid add%s(const %s & value) noexcept {" % (uname, node.struct.name))
         if node.optional:
             self.o("\t\tsetBit_<%d, %d>();" % (node.has_offset, node.has_bit))
@@ -337,7 +346,8 @@ class Generator:
             self.o("\t\tassert(has%s());" % uname)
             self.o(
                 "\t\treturn getObject_<%sIn>(reader_, getPtr_<%s, %sIn::MAGIC, %d>());"
-                % (node.table.name, bs(node.inplace), node.table.name, node.offset) )
+                % (node.table.name, bs(node.inplace), node.table.name, node.offset)
+            )
         self.o("\t}")
 
     def generate_union_table_in(self, node: Value, uname: str) -> None:
@@ -549,7 +559,7 @@ class Generator:
         elif node.type_.type == TokenType.BYTES:
             self.generate_bytes_in(node, uname)
         else:
-            assert False
+            raise ICE()
 
     def generate_value_out(self, node: Value) -> None:
         uname = ucamel(self.value(node.identifier))
@@ -573,7 +583,7 @@ class Generator:
         elif node.type_.type == TokenType.BYTES:
             self.generate_bytes_out(node, uname)
         else:
-            assert False
+            raise ICE()
 
     def generate_union(self, union: Union) -> None:
         # Recursively generate direct contained members
@@ -590,7 +600,8 @@ class Generator:
         self.o("enum class %sType : std::uint16_t {" % union.name)
         self.o("\tnone,")
         for member in union.members:
-            assert isinstance(member, (Table, Value))
+            if not isinstance(member, (Table, Value)):
+                raise ICE()
             self.o("\t%s," % (self.value(member.identifier)))
         self.o("};")
         self.o("")
@@ -617,7 +628,7 @@ class Generator:
             elif member.type_.type == TokenType.TEXT:
                 self.generate_union_text_in(member, uname)
             else:
-                assert False
+                raise ICE()
         self.o("};")
         self.o(
             "namespace scalgoproto {template <bool inplace> struct MetaMagic<%sIn<inplace>> {using t=UnionTag;};}"
@@ -647,7 +658,7 @@ class Generator:
                 elif member.type_.type == TokenType.TEXT:
                     self.generate_union_text_out(member, uname, inplace, idx)
                 else:
-                    assert False
+                    raise ICE()
                 idx += 1
             self.o("};")
             self.o(
@@ -727,7 +738,8 @@ class Generator:
         self.o("#pragma pack(push, 1)")
         self.o("struct %s {" % node.name)
         for v in node.members:
-            assert isinstance(v, Value)
+            if not isinstance(v, Value):
+                raise ICE()
             typeName = ""
             if v.type_.type == TokenType.U8:
                 typeName = "std::uint8_t"
@@ -756,7 +768,7 @@ class Generator:
             elif v.enum:
                 typeName = v.enum.name
             else:
-                assert False
+                raise ICE()
             self.o("\t%s %s;" % (typeName, self.value(v.identifier)))
         self.o("};")
         self.o("#pragma pack(pop)")
@@ -794,7 +806,7 @@ class Generator:
                 # TODO handle namespace
                 pass
             else:
-                assert False
+                raise ICE()
 
 
 def run(args) -> int:
