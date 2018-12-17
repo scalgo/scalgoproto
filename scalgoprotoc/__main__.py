@@ -15,5 +15,11 @@ validate.setup(subparsers)
 magic.setup(subparsers)
 cpp_generator.setup(subparsers)
 python_generator.setup(subparsers)
-args = parser.parse_args()
-sys.exit(args.func(args))
+
+def main():
+	args = parser.parse_args()
+	sys.exit(args.func(args))
+
+
+if __name__ == "__main__":
+	main()
