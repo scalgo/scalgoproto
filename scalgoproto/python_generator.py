@@ -103,7 +103,7 @@ class Generator:
 	def generate_list_in(self, node: Value, uname:str) -> None:
 		self.o("\t@property")
 		self.o("\tdef has_%s(self) -> bool: return self._get_uint32(%d, 0) != 0"%(uname, node.offset))
-		(tn, acc) = self.in_list_help(node, "*self._get_ptr%s(%d, scalgoproto._LIST_MAGIC)"%("_vl" if node.inplace else "", node.offset))
+		(tn, acc) = self.in_list_help(node, "*self._get_ptr%s(%d, scalgoproto.LIST_MAGIC)"%("_vl" if node.inplace else "", node.offset))
 		self.o("\t@property")
 		self.o("\tdef %s(self) -> scalgoproto.ListIn[%s]:"%(uname, tn))
 		self.output_doc(node, "\t\t")
@@ -112,7 +112,7 @@ class Generator:
 		self.o("")
 
 	def generate_union_list_in(self, node:Value, uname:str) -> None:
-		(tn, acc) = self.in_list_help(node, "*self._get_ptr(scalgoproto._LIST_MAGIC)")
+		(tn, acc) = self.in_list_help(node, "*self._get_ptr(scalgoproto.LIST_MAGIC)")
 		self.o("\t@property")
 		self.o("\tdef %s(self) -> scalgoproto.ListIn[%s]:"%(uname, tn))
 		self.output_doc(node, "\t\t")
@@ -326,7 +326,7 @@ class Generator:
 		self.o("\tdef %s(self) -> str:"%(uname))
 		self.output_doc(node, "\t\t")
 		self.o("\t\tassert self.has_%s"%(uname))
-		self.o("\t\t(o, s) = self._get_ptr%s(%d, scalgoproto._TEXT_MAGIC)"%("_vl" if node.inplace else "", node.offset))
+		self.o("\t\t(o, s) = self._get_ptr%s(%d, scalgoproto.TEXT_MAGIC)"%("_vl" if node.inplace else "", node.offset))
 		self.o("\t\treturn self._reader._data[o: o+s].decode('utf-8')")
 		self.o("\t")
 
@@ -335,7 +335,7 @@ class Generator:
 		self.o("\tdef %s(self) -> str:"%(uname))
 		self.output_doc(node, "\t\t")
 		self.o("\t\tassert self.is_%s"%(uname))
-		self.o("\t\t(o, s) = self._get_ptr(scalgoproto._TEXT_MAGIC)")
+		self.o("\t\t(o, s) = self._get_ptr(scalgoproto.TEXT_MAGIC)")
 		self.o("\t\treturn self._reader._data[o: o+s].decode('utf-8')")
 		self.o("\t")
 
@@ -367,7 +367,7 @@ class Generator:
 		self.o("\tdef %s(self) -> bytes:"%(uname))
 		self.output_doc(node, "\t\t")
 		self.o("\t\tassert self.has_%s"%(uname))
-		self.o("\t\t(o, s) = self._get_ptr%s(%d, scalgoproto._BYTES_MAGIC)"%("_vl" if node.inplace else "", node.offset))
+		self.o("\t\t(o, s) = self._get_ptr%s(%d, scalgoproto.BYTES_MAGIC)"%("_vl" if node.inplace else "", node.offset))
 		self.o("\t\treturn self._reader._data[o: o+s]")
 		self.o("\t")
 
@@ -376,7 +376,7 @@ class Generator:
 		self.o("\tdef %s(self) -> bytes:"%(uname))
 		self.output_doc(node, "\t\t")
 		self.o("\t\tassert self.is_%s"%(uname))
-		self.o("\t\t(o, s) = self._get_ptr(scalgoproto._BYTES_MAGIC)")
+		self.o("\t\t(o, s) = self._get_ptr(scalgoproto.BYTES_MAGIC)")
 		self.o("\t\treturn self._reader._data[o: o+s]")
 		self.o("\t")
 

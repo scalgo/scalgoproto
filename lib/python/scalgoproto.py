@@ -2,10 +2,10 @@
 from typing import TypeVar, Type, Generic, Sequence, Callable, Tuple, ClassVar
 import struct, enum, math
 from abc import abstractmethod
-_MESSAGE_MAGIC = 0xB5C0C4B3
-_TEXT_MAGIC = 0xD812C8F5
-_BYTES_MAGIC = 0xDCDBBE10
-_LIST_MAGIC = 0x3400BB46
+MESSAGE_MAGIC = 0xB5C0C4B3
+TEXT_MAGIC = 0xD812C8F5
+BYTES_MAGIC = 0xDCDBBE10
+LIST_MAGIC = 0x3400BB46
 
 B = TypeVar('B')
 class StructType(Generic[B]):
@@ -48,7 +48,7 @@ class ListIn(Sequence[B]):
 	def __len__(self) -> int:
 		return self._size
 
-	def __getitem__(self, idx) -> B:
+	def __getitem__(self, idx:int) -> B:
 		return self._getter(self._reader, self._offset, idx)
 
 class UnionIn(object):
@@ -134,21 +134,21 @@ class Reader(object):
 	def _get_text_list(self, off:int, size:int) -> ListIn[str]:
 		def getter(r:'Reader', s:int, i:int) -> str:
 			ooo = struct.unpack("<I", r._data[s+4*i:s+4*i+4])[0]
-			sss = r._read_size(ooo, _TEXT_MAGIC)
+			sss = r._read_size(ooo, TEXT_MAGIC)
 			return r._data[ooo+8:ooo+8+sss].decode('utf-8')
 		return ListIn[str](self, size, off, getter, lambda r, s, i: struct.unpack("<I", r._data[s+4*i:s+4*i+4])[0] != 0)
 
 	def _get_bytes_list(self, off:int, size:int) -> ListIn[bytes]:
 		def getter(r:'Reader', s:int, i:int) -> bytes:
 			ooo = struct.unpack("<I", r._data[s+4*i:s+4*i+4])[0]
-			sss = r._read_size(ooo, _BYTES_MAGIC)
+			sss = r._read_size(ooo, BYTES_MAGIC)
 			return r._data[ooo+8:ooo+8+sss]
 		return ListIn[bytes](self, size, off, getter, lambda r, s, i: struct.unpack("<I", r._data[s+4*i:s+4*i+4])[0] != 0)
 
 	def root(self, type: Type[TI]) -> TI:
 		"""Return root node of message, of type type"""
 		magic, offset = struct.unpack("<II", self._data[0:8])
-		if magic != _MESSAGE_MAGIC: raise Exception("Bad magic")
+		if magic != MESSAGE_MAGIC: raise Exception("Bad magic")
 		size = self._read_size(offset, type._MAGIC)
 		return type(self, offset+8, size)
 
@@ -221,7 +221,7 @@ class OutList:
 		"""Private constructor. Use factory methods on writer"""
 		self._writer = writer
 		writer._reserve(len(d) + 8)
-		if with_weader: writer._write(struct.pack("<II", _LIST_MAGIC, size))
+		if with_weader: writer._write(struct.pack("<II", LIST_MAGIC, size))
 		self._offset = writer._used
 		self._size = size
 		writer._write(d)
@@ -332,7 +332,7 @@ class Writer:
 	def construct_union_list(self, u:Type[UO], size:int) -> UnionListOut[UO]: return UnionListOut[UO](self, u, size)
 	def construct_bytes(self, b:bytes) -> BytesOut:
 		self._reserve(len(b) + 8)
-		self._write(struct.pack("<II", _BYTES_MAGIC, len(b)))
+		self._write(struct.pack("<II", BYTES_MAGIC, len(b)))
 		o = self._used
 		self._write(b)
 		return BytesOut(o)
@@ -340,23 +340,13 @@ class Writer:
 	def construct_text(self, t:str) -> TextOut:
 		tt = t.encode('utf-8')
 		self._reserve(len(tt) + 9)
-		self._write(struct.pack("<II", _TEXT_MAGIC, len(tt)))
+		self._write(struct.pack("<II", TEXT_MAGIC, len(tt)))
 		o = self._used
 		self._write(tt)
 		self._write(b"\0")
 		return TextOut(o)
 
-	def _add_vl_text(self, o:int, t:str) -> None:
-		tt = t.encode('utf-8')
-		self._writer._reserve(len(tt)+1)
-		self._writer._write(tt)
-		self._writer._write(b"\0")
-
-	def _add_vl_bytes(self, o:int, t:bytes) -> None:
-		self._writer._reserve(len(t))
-		self._writer._write(t)
-
 	def finalize(self, root: TableOut) -> bytes:
 		"""Return finalized message given root object"""
-		self._data[0:8] = struct.pack("<II", _MESSAGE_MAGIC, root._offset - 8)
+		self._data[0:8] = struct.pack("<II", MESSAGE_MAGIC, root._offset - 8)
 		return self._data[0: self._used]
