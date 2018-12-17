@@ -75,13 +75,14 @@ class Enum(AstNode):
 
 
 class Table(AstNode):
-    __slots__ = ["identifier", "id_", "members", "default", "magic", "name"]
+    __slots__ = ["identifier", "id_", "members", "default", "magic", "name", "empty"]
     identifier: Token
     id_: Token
     members: ty.List["Value"]
     default: bytes
     name: str
     magic: int
+    empty: bool
 
     def __init__(
         self,
@@ -98,6 +99,7 @@ class Table(AstNode):
         self.default = None
         self.magic: int = 0
         self.name = None
+        self.empty = False
 
 
 class Union(AstNode):

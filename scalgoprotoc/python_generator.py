@@ -369,23 +369,24 @@ class Generator:
             "\tdef has_%s(self) -> bool: return self._get_uint32(%d, 0) != 0"
             % (uname, node.offset)
         )
-        self.o("\t@property")
-        self.o("\tdef %s(self) -> %sIn:" % (uname, node.table.name))
-        self.output_doc(node, "\t\t")
-        self.o("\t\tassert self.has_%s" % uname)
-        self.o(
-            "\t\treturn %sIn(self._reader, *self._get_ptr%s(%d, %sIn._MAGIC))"
-            % (
-                node.table.name,
-                "_vl" if node.inplace else "",
-                node.offset,
-                node.table.name,
+        if not node.table.empty:
+            self.o("\t@property")
+            self.o("\tdef %s(self) -> %sIn:" % (uname, node.table.name))
+            self.output_doc(node, "\t\t")
+            self.o("\t\tassert self.has_%s" % uname)
+            self.o(
+                "\t\treturn %sIn(self._reader, *self._get_ptr%s(%d, %sIn._MAGIC))"
+                % (
+                    node.table.name,
+                    "_vl" if node.inplace else "",
+                    node.offset,
+                    node.table.name,
+                )
             )
-        )
-        self.o("\t")
+            self.o("\t")
 
     def generate_union_table_in(self, node: Value, uname: str) -> None:
-        if node.table.members:
+        if not node.table.empty:
             self.o("\t@property")
             self.o("\tdef %s(self) -> %sIn:" % (uname, node.table.name))
             self.output_doc(node, "\t\t")
@@ -403,7 +404,7 @@ class Generator:
             self.output_doc(node, "\t\t")
             self.o("\t\tself._set_table(%d, value)" % (node.offset))
             self.o("\t")
-        elif node.table.members:
+        elif not node.table.empty:
             self.o("\tdef add_%s(self) -> %sOut:" % (uname, node.table.name))
             self.output_doc(node, "\t\t")
             self.o(
@@ -421,7 +422,7 @@ class Generator:
         self, node: Value, uname: str, idx: int, inplace: bool
     ) -> None:
         table = node.table
-        if not table.members:
+        if table.empty:
             self.o("\tdef add_%s(self) -> None:" % (uname))
             self.output_doc(node, "\t\t")
             self.o("\t\tself._set(%d, 0)" % (idx))
@@ -752,6 +753,9 @@ class Generator:
                 self.generate_enum(value.direct_enum)
             if value.direct_struct:
                 self.generate_struct(value.direct_struct)
+
+        if table.empty:
+            return
 
         # Generate table reader
         self.o("class %sIn(scalgoproto.TableIn):" % table.name)

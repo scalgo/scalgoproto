@@ -189,6 +189,8 @@ class Annotater:
                     v.direct_table.name, v.direct_table.members, ContentType.TABLE, ip
                 )
                 v.direct_table.bytes = len(v.direct_table.default)
+                v.direct_table.empty = len(v.direct_table.members) == 0
+
             if v.direct_union:
                 v.direct_union.name = name + ucamel(val)
                 self.visit_content(
@@ -515,6 +517,8 @@ class Annotater:
                     name, node.members, ContentType.TABLE, False
                 )
                 node.bytes = len(node.default)
+                node.empty = len(node.members) == 0
+
                 self.tables[name] = node
                 print(
                     "table %s of size >= %d" % (name, len(node.default) + 8),

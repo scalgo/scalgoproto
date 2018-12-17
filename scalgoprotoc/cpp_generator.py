@@ -331,17 +331,17 @@ class Generator:
         self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;" % (node.offset))
         self.o("\t}")
         self.o("\t")
-        self.output_doc(node, "\t")
-        self.o("\t%sIn %s() const {" % (node.table.name, lcamel(uname)))
-        self.o("\t\tassert(has%s());" % uname)
-        self.o(
-            "\t\treturn getObject_<%sIn>(reader_, getPtr_<%s, %sIn::MAGIC, %d>());"
-            % (node.table.name, bs(node.inplace), node.table.name, node.offset)
-        )
+        if not node.table.empty:
+            self.output_doc(node, "\t")
+            self.o("\t%sIn %s() const {" % (node.table.name, lcamel(uname)))
+            self.o("\t\tassert(has%s());" % uname)
+            self.o(
+                "\t\treturn getObject_<%sIn>(reader_, getPtr_<%s, %sIn::MAGIC, %d>());"
+                % (node.table.name, bs(node.inplace), node.table.name, node.offset) )
         self.o("\t}")
 
     def generate_union_table_in(self, node: Value, uname: str) -> None:
-        if node.table.members:
+        if not node.table.empty:
             self.output_doc(node, "\t")
             self.o("\t%sIn %s() const noexcept {" % (node.table.name, lcamel(uname)))
             self.o("\t\tassert(is%s());" % (uname))
@@ -358,7 +358,7 @@ class Generator:
                 "\t\tsetInner_<std::uint32_t, %d>(getOffset_(value)-8);" % (node.offset)
             )
             self.o("\t}")
-        elif node.table.members:
+        elif not node.table.empty:
             self.o("\t%sOut add%s() noexcept {" % (node.table.name, uname))
             self.o(
                 "\t\tsetInner_<std::uint32_t, %d>(%sOut::SIZE);"
@@ -380,7 +380,7 @@ class Generator:
     ) -> None:
         table = node.table
         self.output_doc(node, "\t")
-        if not table.members:
+        if table.empty:
             self.o("\tvoid add%s() noexcept {" % (uname))
             self.o("\t\tsetType_(%d);" % (idx))
             self.o("\t}")
@@ -667,6 +667,9 @@ class Generator:
                 self.generate_enum(value.direct_enum)
             if value.direct_struct:
                 self.generate_struct(value.direct_struct)
+
+        if table.empty:
+            return
 
         self.output_doc(table)
         self.o("class %sIn: public scalgoproto::TableIn {" % table.name)
