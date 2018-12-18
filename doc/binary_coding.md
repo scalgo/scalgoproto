@@ -19,8 +19,9 @@ Lists are encoded as follows. First the magic U32 0x3400BB46 is encoded. Then th
 
 * I8, U16, U32, U64, I8, I16, I16, Int6, F32 and F64 are encoded as basic types. For the floating point types NAN specifies that we do not have a value. For the integer types we always have a value.
 * Texts, Bytes, Lists and tables are encoded as the U32 offset of their magic word in the message. The special offset zero indicates that we do not have a value.
-* Bools are packed into bytes. Such that the value of the i'th bool can be found as (bytes[i>>3] >> (i & 7) & 1.
+* Bools are packed into bytes. Such that the value of the i'th bool can be found as (bytes[i>>3] >> (i & 7)) & 1.
 * Enum values are encoded as U8. The special value 255 indicates that we do not have a value.
+* Unions are encoded are encoded as a U16 type followed by a U32 offset.
 
 ### tables
 Tables are encoded as follows. First the magic U32 id of the table is encoded. Then the length of the non variable length part of the table is encoded as a U32. Next the members of the table are encoded in turn:
@@ -28,9 +29,8 @@ Tables are encoded as follows. First the magic U32 id of the table is encoded. T
 * Booleans: The next free bit (low to high) of the last bool byte is used to store the boolean value. If there are no free bits in the last bool byte.  A new bool byte is appended and the least significant bit of this byte is used.
 * Bools and Struct: If marked as optional a boolean is encoded to represent if we have a value or not. Next the integer or struct is encoded.
 * Floats: The float is encoded as a basic type. If it is marked optional NAN is used to signal that it has no value.
-* Bytes, Texts, Lists and tables: Are encoded as a U32 offset of the magic of object in the message.  A zero offset denotes that there is no value.
-* InplaceList, InplaceBytes, InplaceText: The length of the list, bytes or text is encoded as a U32, the special length 0 indicates that we have no value. The content is encoded as Lists, Bytes and Text but without magic and length immediately after the table. That is at the location table.offset+table.length+8.
-* Union: The choice of union member is encoded as a U16. Where zero indicates no member and other members are numbered as they appear in the specification from 1. Next the length of the member is encoded as a U32. The content of the member is encoded as a Table, List, Bytes or Text but without the magic and length immediately after the table. That is at the location table.offset+table.length+8.
+* Bytes, Texts, list and tables: Are encoded as a U32 offset of the magic of object in the message.  A zero offset denotes that there is no value. If the Bytes, Texts, list or table is marked as inplace, instead of the offset, the length of the object is encoded, the object is then encoded without its magic and length immediatly after the table. That is at the location table.offset+table.length+8.
+* Union: The choice of union member is encoded as a U16. Where zero indicates no member and other members are numbered as they appear in the specification from 1. Next the offset of the object is encoded as a U32. If the union is marked as inplace instead of the offset the length of the object is encoded and the content of the object is encoded without the magic and length immediatly after the table. That is at the location table.offset+table.length+8.
 
 ### Message
 Objects in a message can occur in arbitrary order.  A message starts with the magic U32 0xB5C0C4B3, followed by a U32 containing the offset of the root table within the message.
