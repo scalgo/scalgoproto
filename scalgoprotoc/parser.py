@@ -19,6 +19,7 @@ class AstNode(object):
         "docstring",
         "document",
         "uses",
+        "namespace",
     ]
     token: Token
     doc_comment: Token
@@ -27,6 +28,7 @@ class AstNode(object):
     docstring: ty.List[str]
     document: int
     uses: ty.Set["AstNode"]
+    namespace: str
 
     def __init__(self, token: Token, document: int, doc_comment: Token = None) -> None:
         self.token = token
@@ -36,11 +38,11 @@ class AstNode(object):
         self.document = document
         self.docstring = None
         self.uses = set()
+        self.namespace = ""
 
 
 class Namespace(AstNode):
     __slots__ = ["namespace"]
-    namespace: str
 
     def __init__(self, token: Token, document: int, namespace: str) -> None:
         super().__init__(token, document)

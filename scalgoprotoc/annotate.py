@@ -37,11 +37,21 @@ class Annotater:
     tables: Dict[str, Table]
     unions: Dict[str, Union]
     outer: AstNode
+    namespace: str
+    namespace_document: int
 
     def __init__(self, documents: Documents) -> None:
         self.documents = documents
         self.errors = 0
         self.outer = None
+        self.namespace = None
+        self.namespace_document = None
+
+    def attach_namespace(self, node: AstNode):
+        if node.document == self.namespace_document:
+            node.namespace = self.namespace
+        else:
+            node.namespace = None
 
     def value(self, t: Token) -> str:
         return self.documents.by_id[t.document].content[t.index : t.index + t.length]
@@ -183,10 +193,12 @@ class Annotater:
 
             if v.direct_enum:
                 v.direct_enum.name = name + ucamel(val)
+                self.attach_namespace(v.direct_enum)
                 self.visit_enum(v.direct_enum)
 
             if v.direct_table:
                 v.direct_table.name = name + ucamel(val)
+                self.attach_namespace(v.direct_table)
                 ip = v.inplace != None if t == ContentType.TABLE else inplace_context
                 self.assign_magic(v.direct_table, not ip)
                 v.direct_table.default = self.visit_content(
@@ -197,6 +209,7 @@ class Annotater:
 
             if v.direct_union:
                 v.direct_union.name = name + ucamel(val)
+                self.attach_namespace(v.direct_union)
                 self.visit_content(
                     v.direct_union.name,
                     v.direct_union.members,
@@ -206,6 +219,7 @@ class Annotater:
 
             if v.direct_struct:
                 v.direct_struct.name = name + ucamel(val)
+                self.attach_namespace(v.direct_struct)
                 v.direct_struct.bytes = len(
                     self.visit_content(
                         v.direct_struct.name,
@@ -510,6 +524,7 @@ class Annotater:
                 self.context = "struct %s" % self.value(node.identifier)
                 name = self.validate_uname(node.identifier)
                 node.name = name
+                self.attach_namespace(node)
                 bytes = len(
                     self.visit_content(name, node.members, ContentType.STRUCT, False)
                 )
@@ -520,6 +535,7 @@ class Annotater:
                 self.context = "enum %s" % self.value(node.identifier)
                 name = self.validate_uname(node.identifier)
                 node.name = name
+                self.attach_namespace(node)
                 self.visit_enum(node)
                 self.enums[name] = node
                 print(
@@ -530,6 +546,7 @@ class Annotater:
                 self.context = "table %s" % self.value(node.identifier)
                 name = self.validate_uname(node.identifier)
                 node.name = name
+                self.attach_namespace(node)
                 self.assign_magic(node, True)
                 node.default = self.visit_content(
                     name, node.members, ContentType.TABLE, False
@@ -546,12 +563,13 @@ class Annotater:
                 self.context = "union %s" % self.value(node.identifier)
                 name = self.validate_uname(node.identifier)
                 node.name = name
+                self.attach_namespace(node)
                 self.visit_content(name, node.members, ContentType.UNION, False)
                 self.unions[name] = node
                 print("union %s" % name, file=sys.stderr)
             elif isinstance(node, Namespace):
-                # TODO handel namespace
-                pass
+                self.namespace = node.namespace
+                self.namespace_document = node.document
             else:
                 self.error(node.token, "Unknown thing")
                 continue

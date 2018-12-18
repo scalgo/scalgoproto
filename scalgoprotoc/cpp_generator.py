@@ -5,6 +5,7 @@ Validate a schema
 import math, io, os
 from types import SimpleNamespace
 from typing import Dict, List, Set, Tuple
+import typing
 from .annotate import annotate
 from .parser import (
     AstNode,
@@ -46,6 +47,7 @@ class Generator:
     def __init__(self, documents: Documents, out: io.StringIO) -> None:
         self.documents = documents
         self.out = out
+        self.current_namespace: str = None
 
     def in_list_types(self, node: Value) -> Tuple[str, str]:
         typeName: str = None
@@ -57,13 +59,13 @@ class Generator:
             typeName = "bool"
             rawType = "char"
         elif node.enum:
-            typeName = rawType = node.enum.name
+            typeName = rawType = self.qualify(node.enum)
         elif node.struct:
-            typeName = rawType = node.struct.name
+            typeName = rawType = self.qualify(node.struct)
         elif node.table:
-            typeName = "%sIn" % node.table.name
+            typeName = "%sIn" % self.qualify(node.table)
         elif node.union:
-            typeName = "%sIn<false>" % node.union.name
+            typeName = "%sIn<false>" % self.qualify(node.union)
         elif node.type_.type == TokenType.TEXT:
             typeName = "std::string_view"
         elif node.type_.type == TokenType.BYTES:
@@ -79,13 +81,13 @@ class Generator:
         elif node.type_.type == TokenType.BOOL:
             typeName = "bool"
         elif node.enum:
-            typeName = node.enum.name
+            typeName = self.qualify(node.enum)
         elif node.struct:
-            typeName = node.struct.name
+            typeName = self.qualify(node.struct)
         elif node.table:
-            typeName = "%sOut" % node.table.name
+            typeName = "%sOut" % self.qualify(node.table)
         elif node.union:
-            typeName = "%sOut" % node.union.name
+            typeName = "%sOut" % self.qualify(node.union)
         elif node.type_.type == TokenType.TEXT:
             typeName = "scalgoproto::TextOut"
         elif node.type_.type == TokenType.BYTES:
@@ -296,19 +298,19 @@ class Generator:
         self.o("\t}")
         self.o("\t")
         self.output_doc(node, "\t")
-        self.o("\t%s %s() const noexcept {" % (node.enum.name, lcamel(uname)))
+        self.o("\t%s %s() const noexcept {" % (self.qualify(node.enum), lcamel(uname)))
         self.o("\t\tassert(has%s());" % uname)
         self.o(
             "\t\treturn (%s)getInner_<std::uint8_t, %d>(%s);"
-            % (node.enum.name, node.offset, node.parsed_value)
+            % (self.qualify(node.enum), node.offset, node.parsed_value)
         )
         self.o("\t}")
 
     def generate_enum_out(self, node: Value, uname: str) -> None:
         if node.inplace:
             raise ICE()
-        self.o("\tvoid add%s(%s value) noexcept {" % (uname, node.enum.name))
-        self.o("\t\tsetInner_<%s, %d>(value);" % (node.enum.name, node.offset))
+        self.o("\tvoid add%s(%s value) noexcept {" % (uname, self.qualify(node.enum)))
+        self.o("\t\tsetInner_<%s, %d>(value);" % (self.qualify(node.enum), node.offset))
         self.o("\t}")
 
     def generate_struct_in(self, node: Value, uname: str) -> None:
@@ -320,19 +322,28 @@ class Generator:
             self.o("\t}")
         self.o("\t")
         self.output_doc(node, "\t")
-        self.o("\t%s %s() const noexcept {" % (node.struct.name, lcamel(uname)))
+        self.o(
+            "\t%s %s() const noexcept {" % (self.qualify(node.struct), lcamel(uname))
+        )
         if node.optional:
             self.o("\t\tassert(has%s());" % uname)
-        self.o("\t\treturn getInner_<%s, %d>();" % (node.struct.name, node.offset))
+        self.o(
+            "\t\treturn getInner_<%s, %d>();" % (self.qualify(node.struct), node.offset)
+        )
         self.o("\t}")
 
     def generate_struct_out(self, node: Value, uname: str) -> None:
         if node.inplace:
             raise ICE()
-        self.o("\tvoid add%s(const %s & value) noexcept {" % (uname, node.struct.name))
+        self.o(
+            "\tvoid add%s(const %s & value) noexcept {"
+            % (uname, self.qualify(node.struct))
+        )
         if node.optional:
             self.o("\t\tsetBit_<%d, %d>();" % (node.has_offset, node.has_bit))
-        self.o("\t\tsetInner_<%s, %d>(value);" % (node.struct.name, node.offset))
+        self.o(
+            "\t\tsetInner_<%s, %d>(value);" % (self.qualify(node.struct), node.offset)
+        )
         self.o("\t}")
 
     def generate_table_in(self, node: Value, uname: str) -> None:
@@ -342,41 +353,52 @@ class Generator:
         self.o("\t")
         if not node.table.empty:
             self.output_doc(node, "\t")
-            self.o("\t%sIn %s() const {" % (node.table.name, lcamel(uname)))
+            self.o("\t%sIn %s() const {" % (self.qualify(node.table), lcamel(uname)))
             self.o("\t\tassert(has%s());" % uname)
             self.o(
                 "\t\treturn getObject_<%sIn>(reader_, getPtr_<%s, %sIn::MAGIC, %d>());"
-                % (node.table.name, bs(node.inplace), node.table.name, node.offset)
+                % (
+                    self.qualify(node.table),
+                    bs(node.inplace),
+                    node.table.name,
+                    node.offset,
+                )
             )
         self.o("\t}")
 
     def generate_union_table_in(self, node: Value, uname: str) -> None:
         if not node.table.empty:
             self.output_doc(node, "\t")
-            self.o("\t%sIn %s() const noexcept {" % (node.table.name, lcamel(uname)))
+            self.o(
+                "\t%sIn %s() const noexcept {"
+                % (self.qualify(node.table), lcamel(uname))
+            )
             self.o("\t\tassert(is%s());" % (uname))
             self.o(
                 "\t\treturn scalgoproto::In::getObject_<%sIn>(this->reader_, this->template getPtr_<%sIn::MAGIC>());"
-                % (node.table.name, node.table.name)
+                % (self.qualify(node.table), node.table.name)
             )
             self.o("\t}")
 
     def generate_table_out(self, node: Value, uname: str) -> None:
         if not node.inplace:
-            self.o("\tvoid add%s(%sOut value) noexcept {" % (uname, node.table.name))
+            self.o(
+                "\tvoid add%s(%sOut value) noexcept {"
+                % (uname, self.qualify(node.table))
+            )
             self.o(
                 "\t\tsetInner_<std::uint32_t, %d>(getOffset_(value)-8);" % (node.offset)
             )
             self.o("\t}")
         elif not node.table.empty:
-            self.o("\t%sOut add%s() noexcept {" % (node.table.name, uname))
+            self.o("\t%sOut add%s() noexcept {" % (self.qualify(node.table), uname))
             self.o(
                 "\t\tsetInner_<std::uint32_t, %d>(%sOut::SIZE);"
-                % (node.offset, node.table.name)
+                % (node.offset, self.qualify(node.table))
             )
             self.o(
                 "\t\treturn addInplaceTable_<%sOut>(writer_, offset_+SIZE);"
-                % node.table.name
+                % self.qualify(node.table)
             )
             self.o("\t}")
         else:
@@ -388,22 +410,27 @@ class Generator:
     def generate_union_table_out(
         self, node: Value, uname: str, inplace: bool, idx: int
     ) -> None:
-        table = node.table
         self.output_doc(node, "\t")
-        if table.empty:
+        if node.table.empty:
             self.o("\tvoid add%s() noexcept {" % (uname))
             self.o("\t\tsetType_(%d);" % (idx))
             self.o("\t}")
         elif not inplace:
-            self.o("\tvoid add%s(%sOut value) noexcept {" % (uname, table.name))
+            self.o(
+                "\tvoid add%s(%sOut value) noexcept {"
+                % (uname, self.qualify(node.table))
+            )
             self.o("\t\tsetType_(%d);" % (idx))
             self.o("\t\tsetObject_(getOffset_(value)-8);")
             self.o("\t}")
         else:
-            self.o("\t%sOut add%s() noexcept {" % (table.name, uname))
+            self.o("\t%sOut add%s() noexcept {" % (self.qualify(node.table), uname))
             self.o("\t\tsetType_(%d);" % (idx))
-            self.o("\t\tsetSize_(%sOut::SIZE);" % (table.name))
-            self.o("\t\treturn addInplaceTable_<%sOut>(writer_, next_);" % (table.name))
+            self.o("\t\tsetSize_(%sOut::SIZE);" % (self.qualify(node.table)))
+            self.o(
+                "\t\treturn addInplaceTable_<%sOut>(writer_, next_);"
+                % (self.qualify(node.table))
+            )
             self.o("\t}")
 
     def generate_text_in(self, node: Value, uname: str) -> None:
@@ -502,17 +529,20 @@ class Generator:
             % (uname, node.offset)
         )
         self.output_doc(node, "\t")
-        self.o("\t%sIn<%s> %s() {" % (node.union.name, bs(node.inplace), lcamel(uname)))
+        self.o(
+            "\t%sIn<%s> %s() {"
+            % (self.qualify(node.union), bs(node.inplace), lcamel(uname))
+        )
         self.o("\t\tassert(has%s());" % (uname))
         if node.inplace:
             self.o(
                 "\t\treturn getObject_<%sIn<true>>(reader_, getInner_<std::uint16_t, %d>(), start_ + size_, getInner_<std::uint32_t, %d>());"
-                % (node.union.name, node.offset, node.offset + 2)
+                % (self.qualify(node.union), node.offset, node.offset + 2)
             )
         else:
             self.o(
                 "\t\treturn getObject_<%sIn<false>>(reader_, getInner_<std::uint16_t, %d>(), getInner_<std::uint32_t, %d>());"
-                % (node.union.name, node.offset, node.offset + 2)
+                % (self.qualify(node.union), node.offset, node.offset + 2)
             )
         self.o("\t}")
 
@@ -520,18 +550,21 @@ class Generator:
         if node.inplace:
             self.o(
                 "\t%sInplaceOut %s() const noexcept {"
-                % (node.union.name, lcamel(uname))
+                % (self.qualify(node.union), lcamel(uname))
             )
             self.o(
                 "\t\treturn construct_<%sInplaceOut>(writer_, offset_ + %d, offset_ + SIZE);"
-                % (node.union.name, node.offset)
+                % (self.qualify(node.union), node.offset)
             )
             self.o("\t}")
         else:
-            self.o("\t%sOut %s() const noexcept {" % (node.union.name, lcamel(uname)))
+            self.o(
+                "\t%sOut %s() const noexcept {"
+                % (self.qualify(node.union), lcamel(uname))
+            )
             self.o(
                 "\t\treturn construct_<%sOut>(writer_, offset_ + %d);"
-                % (node.union.name, node.offset)
+                % (self.qualify(node.union), node.offset)
             )
             self.o("\t}")
         self.o("\t")
@@ -585,6 +618,10 @@ class Generator:
         else:
             raise ICE()
 
+    def output_metamagic(self, mm: str) -> None:
+        self.switch_namespace("scalgoproto")
+        self.o(mm)
+
     def generate_union(self, union: Union) -> None:
         # Recursively generate direct contained members
         for value in union.members:
@@ -596,6 +633,7 @@ class Generator:
                 self.generate_enum(value.direct_enum)
             if value.direct_struct:
                 self.generate_struct(value.direct_struct)
+        self.switch_namespace(union.namespace)
         self.output_doc(union)
         self.o("enum class %sType : std::uint16_t {" % union.name)
         self.o("\tnone,")
@@ -630,13 +668,13 @@ class Generator:
             else:
                 raise ICE()
         self.o("};")
-        self.o(
-            "namespace scalgoproto {template <bool inplace> struct MetaMagic<%sIn<inplace>> {using t=UnionTag;};}"
-            % union.name
+        self.output_metamagic(
+            "template <bool inplace> struct MetaMagic<%sIn<inplace>> {using t=UnionTag;};"
+            % self.qualify(union, True)
         )
-
         self.o("")
         for (inplace, prefix) in ((False, ""), (True, "Inplace")):
+            self.switch_namespace(union.namespace)
             self.o(
                 "class %s%sOut: public scalgoproto::%sUnionOut {"
                 % (union.name, prefix, prefix)
@@ -661,9 +699,9 @@ class Generator:
                     raise ICE()
                 idx += 1
             self.o("};")
-            self.o(
-                "namespace scalgoproto {template <> struct MetaMagic<%s%sOut> {using t=UnionTag;};}"
-                % (union.name, prefix)
+            self.output_metamagic(
+                "template <> struct MetaMagic<%s%sOut> {using t=UnionTag;};"
+                % (self.qualify(union, True), prefix)
             )
             self.o("")
 
@@ -681,7 +719,7 @@ class Generator:
 
         if table.empty:
             return
-
+        self.switch_namespace(table.namespace)
         self.output_doc(table)
         self.o("class %sIn: public scalgoproto::TableIn {" % table.name)
         self.o("\tfriend class scalgoproto::In;")
@@ -700,11 +738,12 @@ class Generator:
         for node in table.members:
             self.generate_value_in(node)
         self.o("};")
-        self.o(
-            "namespace scalgoproto {template <> struct MetaMagic<%sIn> {using t=TableTag;};}"
-            % table.name
+        self.output_metamagic(
+            "template <> struct MetaMagic<%sIn> {using t=TableTag;};"
+            % self.qualify(table, True)
         )
         self.o("")
+        self.switch_namespace(table.namespace)
         self.output_doc(table)
         self.o("class %sOut: public scalgoproto::TableOut {" % table.name)
         self.o("\tfriend class scalgoproto::Out;")
@@ -721,9 +760,9 @@ class Generator:
         for node in table.members:
             self.generate_value_out(node)
         self.o("};")
-        self.o(
-            "namespace scalgoproto {template <> struct MetaMagic<%sOut> {using t=TableTag;};}"
-            % table.name
+        self.output_metamagic(
+            "template <> struct MetaMagic<%sOut> {using t=TableTag;};"
+            % self.qualify(table, True)
         )
         self.o("")
 
@@ -735,6 +774,7 @@ class Generator:
             if value.direct_struct:
                 self.generate_struct(value.direct_struct)
 
+        self.switch_namespace(node.namespace)
         self.o("#pragma pack(push, 1)")
         self.o("struct %s {" % node.name)
         for v in node.members:
@@ -772,13 +812,14 @@ class Generator:
             self.o("\t%s %s;" % (typeName, self.value(v.identifier)))
         self.o("};")
         self.o("#pragma pack(pop)")
-        self.o(
-            "namespace scalgoproto {template <> struct MetaMagic<%s> {using t=PodTag;};}"
-            % node.name
+        self.output_metamagic(
+            "template <> struct MetaMagic<%s> {using t=PodTag;};"
+            % (self.qualify(node, True))
         )
         self.o()
 
-    def generate_enum(self, node: Enum):
+    def generate_enum(self, node: Enum) -> None:
+        self.switch_namespace(node.namespace)
         self.o("enum class %s: std::uint8_t {" % node.name)
         index = 0
         for ev in node.members:
@@ -786,11 +827,28 @@ class Generator:
             self.o("\t%s = %d," % (self.value(ev.token), index))
             index += 1
         self.o("};")
-        self.o(
-            "namespace scalgoproto {template <> struct MetaMagic<%s> {using t=EnumTag;};}"
-            % node.name
+        self.output_metamagic(
+            "template <> struct MetaMagic<%s> {using t=EnumTag;};"
+            % (self.qualify(node, True))
         )
         self.o()
+
+    def switch_namespace(self, namespace: str) -> None:
+        if namespace == self.current_namespace:
+            return
+        if self.current_namespace:
+            self.o("} //namespace %s" % self.current_namespace)
+        if namespace:
+            self.o("namespace %s {" % namespace)
+        self.current_namespace = namespace
+
+    def qualify(
+        self, node: typing.Union[Union, Table, Struct, Enum], full: bool = False
+    ) -> str:
+        if node.namespace and (full or node.namespace != self.current_namespace):
+            return "%s::%s" % (node.namespace, node.name)
+        else:
+            return node.name
 
     def generate(self, ast: List[AstNode]) -> None:
         imports = set()
@@ -803,7 +861,7 @@ class Generator:
                 imports.add(self.documents.by_id[u.document].name)
 
         for i in imports:
-            print('#include "%s.hh"' % i, file=self.out)
+            self.o('#include "%s.hh"' % i)
 
         for node in ast:
             if node.document != 0:
@@ -817,10 +875,10 @@ class Generator:
             elif isinstance(node, Union):
                 self.generate_union(node)
             elif isinstance(node, Namespace):
-                # TODO handle namespace
                 pass
             else:
                 raise ICE()
+        self.switch_namespace(None)
 
 
 def run(args) -> int:

@@ -7,6 +7,9 @@
 #include <cstdio>
 #include <vector>
 
+using namespace scalgoprototest;
+using namespace scalgoprototest2;
+
 constexpr bool writeMode = false;
 
 bool validateOut(const char * data, size_t size, const char * file) {

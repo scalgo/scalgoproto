@@ -1,5 +1,7 @@
 import base
 
+namespace scalgoprototest2;
+
 table Complex2 @76AB8115 {
 	u1: NamedUnion;
 	u2: NamedUnion;
