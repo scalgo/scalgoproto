@@ -37,21 +37,16 @@ class Annotater:
     tables: Dict[str, Table]
     unions: Dict[str, Union]
     outer: AstNode
-    namespace: str
-    namespace_document: int
+    namespace: Dict[int, str]
 
     def __init__(self, documents: Documents) -> None:
         self.documents = documents
         self.errors = 0
         self.outer = None
-        self.namespace = None
-        self.namespace_document = None
+        self.namespace = {}
 
     def attach_namespace(self, node: AstNode):
-        if node.document == self.namespace_document:
-            node.namespace = self.namespace
-        else:
-            node.namespace = None
+        node.namespace = self.namespace.get(node.document, None)
 
     def value(self, t: Token) -> str:
         return self.documents.by_id[t.document].content[t.index : t.index + t.length]
@@ -568,8 +563,7 @@ class Annotater:
                 self.unions[name] = node
                 print("union %s" % name, file=sys.stderr)
             elif isinstance(node, Namespace):
-                self.namespace = node.namespace
-                self.namespace_document = node.document
+                self.namespace[node.document] = node.namespace
             else:
                 self.error(node.token, "Unknown thing")
                 continue
