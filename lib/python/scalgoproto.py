@@ -3,7 +3,7 @@ import enum
 import math
 import struct
 from abc import abstractmethod
-from typing import Callable, ClassVar, Generic, Sequence, Tuple, Type, TypeVar
+from typing import Callable, ClassVar, Generic, Sequence, Tuple, Type, TypeVar, Union
 
 MESSAGE_MAGIC = 0xB5C0C4B3
 TEXT_MAGIC = 0xD812C8F5
@@ -411,12 +411,16 @@ class TableOut(object):
             "<I", v._offset - 8
         )
 
-    def _set_text(self, o: int, v: TextOut) -> None:
+    def _set_text(self, o: int, v: Union[TextOut, str]) -> None:
+        if not isinstance(v, TextOut):
+            v = self._writer.construct_text(v)
         self._writer._data[self._offset + o : self._offset + o + 4] = struct.pack(
             "<I", v._offset - 8
         )
 
-    def _set_bytes(self, o: int, v: BytesOut) -> None:
+    def _set_bytes(self, o: int, v: Union[BytesOut, bytes]) -> None:
+        if not isinstance(v, BytesOut):
+            v = self._writer.construct_bytes(v)
         self._writer._data[self._offset + o : self._offset + o + 4] = struct.pack(
             "<I", v._offset - 8
         )
@@ -466,6 +470,15 @@ class UnionOut(object):
             "<HI", idx, offset
         )
 
+    def _set_text(self, idx: int, v: Union[TextOut, str]) -> None:
+        if not isinstance(v, TextOut):
+            v = self._writer.construct_text(v)
+        self._set(idx, v._offset - 8)
+
+    def _set_bytes(self, idx: int, v: Union[BytesOut, bytes]) -> None:
+        if not isinstance(v, BytesOut):
+            v = self._writer.construct_bytes(v)
+        self._set(idx, v._offset - 8)
 
 class OutList:
     _offset: int = 0
