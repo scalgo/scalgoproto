@@ -27,7 +27,7 @@ class AstNode(object):
     offset: int
     docstring: ty.List[str]
     document: int
-    uses: ty.Set["AstNode"]
+    uses: ty.Set[ty.Union["Union", "Table", "Struct", "Enum"]]
     namespace: str
 
     def __init__(self, token: Token, document: int, doc_comment: Token = None) -> None:

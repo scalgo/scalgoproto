@@ -20,7 +20,7 @@ from .parser import (
     ICE,
 )
 from .sp_tokenize import Token, TokenType
-from .util import cescape, lcamel, ucamel
+from .util import cescape, lcamel, ucamel, snake
 from .documents import Documents, Document
 
 typeMap = {
@@ -44,10 +44,11 @@ def bs(v: Token):
 class Generator:
     out: io.StringIO = None
 
-    def __init__(self, documents: Documents, out: io.StringIO) -> None:
+    def __init__(self, documents: Documents) -> None:
         self.documents = documents
-        self.out = out
+        self.out: io.StringIO = None
         self.current_namespace: str = None
+        self.current_file: str = None
 
     def in_list_types(self, node: Value) -> Tuple[str, str]:
         typeName: str = None
@@ -850,22 +851,52 @@ class Generator:
         else:
             return node.name
 
-    def generate(self, ast: List[AstNode]) -> None:
-        imports = set()
-        for node in ast:
-            if node.document != 0:
-                continue
-            for u in node.uses:
-                if u.document == 0:
+    def switch_file(self, name: str, output: str):
+        if self.current_file:
+            self.switch_namespace(None)
+            self.o("#endif //__SCALGOPROTO_%s__" % self.current_file)
+            po = os.path.join(output, "%s.hh" % self.current_file)
+            if not os.path.exists(po) or open(po, "r").read() != self.out.getvalue():
+                open(po, "w").write(self.out.getvalue())
+        if name:
+            self.out = io.StringIO()
+            self.o("//THIS FILE IS GENERATED DO NOT EDIT")
+            self.o("#ifndef __SCALGOPROTO_%s__" % name)
+            self.o("#define __SCALGOPROTO_%s__" % name)
+            self.o("#include <scalgoproto.hh>")
+            self.current_file = name
+
+    def generate(self, ast: List[AstNode], output: str, single: bool) -> None:
+        if single:
+            self.switch_file(self.documents.root.name, output)
+
+            imports = set()
+            for node in ast:
+                if node.document != 0:
                     continue
-                imports.add(self.documents.by_id[u.document].name)
+                for u in node.uses:
+                    if u.document == 0:
+                        continue
+                    imports.add(self.documents.by_id[u.document].name)
 
-        for i in imports:
-            self.o('#include "%s.hh"' % i)
+            for i in imports:
+                self.o('#include "%s.hh"' % i)
 
         for node in ast:
             if node.document != 0:
                 continue
+
+            if not single:
+                if (
+                    isinstance(node, Struct)
+                    or isinstance(node, Enum)
+                    or isinstance(node, Table)
+                    or isinstance(node, Union)
+                ):
+                    self.switch_file(node.name, output)
+                    for u in node.uses:
+                        self.o('#include "%s.hh"' % u.name)
+
             if isinstance(node, Struct):
                 self.generate_struct(node)
             elif isinstance(node, Enum):
@@ -878,7 +909,7 @@ class Generator:
                 pass
             else:
                 raise ICE()
-        self.switch_namespace(None)
+        self.switch_file(None, output)
 
 
 def run(args) -> int:
@@ -890,17 +921,8 @@ def run(args) -> int:
         if not annotate(documents, ast):
             print("Invalid schema is valid")
             return 1
-        out = io.StringIO()
-        g = Generator(documents, out)
-        print("//THIS FILE IS GENERATED DO NOT EDIT", file=out)
-        print("#ifndef __SCALGOPROTO_%s__" % documents.root.name, file=out)
-        print("#define __SCALGOPROTO_%s__" % documents.root.name, file=out)
-        print("#include <scalgoproto.hh>", file=out)
-        g.generate(ast)
-        print("#endif //__SCALGOPROTO_%s__" % documents.root.name, file=out)
-        po = os.path.join(args.output, "%s.hh" % documents.root.name)
-        if not os.path.exists(po) or open(po, "r").read() != out.getvalue():
-            open(po, "w").write(out.getvalue())
+        g = Generator(documents)
+        g.generate(ast, args.output, args.single)
         return 0
     except ParseError as err:
         err.describe(documents)
@@ -911,4 +933,5 @@ def setup(subparsers) -> None:
     cmd = subparsers.add_parser("cpp", help="Generate cpp code for windows")
     cmd.add_argument("schema", help="schema to generate things from")
     cmd.add_argument("output", help="where do we store the output")
+    cmd.add_argument("--single", action="store_true")
     cmd.set_defaults(func=run)

@@ -19,7 +19,9 @@ def runValidate(schema: str, fail: bool = False) -> bool:
 
 def runCppSetup(schemas: List[str], cpp: str) -> bool:
     for schema in schemas:
-        subprocess.check_call(["python3", "-m", "scalgoprotoc", "cpp", schema, "tmp/"])
+        subprocess.check_call(
+            ["python3", "-m", "scalgoprotoc", "cpp", schema, "tmp/", "--single"]
+        )
     subprocess.check_call(
         [
             "g++",
