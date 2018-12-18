@@ -11,13 +11,22 @@ from .documents import Documents, Document
 
 
 class AstNode(object):
-    __slots__ = ["token", "doc_comment", "bytes", "offset", "docstring", "document"]
+    __slots__ = [
+        "token",
+        "doc_comment",
+        "bytes",
+        "offset",
+        "docstring",
+        "document",
+        "uses",
+    ]
     token: Token
     doc_comment: Token
     bytes: int
     offset: int
     docstring: ty.List[str]
     document: int
+    uses: ty.Set["AstNode"]
 
     def __init__(self, token: Token, document: int, doc_comment: Token = None) -> None:
         self.token = token
@@ -26,6 +35,7 @@ class AstNode(object):
         self.offset = 0
         self.document = document
         self.docstring = None
+        self.uses = set()
 
 
 class Namespace(AstNode):

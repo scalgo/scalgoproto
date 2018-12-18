@@ -1,5 +1,7 @@
 // -*- mode: c++; tab-width: 4; indent-tabs-mode: t; eval: (progn (c-set-style "stroustrup") (c-set-offset 'innamespace 0)); -*-
 // vi:set ts=4 sts=4 sw=4 noet :
+#ifndef __SCALGOPROTO_HH__
+#define __SCALGOPROTO_HH__
 #include <cstdint>
 #include <cstring>
 #include <cassert>
@@ -781,3 +783,4 @@ std::pair<const char *, size_t> Writer::finalize(const TableOut & root) {
 }
 
 } //namespace scalgoproto
+#endif //__SCALGOPROTO_HH__

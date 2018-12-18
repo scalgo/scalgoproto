@@ -742,7 +742,7 @@ class Generator:
         self.o("    __slots__ = []")
         self.o()
         self.o(
-            "    def __init__(self, writer: scalgoproto.Writer, offset: int, end: int = 0):"
+            "    def __init__(self, writer: scalgoproto.Writer, offset: int, end: int = 0) -> None:"
         )
         self.o(
             '        """Private constructor. Call factory methods on scalgoproto.Writer to construct instances"""'
@@ -787,7 +787,7 @@ class Generator:
         self.o("    _MAGIC: typing_.ClassVar[int] = 0x%08X" % table.magic)
         self.o()
         self.o(
-            "    def __init__(self, reader: scalgoproto.Reader, offset: int, size: int):"
+            "    def __init__(self, reader: scalgoproto.Reader, offset: int, size: int) -> None:"
         )
         self.o(
             '        """Private constructor. Call factory methods on scalgoproto.Reader to construct instances"""'
@@ -906,27 +906,28 @@ class Generator:
         self.o()
 
     def generate(self, ast: List[AstNode]) -> None:
-        imports = {}
+        imports: Dict[str, Set[str]] = {}
         for node in ast:
-            if node.document == 0:
+            if node.document != 0:
                 continue
-            if not node.document in imports:
-                imports[node.document] = []
-            i = imports[node.document]
-            if isinstance(node, Struct):
-                i.append(node.name)
-            elif isinstance(node, Enum):
-                i.append(node.name)
-            elif isinstance(node, Table):
-                i.append("%sIn" % node.name)
-                i.append("%sOut" % node.name)
-            elif isinstance(node, Union):
-                i.append("%sIn" % node.name)
-                i.append("%sOut" % node.name)
-            elif isinstance(node, Namespace):
-                pass
-            else:
-                raise ICE()
+            for u in node.uses:
+                if u.document == 0:
+                    continue
+                if not u.document in imports:
+                    imports[u.document] = set()
+                i = imports[u.document]
+                if isinstance(u, Struct):
+                    i.add(u.name)
+                elif isinstance(u, Enum):
+                    i.add(u.name)
+                elif isinstance(u, Table):
+                    i.add("%sIn" % u.name)
+                    i.add("%sOut" % u.name)
+                elif isinstance(u, Union):
+                    i.add("%sIn" % u.name)
+                    i.add("%sOut" % u.name)
+                else:
+                    raise ICE()
 
         for (d, imp) in imports.items():
             doc = self.documents.by_id[d]

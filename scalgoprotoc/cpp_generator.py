@@ -2,10 +2,9 @@
 """
 Validate a schema
 """
-import math
+import math, io, os
 from types import SimpleNamespace
-from typing import Dict, List, Set, TextIO, Tuple
-
+from typing import Dict, List, Set, Tuple
 from .annotate import annotate
 from .parser import (
     AstNode,
@@ -21,6 +20,7 @@ from .parser import (
 )
 from .sp_tokenize import Token, TokenType
 from .util import cescape, lcamel, ucamel
+from .documents import Documents, Document
 
 typeMap = {
     TokenType.I8: "std::int8_t",
@@ -36,15 +36,15 @@ typeMap = {
 }
 
 
-def bs(v: bool):
+def bs(v: Token):
     return "true" if v else "false"
 
 
 class Generator:
-    out: TextIO = None
+    out: io.StringIO = None
 
-    def __init__(self, data: str, out: TextIO) -> None:
-        self.data = data
+    def __init__(self, documents: Documents, out: io.StringIO) -> None:
+        self.documents = documents
         self.out = out
 
     def in_list_types(self, node: Value) -> Tuple[str, str]:
@@ -98,7 +98,7 @@ class Generator:
         print(text, file=self.out)
 
     def value(self, t: Token) -> str:
-        return self.data[t.index : t.index + t.length]
+        return self.documents.by_id[t.document].content[t.index : t.index + t.length]
 
     def output_doc(
         self,
@@ -793,7 +793,21 @@ class Generator:
         self.o()
 
     def generate(self, ast: List[AstNode]) -> None:
+        imports = set()
         for node in ast:
+            if node.document != 0:
+                continue
+            for u in node.uses:
+                if u.document == 0:
+                    continue
+                imports.add(self.documents.by_id[u.document].name)
+
+        for i in imports:
+            print('#include "%s.hh"' % i, file=self.out)
+
+        for node in ast:
+            if node.document != 0:
+                continue
             if isinstance(node, Struct):
                 self.generate_struct(node)
             elif isinstance(node, Enum):
@@ -810,21 +824,28 @@ class Generator:
 
 
 def run(args) -> int:
-    data = open(args.schema, "r").read()
-    p = Parser(data)
-    out = open(args.output, "w")
+    documents = Documents()
+    documents.read_root(args.schema)
+    p = Parser(documents)
     try:
         ast = p.parse_document()
-        if not annotate(data, ast):
+        if not annotate(documents, ast):
             print("Invalid schema is valid")
             return 1
-        g = Generator(data, out)
+        out = io.StringIO()
+        g = Generator(documents, out)
         print("//THIS FILE IS GENERATED DO NOT EDIT", file=out)
-        print('#include "scalgoproto.hh"', file=out)
+        print("#ifndef __SCALGOPROTO_%s__" % documents.root.name, file=out)
+        print("#define __SCALGOPROTO_%s__" % documents.root.name, file=out)
+        print("#include <scalgoproto.hh>", file=out)
         g.generate(ast)
+        print("#endif //__SCALGOPROTO_%s__" % documents.root.name, file=out)
+        po = os.path.join(args.output, "%s.hh" % documents.root.name)
+        if not os.path.exists(po) or open(po, "r").read() != out.getvalue():
+            open(po, "w").write(out.getvalue())
         return 0
     except ParseError as err:
-        err.describe(data)
+        err.describe(documents)
     return 1
 
 
@@ -832,5 +853,4 @@ def setup(subparsers) -> None:
     cmd = subparsers.add_parser("cpp", help="Generate cpp code for windows")
     cmd.add_argument("schema", help="schema to generate things from")
     cmd.add_argument("output", help="where do we store the output")
-    cmd.add_argument("single", action="store_true")
     cmd.set_defaults(func=run)

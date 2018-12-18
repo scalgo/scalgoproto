@@ -7,7 +7,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import Callable
+from typing import Callable, List
 
 failures = []
 
@@ -17,10 +17,9 @@ def runValidate(schema: str, fail: bool = False) -> bool:
     return fail == (code != 0)
 
 
-def runCppSetup(schema: str, cpp: str) -> bool:
-    subprocess.check_call(
-        ["python3", "-m", "scalgoprotoc", "cpp", schema, "tmp/test.hh"]
-    )
+def runCppSetup(schemas: List[str], cpp: str) -> bool:
+    for schema in schemas:
+        subprocess.check_call(["python3", "-m", "scalgoprotoc", "cpp", schema, "tmp/"])
     subprocess.check_call(
         [
             "g++",
@@ -45,7 +44,7 @@ def runCpp(name: str, bin: str) -> bool:
     return True
 
 
-def runPySetup(schemas: [str, str]) -> bool:
+def runPySetup(schemas: List[str]) -> bool:
     for schema in schemas:
         subprocess.check_call(["python3", "-m", "scalgoprotoc", "py", schema, "tmp"])
     return True
@@ -101,7 +100,7 @@ def main():
     if not os.path.isdir("tmp"):
         os.mkdir("tmp")
 
-        # Test names
+    # Test names
     for (bad, good) in (("monkey", "Monkey"), ("Monkey_Cat", "MonkeyCat")):
         runNeg("bad table name %s" % bad, "table %s @8908828A {}", bad, good)
     for (bad, good) in (("Cat", "cat"), ("type", "myType"), ("cat_dog", "catDog")):
@@ -111,7 +110,7 @@ def main():
             bad,
             good,
         )
-        # Test table types
+    # Test table types
     for (bad, good) in (
         ("Int", "I32"),
         ("int32", "I32"),
@@ -185,7 +184,10 @@ def main():
 
     runTest("validate base", lambda: runValidate("test/base.spr"))
     runTest("validate complex2", lambda: runValidate("test/complex2.spr"))
-    if runTest("cpp setup", lambda: runCppSetup(["test/base.spr", "test/complex2.spr"], "test/cpp.cc")):
+    if runTest(
+        "cpp setup",
+        lambda: runCppSetup(["test/base.spr", "test/complex2.spr"], "test/cpp.cc"),
+    ):
         runTest(
             "cpp out default simple",
             lambda: runCpp("out_default", "test/simple_default.bin"),

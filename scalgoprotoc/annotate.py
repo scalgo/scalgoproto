@@ -36,10 +36,12 @@ class Annotater:
     structs: Dict[str, Struct]
     tables: Dict[str, Table]
     unions: Dict[str, Union]
+    outer: AstNode
 
     def __init__(self, documents: Documents) -> None:
         self.documents = documents
         self.errors = 0
+        self.outer = None
 
     def value(self, t: Token) -> str:
         return self.documents.by_id[t.document].content[t.index : t.index + t.length]
@@ -275,12 +277,16 @@ class Annotater:
                     typeName = self.value(v.type_)
                     if typeName in self.enums:
                         v.enum = self.enums[typeName]
+                        self.outer.uses.add(v.enum)
                     elif typeName in self.tables:
                         v.table = self.tables[typeName]
+                        self.outer.uses.add(v.table)
                     elif typeName in self.structs:
                         v.struct = self.structs[typeName]
+                        self.outer.uses.add(v.struct)
                     elif typeName in self.unions:
                         v.union = self.unions[typeName]
+                        self.outer.uses.add(v.union)
                     else:
                         self.error(v.type_, "Unknown type")
                 if t == ContentType.STRUCT:
@@ -393,6 +399,8 @@ class Annotater:
                 if v.optional:
                     self.error(v.optional, "Are alwayes optional")
                 v.enum = v.direct_enum or self.enums[typeName]
+                if not v.direct_enum:
+                    self.outer.uses.add(v.enum)
                 d = 255
                 if v.value:
                     dn = self.value(v.value)
@@ -417,6 +425,8 @@ class Annotater:
                     bool_bit += 1
                 v.offset = bytes
                 v.struct = v.direct_struct or self.structs[typeName]
+                if not v.direct_struct:
+                    self.outer.uses.add(v.struct)
                 v.bytes = v.struct.bytes
                 default.append(b"\0" * v.bytes)
             elif typeName in self.tables or v.direct_table:
@@ -428,6 +438,8 @@ class Annotater:
                 v.bytes = 4
                 v.offset = bytes
                 v.table = v.direct_table or self.tables[typeName]
+                if not v.direct_table:
+                    self.outer.uses.add(v.table)
             elif typeName in self.unions or v.direct_union:
                 if t == ContentType.STRUCT:
                     self.error(v.type_, "Unions not allowed in structs")
@@ -437,6 +449,8 @@ class Annotater:
                 v.bytes = 6
                 v.offset = bytes
                 v.union = v.direct_union or self.unions[typeName]
+                if not v.direct_union:
+                    self.outer.uses.add(v.union)
             else:
                 self.error(v.type_, "Unknown identifier")
                 v.bytes = 0
@@ -491,6 +505,7 @@ class Annotater:
         for node in ast:
             self.context = "outer"
             self.create_doc_string(node)
+            self.outer = node
             if isinstance(node, Struct):
                 self.context = "struct %s" % self.value(node.identifier)
                 name = self.validate_uname(node.identifier)
