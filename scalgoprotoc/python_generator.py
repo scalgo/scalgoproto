@@ -426,7 +426,9 @@ class Generator:
             self.o()
             self.o("    def add_%s(self) -> %sOut:" % (uname, node.table.name))
             self.output_doc(node, "        ")
-            self.o("        res = self._writer.construct_table(%sOut)"%node.table.name)
+            self.o(
+                "        res = self._writer.construct_table(%sOut)" % node.table.name
+            )
             self.o("        self._set_table(%d, res)" % (node.offset,))
             self.o("        return res")
             self.o()
@@ -463,7 +465,9 @@ class Generator:
             self.o()
             self.o("    def add_%s(self) -> %sOut:" % (uname, table.name))
             self.output_doc(node, "        ")
-            self.o("        res = self._writer.construct_table(%sOut)"%node.table.name)
+            self.o(
+                "        res = self._writer.construct_table(%sOut)" % node.table.name
+            )
             self.o("        self._set(%d, res._offset - 8)" % (idx,))
             self.o("        return res")
             self.o()
@@ -505,7 +509,10 @@ class Generator:
         if node.inplace:
             self.o("    def %s(self, text: str) -> None:" % (uname))
         else:
-            self.o("    def %s(self, t: typing_.Union[scalgoproto.TextOut, str]) -> None:" % (uname))
+            self.o(
+                "    def %s(self, t: typing_.Union[scalgoproto.TextOut, str]) -> None:"
+                % (uname)
+            )
         self.output_doc(node, "        ")
         if node.inplace:
             self.o("        self._add_inplace_text(%d, text)" % (node.offset))
@@ -520,7 +527,10 @@ class Generator:
         if inplace:
             self.o("    def %s(self, value: str) -> None:" % (uname))
         else:
-            self.o("    def %s(self, t: typing_.Union[scalgoproto.TextOut, str]) -> None:" % (uname))
+            self.o(
+                "    def %s(self, t: typing_.Union[scalgoproto.TextOut, str]) -> None:"
+                % (uname)
+            )
         self.output_doc(node, "        ")
         if node.inplace:
             self.o("        self._set(%d, len(value))" % (idx))
@@ -559,7 +569,10 @@ class Generator:
         if node.inplace:
             self.o("    def %s(self, value: bytes) -> None:" % (uname))
         else:
-            self.o("    def %s(self, b: typing_.Union[scalgoproto.BytesOut, bytes]) -> None:" % (uname))
+            self.o(
+                "    def %s(self, b: typing_.Union[scalgoproto.BytesOut, bytes]) -> None:"
+                % (uname)
+            )
         self.output_doc(node, "        ")
         if node.inplace:
             self.o("        self._add_inplace_bytes(%d, value)" % (node.offset))
@@ -574,7 +587,10 @@ class Generator:
         if inplace:
             self.o("    def %s(self, value: bytes) -> None:" % (uname))
         else:
-            self.o("    def %s(self, b: typing_.Union[scalgoproto.BytesOut, bytes]) -> None:" % (uname))
+            self.o(
+                "    def %s(self, b: typing_.Union[scalgoproto.BytesOut, bytes]) -> None:"
+                % (uname)
+            )
         self.output_doc(node, "        ")
         if node.inplace:
             self.o("        self._set(%d, len(value))" % (idx))

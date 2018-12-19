@@ -484,6 +484,7 @@ class UnionOut(object):
             v = self._writer.construct_bytes(v)
         self._set(idx, v._offset - 8)
 
+
 class OutList:
     _offset: int = 0
     _size: int = 0

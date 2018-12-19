@@ -177,7 +177,7 @@ class Generator:
             )
             self.o("\t}")
 
-    def generate_list_out(self, node: Value, uname: str) -> None:
+    def generate_list_out(self, node: Value, uname: str, outer: str) -> None:
         typeName = self.out_list_type(node)
         if node.inplace:
             self.o(
@@ -191,12 +191,23 @@ class Generator:
             )
         else:
             self.o(
-                "\tvoid add%s(scalgoproto::ListOut<%s> value) noexcept {"
-                % (uname, typeName)
+                "\t%s & set%s(scalgoproto::ListOut<%s> value) noexcept {"
+                % (outer, uname, typeName)
             )
             self.o(
                 "\t\tsetInner_<std::uint32_t, %d>(getOffset_(value)-8);" % (node.offset)
             )
+            self.o("\t\treturn * this;")
+            self.o("\t}")
+            self.o(
+                "\tscalgoproto::ListOut<%s> add%s(size_t size) noexcept {"
+                % (typeName, uname)
+            )
+            self.o("\t\tauto res = writer_.constructList<%s>(size);" % typeName)
+            self.o(
+                "\t\tsetInner_<std::uint32_t, %d>(getOffset_(res)-8);" % (node.offset)
+            )
+            self.o("\t\treturn res;")
         self.o("\t}")
 
     def generate_union_list_out(
@@ -213,11 +224,19 @@ class Generator:
             self.o("\t\treturn addInplaceList_<%s>(writer_, next_, size);" % (typeName))
         else:
             self.o(
-                "\tvoid add%s(scalgoproto::ListOut<%s> value) noexcept {"
+                "\tvoid set%s(scalgoproto::ListOut<%s> value) noexcept {"
                 % (uname, typeName)
             )
             self.o("\t\tsetType_(%d);" % (idx))
             self.o("\t\tsetObject_(getOffset_(value)-8);")
+            self.o("\t}")
+            self.o(
+                "\tscalgoproto::ListOut<%s> add%s(size_t size) noexcept {"
+                % (typeName, uname)
+            )
+            self.o("\t\tauto res = writer_.constructList<%s>(size);" % typeName)
+            self.o("\t\tset%s(res);" % (uname))
+            self.o("\t\treturn res;")
         self.o("\t}")
 
     def generate_bool_in(self, node: Value, uname: str) -> None:
@@ -235,16 +254,17 @@ class Generator:
         self.o("\t\treturn getBit_<%d, %s, 0>();" % (node.offset, node.bit))
         self.o("\t}")
 
-    def generate_bool_out(self, node: Value, uname: str) -> None:
+    def generate_bool_out(self, node: Value, uname: str, outer: str) -> None:
         if node.inplace:
             raise ICE()
-        self.o("\tvoid add%s(bool value) noexcept {" % (uname))
+        self.o("\t%s & set%s(bool value) noexcept {" % (outer, uname))
         if node.optional:
             self.o("\t\tsetBit_<%d, %d>();" % (node.has_offset, node.has_bit))
         self.o(
             "\t\tif(value) setBit_<%d, %d>(); else unsetBit_<%d, %d>();"
             % (node.offset, node.bit, node.offset, node.bit)
         )
+        self.o("\t\treturn *this;")
         self.o("\t}")
 
     def generate_basic_in(self, node: Value, uname: str) -> None:
@@ -278,14 +298,15 @@ class Generator:
         )
         self.o("\t}")
 
-    def generate_basic_out(self, node: Value, uname: str) -> None:
+    def generate_basic_out(self, node: Value, uname: str, outer: str) -> None:
         if node.inplace:
             raise ICE()
         typeName = typeMap[node.type_.type]
-        self.o("\tvoid add%s(%s value) noexcept {" % (uname, typeName))
+        self.o("\t%s & set%s(%s value) noexcept {" % (outer, uname, typeName))
         if node.optional and node.type_.type not in (TokenType.F32, TokenType.F64):
             self.o("\t\tsetBit_<%d, %d>();" % (node.has_offset, node.has_bit))
         self.o("\t\tsetInner_<%s, %d>(value);" % (typeName, node.offset))
+        self.o("\t\treturn *this;")
         self.o("\t}")
 
     def generate_enum_in(self, node: Value, uname: str) -> None:
@@ -307,11 +328,15 @@ class Generator:
         )
         self.o("\t}")
 
-    def generate_enum_out(self, node: Value, uname: str) -> None:
+    def generate_enum_out(self, node: Value, uname: str, outer: str) -> None:
         if node.inplace:
             raise ICE()
-        self.o("\tvoid add%s(%s value) noexcept {" % (uname, self.qualify(node.enum)))
+        self.o(
+            "\t%s & set%s(%s value) noexcept {"
+            % (outer, uname, self.qualify(node.enum))
+        )
         self.o("\t\tsetInner_<%s, %d>(value);" % (self.qualify(node.enum), node.offset))
+        self.o("\t\treturn *this;")
         self.o("\t}")
 
     def generate_struct_in(self, node: Value, uname: str) -> None:
@@ -333,18 +358,19 @@ class Generator:
         )
         self.o("\t}")
 
-    def generate_struct_out(self, node: Value, uname: str) -> None:
+    def generate_struct_out(self, node: Value, uname: str, outer: str) -> None:
         if node.inplace:
             raise ICE()
         self.o(
-            "\tvoid add%s(const %s & value) noexcept {"
-            % (uname, self.qualify(node.struct))
+            "\t%s& set%s(const %s & value) noexcept {"
+            % (outer, uname, self.qualify(node.struct))
         )
         if node.optional:
             self.o("\t\tsetBit_<%d, %d>();" % (node.has_offset, node.has_bit))
         self.o(
             "\t\tsetInner_<%s, %d>(value);" % (self.qualify(node.struct), node.offset)
         )
+        self.o("\t\treturn *this;")
         self.o("\t}")
 
     def generate_table_in(self, node: Value, uname: str) -> None:
@@ -381,15 +407,26 @@ class Generator:
             )
             self.o("\t}")
 
-    def generate_table_out(self, node: Value, uname: str) -> None:
+    def generate_table_out(self, node: Value, uname: str, outer: str) -> None:
         if not node.inplace:
             self.o(
-                "\tvoid add%s(%sOut value) noexcept {"
-                % (uname, self.qualify(node.table))
+                "\t%s & set%s(%sOut value) noexcept {"
+                % (outer, uname, self.qualify(node.table))
             )
             self.o(
                 "\t\tsetInner_<std::uint32_t, %d>(getOffset_(value)-8);" % (node.offset)
             )
+            self.o("\t\treturn *this;")
+            self.o("\t}")
+            self.o("\t%sOut add%s() noexcept {" % (self.qualify(node.table), uname))
+            self.o(
+                "\t\tauto res = writer_.construct<%sOut>();"
+                % (self.qualify(node.table),)
+            )
+            self.o(
+                "\t\tsetInner_<std::uint32_t, %d>(getOffset_(res)-8);" % (node.offset)
+            )
+            self.o("\t\treturn res;")
             self.o("\t}")
         elif not node.table.empty:
             self.o("\t%sOut add%s() noexcept {" % (self.qualify(node.table), uname))
@@ -403,9 +440,10 @@ class Generator:
             )
             self.o("\t}")
         else:
-            self.o("\tvoid add%s() noexcept {" % (uname))
+            self.o("\t%s & set%s() noexcept {" % (uname, outer))
             self.o("\t\tassert(!has%s());" % (uname))
             self.o("\t\tsetInner_<std::uint32_t, %d>(0);" % (node.offset))
+            self.o("\t\treturn *this;")
             self.o("\t}")
 
     def generate_union_table_out(
@@ -413,16 +451,23 @@ class Generator:
     ) -> None:
         self.output_doc(node, "\t")
         if node.table.empty:
-            self.o("\tvoid add%s() noexcept {" % (uname))
+            self.o("\tvoid set%s() noexcept {" % (uname))
             self.o("\t\tsetType_(%d);" % (idx))
             self.o("\t}")
         elif not inplace:
             self.o(
-                "\tvoid add%s(%sOut value) noexcept {"
+                "\tvoid set%s(%sOut value) noexcept {"
                 % (uname, self.qualify(node.table))
             )
             self.o("\t\tsetType_(%d);" % (idx))
             self.o("\t\tsetObject_(getOffset_(value)-8);")
+            self.o("\t}")
+            self.o("\t%sOut add%s() noexcept {" % (self.qualify(node.table), uname))
+            self.o(
+                "\t\tauto res = writer_.construct<%sOut>();" % self.qualify(node.table)
+            )
+            self.o("\t\tset%s(res);" % (uname,))
+            self.o("\t\treturn res;")
             self.o("\t}")
         else:
             self.o("\t%sOut add%s() noexcept {" % (self.qualify(node.table), uname))
@@ -455,14 +500,22 @@ class Generator:
         )
         self.o("\t}")
 
-    def generate_text_out(self, node: Value, uname: str) -> None:
+    def generate_text_out(self, node: Value, uname: str, outer: str) -> None:
         if node.inplace:
             self.o("\tvoid add%s(std::string_view text) noexcept {" % (uname))
             self.o("\t\tsetInner_<std::uint32_t, %d>(text.size());" % (node.offset))
             self.o("\t\taddInplaceText_(writer_, offset_+SIZE, text);")
         else:
-            self.o("\tvoid add%s(scalgoproto::TextOut t) noexcept {" % (uname))
+            self.o("\t%s set%s(scalgoproto::TextOut t) noexcept {" % (outer, uname))
             self.o("\t\tsetInner_<std::uint32_t, %d>(getOffset_(t));" % (node.offset))
+            self.o("\t\treturn *this;")
+            self.o("\t}")
+            self.o(
+                "\tscalgoproto::TextOut add%s(std::string_view t) noexcept {" % (uname)
+            )
+            self.o("\t\tauto res = writer_.constructText(t);")
+            self.o("\t\tsetInner_<std::uint32_t, %d>(getOffset_(res));" % (node.offset))
+            self.o("\t\treturn res;")
         self.o("\t}")
 
     def generate_union_text_out(
@@ -474,9 +527,16 @@ class Generator:
             self.o("\t\tsetSize_(text.size());")
             self.o("\t\taddInplaceText_(writer_, next_, text);")
         else:
-            self.o("\tvoid add%s(scalgoproto::TextOut t) noexcept {" % (uname))
+            self.o("\tvoid set%s(scalgoproto::TextOut t) noexcept {" % (uname))
             self.o("\t\tsetType_(%d);" % (idx))
             self.o("\t\tsetObject_(getOffset_(t));")
+            self.o("\t}")
+            self.o(
+                "\tscalgoproto::TextOut add%s(std::string_view t) noexcept {" % (uname)
+            )
+            self.o("\t\tauto res = writer_.constructText(t);")
+            self.o("\t\tset%s(res);" % uname)
+            self.o("\t\treturn res;")
         self.o("\t}")
 
     def generate_bytes_in(self, node: Value, uname: str) -> None:
@@ -500,28 +560,47 @@ class Generator:
         )
         self.o("\t}")
 
-    def generate_bytes_out(self, node: Value, uname: str) -> None:
+    def generate_bytes_out(self, node: Value, uname: str, outer: str) -> None:
         if node.inplace:
-            self.o("\tvoid add%s(const char * data, size_t size) noexcept {" % (uname))
-            self.o("\t\tsetInner_<std::uint32_t, %d>(size);" % (node.offset))
+            self.o("\tvoid add%s(const char * data, size_t size) noexcept {" % (uname,))
+            self.o("\t\tsetInner_<std::uint32_t, %d>(size);" % (node.offset,))
             self.o("\t\taddInplaceBytes_(writer_, offset_+SIZE, data, size);")
         else:
-            self.o("\tvoid add%s(scalgoproto::BytesOut b) noexcept {" % (uname))
-            self.o("\t\tsetInner_<std::uint32_t, %d>(getOffset_(b));" % (node.offset))
+            self.o("\t%s & set%s(scalgoproto::BytesOut b) noexcept {" % (outer, uname))
+            self.o("\t\tsetInner_<std::uint32_t, %d>(getOffset_(b));" % (node.offset,))
+            self.o("\t\treturn *this;")
+            self.o("\t}")
+            self.o(
+                "\tscalgoproto::BytesOut add%s(const char * data, size_t size) noexcept {"
+                % (uname,)
+            )
+            self.o("\t\tauto res = writer_.constructBytes(data, size);")
+            self.o(
+                "\t\tsetInner_<std::uint32_t, %d>(getOffset_(res));" % (node.offset,)
+            )
+            self.o("\t\treturn res;")
         self.o("\t}")
 
     def generate_union_bytes_out(
         self, node: Value, uname: str, inplace: bool, idx: int
     ) -> None:
         if inplace:
-            self.o("\tvoid add%s(const char * data, size_t size) noexcept {" % (uname))
-            self.o("\t\tsetType_(%d);" % (idx))
+            self.o("\tvoid add%s(const char * data, size_t size) noexcept {" % (uname,))
+            self.o("\t\tsetType_(%d);" % (idx,))
             self.o("\t\tsetSize_(size);")
             self.o("\t\taddInplaceBytes_(writer_, next_, data, size);")
         else:
-            self.o("\tvoid add%s(scalgoproto::BytesOut b) noexcept {" % (uname))
-            self.o("\t\tsetType_(%d);" % (idx))
+            self.o("\tvoid set%s(scalgoproto::BytesOut b) noexcept {" % (uname,))
+            self.o("\t\tsetType_(%d);" % (idx,))
             self.o("\t\tsetObject_(getOffset_(b));")
+            self.o("\t}")
+            self.o(
+                "\tscalgoproto::BytesOut add%s(const char * data, size_t size) noexcept {"
+                % (uname,)
+            )
+            self.o("\t\tauto res = writer_.constructBytes(data, size);")
+            self.o("\t\tset%s(res);" % (uname,))
+            self.o("\t\treturn res;")
         self.o("\t}")
 
     def generate_union_in(self, node: Value, uname: str) -> None:
@@ -595,27 +674,27 @@ class Generator:
         else:
             raise ICE()
 
-    def generate_value_out(self, node: Value) -> None:
+    def generate_value_out(self, node: Value, outer: str) -> None:
         uname = ucamel(self.value(node.identifier))
         self.output_doc(node, "\t")
         if node.list_:
-            self.generate_list_out(node, uname)
+            self.generate_list_out(node, uname, outer)
         elif node.type_.type == TokenType.BOOL:
-            self.generate_bool_out(node, uname)
+            self.generate_bool_out(node, uname, outer)
         elif node.type_.type in typeMap:
-            self.generate_basic_out(node, uname)
+            self.generate_basic_out(node, uname, outer)
         elif node.enum:
-            self.generate_enum_out(node, uname)
+            self.generate_enum_out(node, uname, outer)
         elif node.struct:
-            self.generate_struct_out(node, uname)
+            self.generate_struct_out(node, uname, outer)
         elif node.table:
-            self.generate_table_out(node, uname)
+            self.generate_table_out(node, uname, outer)
         elif node.union:
             self.generate_union_out(node, uname)
         elif node.type_.type == TokenType.TEXT:
-            self.generate_text_out(node, uname)
+            self.generate_text_out(node, uname, outer)
         elif node.type_.type == TokenType.BYTES:
-            self.generate_bytes_out(node, uname)
+            self.generate_bytes_out(node, uname, outer)
         else:
             raise ICE()
 
@@ -759,7 +838,7 @@ class Generator:
         )
         self.o("public:")
         for node in table.members:
-            self.generate_value_out(node)
+            self.generate_value_out(node, "%sOut" % table.name)
         self.o("};")
         self.output_metamagic(
             "template <> struct MetaMagic<%sOut> {using t=TableTag;};"

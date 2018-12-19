@@ -55,31 +55,17 @@ int main(int, char ** argv) {
 	} else if (!strcmp(argv[1], "out")) {
 		scalgoproto::Writer w;
 		auto s = w.construct<SimpleOut>();
-		s.addE(MyEnum::c);
-		s.addS({MyEnum::d, {42, 27.0, true}, false, 8, 9, 10, 11, -8, -9, -10, -11, 27.0, 22.0});
-		s.addB(true);
-		s.addU8(242);
-		s.addU16(4024);
-		s.addU32(124474);
-		s.addU64(5465778);
-		s.addI8(-40);
-		s.addI16(4025);
-		s.addI32(124475);
-		s.addI64(5465779);
-		s.addF(2.0);
-		s.addD(3.0);
-		s.addOs({43, 28.0, false});
-		s.addOb(false);
-		s.addOu8(252);
-		s.addOu16(4034);
-		s.addOu32(124464);
-		s.addOu64(5465768);
-		s.addOi8(-60);
-		s.addOi16(4055);
-		s.addOi32(124465);
-		s.addOi64(5465729);
-		s.addOf(5.0);
-		s.addOd(6.4);
+		s.setE(MyEnum::c);
+		s.setS({MyEnum::d, {42, 27.0, true}, false, 8, 9, 10, 11, -8, -9, -10, -11, 27.0, 22.0});
+		s.setB(true);
+		s.setU8(242).setU16(4024).setU32(124474).setU64(5465778);
+		s.setI8(-40).setI16(4025).setI32(124475).setI64(5465779);
+		s.setF(2.0).setD(3.0);
+		s.setOs({43, 28.0, false});
+		s.setOb(false);
+		s.setOu8(252).setOu16(4034).setOu32(124464).setOu64(5465768);
+		s.setOi8(-60).setOi16(4055).setOi32(124465).setOi64(5465729);
+		s.setOf(5.0).setOd(6.4);
 		auto [data, size] = w.finalize(s);
 		return !validateOut(data, size, argv[2]);
 	} else if (!strcmp(argv[1], "in")) {
@@ -210,7 +196,7 @@ int main(int, char ** argv) {
 	} else if (!strcmp(argv[1], "out_complex")) {
 		scalgoproto::Writer w;
 		auto m = w.construct<MemberOut>();
-		m.addId(42);
+		m.setId(42);
 		auto l = w.constructList<std::int32_t>(31);
 		for (size_t i=0; i < 31; ++i)
 			l[i] = 100-2*i;
@@ -244,19 +230,17 @@ int main(int, char ** argv) {
 		l10[8] = true;
 
 		auto s = w.construct<ComplexOut>();
-		s.addMember(m);
-		s.addText(t);
-		s.addMyBytes(b);
-		s.addIntList(l);
-		s.addStructList(l3);
-		s.addEnumList(l2);
-		s.addTextList(l4);
-		s.addBytesList(l5);
-		s.addMemberList(l6);
-		s.addF32list(l7);
-		s.addF64list(l8);
-		s.addU8list(l9);
-		s.addBlist(l10);
+		s.setMember(m).setText(t).setMyBytes(b);
+		s.setIntList(l);
+		s.setStructList(l3);
+		s.setEnumList(l2);
+		s.setTextList(l4);
+		s.setBytesList(l5);
+		s.setMemberList(l6);
+		s.setF32list(l7);
+		s.setF64list(l8);
+		s.setU8list(l9);
+		s.setBlist(l10);
 
 		auto [data, size] = w.finalize(s);
 		return !validateOut(data, size, argv[2]);
@@ -361,7 +345,7 @@ int main(int, char ** argv) {
 		scalgoproto::Writer w;
 
 		auto m = w.construct<MemberOut>();
-		m.addId(42);
+		m.setId(42);
 
 		auto b = w.constructBytes("bytes", 5);
 		auto t = w.constructText("text");
@@ -374,22 +358,22 @@ int main(int, char ** argv) {
 		l2[0] = {2, true};
 
 		auto l3 = w.constructList<NamedUnionOut>(2);
-		l3[0].addText(t);
-		l3[1].addMyBytes(b);
+		l3[0].setText(t);
+		l3[1].setMyBytes(b);
 
 		auto r = w.construct<Complex2Out>();
-		r.u1().addMember(m);
-		r.u2().addText(t);
-		r.u3().addMyBytes(b);
-		r.u4().addEnumList(l);
-		r.u5().addA();
+		r.u1().setMember(m);
+		r.u2().setText(t);
+		r.u3().setMyBytes(b);
+		r.u4().setEnumList(l);
+		r.u5().setA();
 
 		auto m2 = r.addHat();
-		m2.addId(43);
+		m2.setId(43);
 
-		r.addL(l2);
-		r.addS({Complex2SX::p, {8}});
-		r.addL2(l3);
+		r.setL(l2);
+		r.setS({Complex2SX::p, {8}});
+		r.setL2(l3);
 
 		auto [data, size] = w.finalize(r);
 		return !validateOut(data, size, argv[2]);
@@ -432,31 +416,27 @@ int main(int, char ** argv) {
 		scalgoproto::Writer w;
 		auto name = w.constructText("nilson");
 		auto u = w.construct<InplaceUnionOut>();
-		u.u().addMonkey().addName(name);
+		u.u().addMonkey().setName(name);
 
 		auto u2 = w.construct<InplaceUnionOut>();
 		u2.u().addText().addT("foobar");
 
 		auto t = w.construct<InplaceTextOut>();
-		t.addId(45);
+		t.setId(45);
 		t.addT("cake");
 
 		auto b = w.construct<InplaceBytesOut>();
-		b.addId(46);
+		b.setId(46);
 		b.addB("hi", 2);
 
 		auto l = w.construct<InplaceListOut>();
-		l.addId(47);
+		l.setId(47);
 		auto ll = l.addL(2);
 		ll[0] = 24;
 		ll[1] = 99;
 
 		auto root = w.construct<InplaceRootOut>();
-		root.addU(u);
-		root.addU2(u2);
-		root.addT(t);
-		root.addB(b);
-		root.addL(l);
+		root.setU(u).setU2(u2).setT(t).setB(b).setL(l);
 		auto [data, size] = w.finalize(root);
 		return !validateOut(data, size, argv[2]);
 	} else if (!strcmp(argv[1], "in_inplace")) {
@@ -503,7 +483,7 @@ int main(int, char ** argv) {
 	} else if (!strcmp(argv[1], "out_extend1")) {
 		scalgoproto::Writer w;
 		auto root = w.construct<Gen1Out>();
-		root.addAa(77);
+		root.setAa(77);
 		auto [data, size] = w.finalize(root);
 		return !validateOut(data, size, argv[2]);
 	} else if (!strcmp(argv[1], "in_extend1")) {
@@ -517,10 +497,10 @@ int main(int, char ** argv) {
 	} else if (!strcmp(argv[1], "out_extend2")) {
 		scalgoproto::Writer w;
 		auto root = w.construct<Gen2Out>();
-		root.addAa(80);
-		root.addBb(81);
+		root.setAa(80);
+		root.setBb(81);
 		auto cake = root.u().addCake();
-		cake.addV(45);
+		cake.setV(45);
 		auto [data, size] = w.finalize(root);
 		return !validateOut(data, size, argv[2]);
 	} else if (!strcmp(argv[1], "in_extend2")) {

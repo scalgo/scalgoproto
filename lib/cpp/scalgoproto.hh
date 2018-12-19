@@ -159,6 +159,7 @@ protected:
 template <typename T>
 struct ListAccessHelp<BoolTag, T> : public In {
 	static constexpr bool optional = false;
+	static constexpr bool hasAdd = false;
 	static constexpr size_t mult = 0;
 	static constexpr int def = 0;
 	static bool get(const Reader &, const char * start, std::uint32_t index) noexcept {
@@ -187,6 +188,7 @@ struct ListAccessHelp<BoolTag, T> : public In {
 template <typename T>
 struct ListAccessHelp<PodTag, T>: public In {
 	static constexpr bool optional = false;
+	static constexpr bool hasAdd = false;
 	static constexpr size_t mult = sizeof(T);
 	static constexpr int def = 0;
 	static T get(const Reader &, const char * start, std::uint32_t index) noexcept {
@@ -206,6 +208,7 @@ struct ListAccessHelp<PodTag, T>: public In {
 template <typename T>
 struct ListAccessHelp<EnumTag, T>: public In {
 	static constexpr bool optional = true;
+	static constexpr bool hasAdd = false;
 	static constexpr size_t mult = 1;
 	static constexpr int def = 255;
 	static bool has(const char * start, std::uint32_t index) noexcept {
@@ -229,6 +232,7 @@ struct ListAccessHelp<EnumTag, T>: public In {
 template <typename T>
 struct ListAccessHelp<TextTag, T>: public In {
 	static constexpr bool optional = true;
+	static constexpr bool hasAdd = false;
 	static constexpr size_t mult = 4;
 	static constexpr int def = 0;
 	static bool has(const char * start, std::uint32_t index) noexcept {
@@ -246,15 +250,18 @@ struct ListAccessHelp<TextTag, T>: public In {
 	class Setter {
 		template <typename> friend class ListOut;
 		Setter(Writer & writer, std::uint32_t offset, std::uint32_t index);
+		Writer & writer;
 		char * const location;
 	public:
-		void operator=(const T & value) noexcept {memcpy(location, &value.offset_, 4);}
+		T operator=(const T & value) noexcept {memcpy(location, &value.offset_, 4); return value;}
+		TextOut operator=(std::string_view t);
 	};
 };
 
 template <typename T>
 struct ListAccessHelp<BytesTag, T>: public In {
 	static constexpr bool optional = true;
+	static constexpr bool hasAdd = false;
 	static constexpr size_t mult = 4;
 	static constexpr int def = 0;
 	static bool has(const char * start, std::uint32_t index) noexcept {
@@ -280,6 +287,7 @@ struct ListAccessHelp<BytesTag, T>: public In {
 template <typename T>
 struct ListAccessHelp<TableTag, T>: public In {
 	static constexpr bool optional = true;
+	static constexpr bool hasAdd = true;
 	static constexpr size_t mult = 4;
 	static constexpr int def = 0;
 	static bool has(const char * start, std::uint32_t index) noexcept {
@@ -294,6 +302,8 @@ struct ListAccessHelp<TableTag, T>: public In {
 		assert(off != 0);
 		return getObject_<T>(reader, reader.getPtr_<T::MAGIC>(off));
 	}
+
+	static T add(Writer & w, std::uint32_t offset, std::uint32_t index);
 
 	class Setter {
 		template <typename> friend class ListOut;
@@ -310,6 +320,8 @@ struct ListAccessHelp<TableTag, T>: public In {
 template <typename T>
 struct ListAccessHelp<UnionTag, T>: public In {
 	static constexpr bool optional = true;
+	static constexpr bool hasAdd = false;
+
 	static constexpr size_t mult = 6;
 	static constexpr int def = 0;
 	static bool has(const char * start, std::uint32_t index) noexcept {
@@ -544,6 +556,13 @@ public:
 		return typename A::Setter(writer_, offset_, index);
 	}
 
+	T add(size_t index) {
+		if constexpr(A::hasAdd)
+			return A::add(writer_, offset_, index);
+		else
+			throw Error();
+	}
+
 	uint32_t size() const noexcept {return size_;}
 };
 
@@ -772,13 +791,29 @@ template <typename T>
 ListAccessHelp<EnumTag, T>::Setter ::Setter(Writer & writer, std::uint32_t offset, std::uint32_t index) : location(writer.data + offset + index * sizeof(T)) {}
 
 template <typename T>
-ListAccessHelp<TextTag, T>::Setter::Setter(Writer & writer, std::uint32_t offset, std::uint32_t index) : location(writer.data + offset + index * 4) {}
+ListAccessHelp<TextTag, T>::Setter::Setter(Writer & writer, std::uint32_t offset, std::uint32_t index) :  writer(writer), location(writer.data + offset + index * 4) {}
+
+template <typename T>
+TextOut ListAccessHelp<TextTag, T>::Setter::operator=(std::string_view t) {
+	auto value = writer.constructText(t);
+	memcpy(location, &value.offset_, 4);
+	return value;
+}
+
 
 template <typename T>
 ListAccessHelp<BytesTag, T>::Setter::Setter(Writer & writer, std::uint32_t offset, std::uint32_t index) : location(writer.data + offset + index * 4) {}
 
 template <typename T>
 ListAccessHelp<TableTag, T>::Setter::Setter(Writer & writer, std::uint32_t offset, std::uint32_t index) : location(writer.data + offset + index * 4) {}
+
+template <typename T>
+T ListAccessHelp<TableTag, T>::add(Writer & w, std::uint32_t offset, std::uint32_t index) {
+	auto ans = w.construct<T>();
+	uint32_t o = ans.offset_ - 8;
+	memcpy(w.data + offset + index * 4, &o, 4);
+	return ans;
+}
 
 std::pair<const char *, size_t> Writer::finalize(const TableOut & root) {
 	write((std::uint32_t)0xB5C0C4B3, 0);
