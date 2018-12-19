@@ -196,11 +196,11 @@ class Generator:
             )
         elif node.type_.type == TokenType.TEXT:
             self.o(
-                "        l = scalgoproto.ObjectListOut[TextOut](self._writer, size, False)"
+                "        l = scalgoproto.ObjectListOut[scalgoproto.TextOut](self._writer, size, False)"
             )
         elif node.type_.type == TokenType.BYTES:
             self.o(
-                "        l = scalgoproto.ObjectListOut[TextOut](self._writer, size, False)"
+                "        l = scalgoproto.ObjectListOut[scalgoproto.TextOut](self._writer, size, False)"
             )
 
     def generate_list_out(self, node: Value, uname: str) -> None:

@@ -377,14 +377,14 @@ public:
 	bool operator == (const ListInIterator & o) const noexcept {return index == o.index;}
 
 	// Movement
-	ListInIterator & operator++() noexcept {index++;}
-	ListInIterator & operator--() noexcept {index--;}
+	ListInIterator & operator++() noexcept {index++; return *this;}
+	ListInIterator & operator--() noexcept {index--; return *this;}
 	ListInIterator operator++(int) noexcept {ListInIterator t=*this; index++; return t;}
 	ListInIterator operator--(int)  noexcept {ListInIterator t=*this; index--; return t;}
 	ListInIterator operator+(int delta) const noexcept {ListInIterator t=*this; t += delta; return t;}
 	ListInIterator operator-(int delta) const noexcept {ListInIterator t=*this; t -= delta; return t;}
-	ListInIterator & operator+=(int delta) noexcept {index += delta;}
-	ListInIterator & operator-=(int delta) noexcept {index -= delta;}
+	ListInIterator & operator+=(int delta) noexcept {index += delta; return *this;}
+	ListInIterator & operator-=(int delta) noexcept {index -= delta; return *this;}
 };
 
 
@@ -410,8 +410,8 @@ public:
 	value_type back() const noexcept(noexceptGet) {assert(hasBack()); return A::get(reader_, start_, size_-1);}
 	size_type size() const noexcept {return size_;}
 	bool empty() const noexcept {return size_ == 0;}
-	iterator begin() const noexcept {return ListInIterator(reader_, start_, 0);}
-	iterator end() const noexcept {return ListInIterator(reader_, start_, size_);}
+	iterator begin() const noexcept {return iterator(reader_, start_, 0);}
+	iterator end() const noexcept {return iterator(reader_, start_, size_);}
 	value_type at(size_type pos) const {
 		if (pos >= size_) throw std::out_of_range("out of range");
 		if (!has(pos)) throw std::out_of_range("unset member");
@@ -585,10 +585,14 @@ public:
 		capacity = 0;
 	}
 	
-	void clear() {
+	void clear() noexcept {
 		size = 8;
 	}
-  
+
+	bool isClean() const noexcept {
+		return size == 8;
+	}
+	
 	inline std::pair<const char *, size_t> finalize(const TableOut & root);
 	
 	template <typename T>

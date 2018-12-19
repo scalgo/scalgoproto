@@ -66,6 +66,10 @@ class ListIn(Sequence[B]):
         return self._size
 
     def __getitem__(self, idx: int) -> B:
+        if idx < 0:
+            idx += self._size
+        if not 0 <= idx < self._size:
+            raise IndexError()
         return self._getter(self._reader, self._offset, idx)
 
 
