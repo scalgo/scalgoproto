@@ -43,11 +43,12 @@ typeMap: Dict[TokenType, TypeInfo] = {
 
 
 class Generator:
-    out: TextIO = None
-
-    def __init__(self, documents: Documents, out: TextIO) -> None:
-        self.documents = documents
-        self.out = out
+    def __init__(self, documents: Documents, out: TextIO, import_prefix: str) -> None:
+        self.documents: Documents = documents
+        self.out: TextIo = out
+        if import_prefix and import_prefix[-1] != '.':
+            import_prefix += '.'
+        self.import_prefix: str = import_prefix
 
     def out_list_type(self, node: Value) -> str:
         if node.type_.type == TokenType.BOOL:
@@ -989,7 +990,7 @@ class Generator:
 
         for (d, imp) in imports.items():
             doc = self.documents.by_id[d]
-            self.o("from %s import %s" % (doc.name, ", ".join(imp)))
+            self.o("from %s%s import %s" % (self.import_prefix, doc.name, ", ".join(imp)))
 
         for node in ast:
             if node.document != 0:
@@ -1018,7 +1019,7 @@ def run(args) -> int:
         if not annotate(documents, ast):
             print("Schema is invalid")
             return 1
-        g = Generator(documents, out)
+        g = Generator(documents, out, args.import_prefix)
         print(
             "# -*- mode: python; tab-width: 4; indent-tabs-mode: nil; python-indent-offset: 4; coding: utf-8 -*-",
             file=out,
@@ -1039,4 +1040,5 @@ def setup(subparsers) -> None:
     cmd = subparsers.add_parser("py", help="Generate python code")
     cmd.add_argument("schema", help="schema to generate things from")
     cmd.add_argument("output", help="where do we store the output")
+    cmd.add_argument("--import-prefix", help="Prefix to put infront of imports", default="")
     cmd.set_defaults(func=run)
