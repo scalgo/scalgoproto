@@ -1,4 +1,4 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: t; python-indent-offset: 4; coding: utf-8 -*-
+# -*- mode: python; tab-width: 4; indent-tabs-mode: nil; python-indent-offset: 4; coding: utf-8 -*-
 """
 Generate python reader/wirter
 """
@@ -59,13 +59,33 @@ class Generator:
         elif node.enum:
             return "scalgoproto.EnumListOut[%s]" % (node.enum.name)
         elif node.table:
-            return "scalgoproto.ObjectListOut[%sOut]" % (node.table.name)
+            return "scalgoproto.TableListOut[%sOut]" % (node.table.name)
         elif node.union:
             return "scalgoproto.UnionListOut[%sOut]" % (node.union.name)
         elif node.type_.type == TokenType.TEXT:
-            return "scalgoproto.ObjectListOut[scalgoproto.TextOut]"
+            return "scalgoproto.TextListOut"
         elif node.type_.type == TokenType.BYTES:
-            return "scalgoproto.ObjectListOut[scalgoproto.BytesOut]"
+            return "scalgoproto.BytesListOut"
+        else:
+            raise ICE()
+
+    def out_list_constructor(self, node: Value) -> str:
+        if node.type_.type == TokenType.BOOL:
+            return "construct_bool_list(size)"
+        elif node.type_.type in typeMap:
+            return "construct_%s_list(size)" % (typeMap[node.type_.type].n)
+        elif node.struct:
+            return "construct_struct_list(%s, size)" % (node.struct.name)
+        elif node.enum:
+            return "construct_enum_list(%s, size)" % (node.enum.name)
+        elif node.table:
+            return "construct_table_list(%sOut, size)" % (node.table.name)
+        elif node.union:
+            return "construct_union_list(%sOut, size)" % (node.union.name)
+        elif node.type_.type == TokenType.TEXT:
+            return "construct_text_list(size)"
+        elif node.type_.type == TokenType.BYTES:
+            return "construct_bytes_list(size)"
         else:
             raise ICE()
 
@@ -191,24 +211,33 @@ class Generator:
             )
         elif node.table:
             self.o(
-                "        l = scalgoproto.ObjectListOut[%sOut](self._writer, size, False)"
+                "        l = scalgoproto.TableListOut[%sOut](self._writer, size, False)"
                 % (node.table)
             )
         elif node.type_.type == TokenType.TEXT:
-            self.o(
-                "        l = scalgoproto.ObjectListOut[scalgoproto.TextOut](self._writer, size, False)"
-            )
+            self.o("        l = scalgoproto.TextListOut(self._writer, size, False)")
         elif node.type_.type == TokenType.BYTES:
-            self.o(
-                "        l = scalgoproto.ObjectListOut[scalgoproto.TextOut](self._writer, size, False)"
-            )
+            self.o("        l = scalgoproto.BytesListOut(self._writer, size, False)")
 
     def generate_list_out(self, node: Value, uname: str) -> None:
         if not node.inplace:
             self.o("    @scalgoproto.Adder")
-            self.o("    def %s(self, value: %s):" % (uname, self.out_list_type(node)))
+            self.o(
+                "    def %s(self, value: %s) -> None:"
+                % (uname, self.out_list_type(node))
+            )
             self.output_doc(node, "        ")
             self.o("        self._set_list(%d, value)" % (node.offset))
+            self.o()
+
+            self.o(
+                "    def add_%s(self, size:int) -> %s:"
+                % (uname, self.out_list_type(node))
+            )
+            self.output_doc(node, "        ")
+            self.o("        res = self._writer.%s" % self.out_list_constructor(node))
+            self.o("        self._set_list(%d, res)" % (node.offset))
+            self.o("        return res")
             self.o()
         else:
             self.o(

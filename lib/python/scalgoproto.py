@@ -1,4 +1,4 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: t; python-indent-offset: 4; coding: utf-8 -*-
+# -*- mode: python; tab-width: 4; indent-tabs-mode: nil; python-indent-offset: 4; coding: utf-8 -*-
 import enum
 import math
 import struct
@@ -564,14 +564,56 @@ class StructListOut(OutList, Generic[S]):
         self._s._write(self._writer, self._offset + index * self._s._WIDTH, value)
 
 
-class ObjectListOut(OutList, Generic[B]):
+class TableListOut(OutList, Generic[TO]):
+    def __init__(
+        self, writer: "Writer", t: Type[TO], size: int, with_header: bool = True
+    ) -> None:
+        """Private constructor. Use factory methods on writer"""
+        super().__init__(writer, b"\0\0\0\0" * size, size, with_header)
+        self.table = t
+
+    def __setitem__(self, index: int, value: TO) -> None:
+        """Add value to list at index"""
+        assert 0 <= index < self._size
+        assert isinstance(value, self.table)
+        self._writer._data[
+            self._offset + index * 4 : self._offset + index * 4 + 1
+        ] = struct.pack("I", value._offset - 8)
+
+    def add(self, index: int) -> TO:
+        assert 0 <= index < self._size
+        res = self._writer.construct_table(self.table)
+        self[index] = res
+        return res
+
+
+class TextListOut(OutList):
     def __init__(self, writer: "Writer", size: int, with_header: bool = True) -> None:
         """Private constructor. Use factory methods on writer"""
         super().__init__(writer, b"\0\0\0\0" * size, size, with_header)
 
-    def __setitem__(self, index: int, value: B) -> None:
+    def __setitem__(self, index: int, value: Union[TextOut, str]) -> None:
         """Add value to list at index"""
         assert 0 <= index < self._size
+        if not isinstance(value, TextOut):
+            value = self._writer.construct_text(value)
+        self._writer._data[
+            self._offset + index * 4 : self._offset + index * 4 + 1
+        ] = struct.pack("I", value._offset - 8)
+
+
+class BytesListOut(OutList, Generic[TO]):
+    def __init__(
+        self, writer: "Writer", t: Type[TO], size: int, with_header: bool = True
+    ) -> None:
+        """Private constructor. Use factory methods on writer"""
+        super().__init__(writer, b"\0\0\0\0" * size, size, with_header)
+        self.table = t
+
+    def __setitem__(self, index: int, value: TO) -> None:
+        """Add value to list at index"""
+        assert 0 <= index < self._size
+        assert isinstance(value, BytesOut)
         self._writer._data[
             self._offset + index * 4 : self._offset + index * 4 + 1
         ] = struct.pack("I", value._offset - 8)
@@ -645,14 +687,14 @@ class Writer:
     def construct_struct_list(self, s: Type[S], size: int) -> StructListOut[S]:
         return StructListOut[S](self, s, size)
 
-    def construct_table_list(self, s: Type[TO], size: int) -> ObjectListOut[TO]:
-        return ObjectListOut[S](self, size)
+    def construct_table_list(self, s: Type[TO], size: int) -> TableListOut[TO]:
+        return TableListOut[S](self, s, size)
 
-    def construct_text_list(self, size: int) -> ObjectListOut[TextOut]:
-        return ObjectListOut[TextOut](self, size)
+    def construct_text_list(self, size: int) -> TextListOut:
+        return TextListOut(self, size)
 
-    def construct_bytes_list(self, size: int) -> ObjectListOut[BytesOut]:
-        return ObjectListOut[BytesOut](self, size)
+    def construct_bytes_list(self, size: int) -> BytesListOut:
+        return BytesListOut(self, size)
 
     def construct_bool_list(self, size: int) -> BoolListOut:
         return BoolListOut(self, size)
