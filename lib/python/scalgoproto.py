@@ -355,54 +355,34 @@ class TableOut(object):
         writer._write(default)
 
     def _set_int8(self, o: int, v: int) -> None:
-        self._writer._data[self._offset + o : self._offset + o + 1] = struct.pack(
-            "<b", v
-        )
+        self._writer._put(self._offset + o, struct.pack("<b", v))
 
     def _set_uint8(self, o: int, v: int) -> None:
-        self._writer._data[self._offset + o : self._offset + o + 1] = struct.pack(
-            "<B", v
-        )
+        self._writer._put(self._offset + o, struct.pack("<B", v))
 
     def _set_int16(self, o: int, v: int) -> None:
-        self._writer._data[self._offset + o : self._offset + o + 2] = struct.pack(
-            "<h", v
-        )
+        self._writer._put(self._offset + o, struct.pack("<h", v))
 
     def _set_uint16(self, o: int, v: int) -> None:
-        self._writer._data[self._offset + o : self._offset + o + 2] = struct.pack(
-            "<H", v
-        )
+        self._writer._put(self._offset + o, struct.pack("<H", v))
 
     def _set_int32(self, o: int, v: int) -> None:
-        self._writer._data[self._offset + o : self._offset + o + 4] = struct.pack(
-            "<i", v
-        )
+        self._writer._put(self._offset + o, struct.pack("<i", v))
 
     def _set_uint32(self, o: int, v: int) -> None:
-        self._writer._data[self._offset + o : self._offset + o + 4] = struct.pack(
-            "<I", v
-        )
+        self._writer._put(self._offset + o, struct.pack("<I", v))
 
     def _set_int64(self, o: int, v: int) -> None:
-        self._writer._data[self._offset + o : self._offset + o + 8] = struct.pack(
-            "<q", v
-        )
+        self._writer._put(self._offset + o, struct.pack("<q", v))
 
     def _set_uint64(self, o: int, v: int) -> None:
-        self._writer._data[self._offset + o : self._offset + o + 8] = struct.pack(
-            "<Q", v
-        )
+        self._writer._put(self._offset + o, struct.pack("<Q", v))
 
     def _set_float32(self, o: int, v: float) -> None:
-        self._writer._data[self._offset + o : self._offset + o + 4] = struct.pack(
-            "<f", v
-        )
+        self._writer._put(self._offset + o, struct.pack("<f", v))
 
     def _set_float64(self, o: int, v: float) -> None:
-        self._writer._data[self._offset + o : self._offset + o + 8] = struct.pack(
-            "<d", v
-        )
+        self._writer._put(self._offset + o, struct.pack("<d", v))
 
     def _set_bit(self, o: int, b: int) -> None:
         self._writer._data[self._offset + o] ^= 1 << b
@@ -411,28 +391,20 @@ class TableOut(object):
         self._writer._data[self._offset + o] &= ~(1 << b)
 
     def _set_table(self, o: int, v: TO) -> None:
-        self._writer._data[self._offset + o : self._offset + o + 4] = struct.pack(
-            "<I", v._offset - 8
-        )
+        self._writer._put(self._offset + o, struct.pack("<I", v._offset - 8))
 
     def _set_text(self, o: int, v: Union[TextOut, str]) -> None:
         if not isinstance(v, TextOut):
             v = self._writer.construct_text(v)
-        self._writer._data[self._offset + o : self._offset + o + 4] = struct.pack(
-            "<I", v._offset - 8
-        )
+        self._writer._put(self._offset + o, struct.pack("<I", v._offset - 8))
 
     def _set_bytes(self, o: int, v: Union[BytesOut, bytes]) -> None:
         if not isinstance(v, BytesOut):
             v = self._writer.construct_bytes(v)
-        self._writer._data[self._offset + o : self._offset + o + 4] = struct.pack(
-            "<I", v._offset - 8
-        )
+        self._writer._put(self._offset + o, struct.pack("<I", v._offset - 8))
 
     def _set_list(self, o: int, v: "OutList") -> None:
-        self._writer._data[self._offset + o : self._offset + o + 4] = struct.pack(
-            "<I", v._offset - 8
-        )
+        self._writer._put(self._offset + o, struct.pack("<I", v._offset - 8))
 
     def _get_uint16(self, o: int) -> int:
         return struct.unpack(
@@ -441,24 +413,18 @@ class TableOut(object):
 
     def _add_inplace_text(self, o: int, t: str) -> None:
         tt = t.encode("utf-8")
-        self._writer._data[self._offset + o : self._offset + o + 4] = struct.pack(
-            "<I", len(tt)
-        )
+        self._writer._put(self._offset + o, struct.pack("<I", len(tt)))
         self._writer._reserve(len(tt) + 1)
         self._writer._write(tt)
         self._writer._write(b"\0")
 
     def _add_inplace_bytes(self, o: int, t: bytes) -> None:
-        self._writer._data[self._offset + o : self._offset + o + 4] = struct.pack(
-            "<I", len(t)
-        )
+        self._writer._put(self._offset + o, struct.pack("<I", len(t)))
         self._writer._reserve(len(t))
         self._writer._write(t)
 
     def _set_inplace_list(self, o: int, size: int) -> None:
-        self._writer._data[self._offset + o : self._offset + o + 4] = struct.pack(
-            "<I", size
-        )
+        self._writer._put(self._offset + o, struct.pack("<I", size))
 
 
 class UnionOut(object):
@@ -470,9 +436,7 @@ class UnionOut(object):
         self._end = end
 
     def _set(self, idx: int, offset: int) -> None:
-        self._writer._data[self._offset : self._offset + 6] = struct.pack(
-            "<HI", idx, offset
-        )
+        self._writer._put(self._offset, struct.pack("<HI", idx, offset))
 
     def _set_text(self, idx: int, v: Union[TextOut, str]) -> None:
         if not isinstance(v, TextOut):
@@ -517,9 +481,7 @@ class BasicListOut(OutList, Generic[B]):
     def __setitem__(self, index: int, value: B) -> None:
         """Add value to list at index"""
         assert 0 <= index < self._size
-        self._writer._data[
-            self._offset + index * self._w : self._offset + (1 + index) * self._w
-        ] = struct.pack(self._e, value)
+        self._writer._put(self._offset + index * self._w, struct.pack(self._e, value))
 
 
 class BoolListOut(OutList):
@@ -545,9 +507,7 @@ class EnumListOut(OutList, Generic[E]):
 
     def __setitem__(self, index: int, value: E) -> None:
         """Add value to list at index"""
-        self._writer._data[
-            self._offset + index : self._offset + index + 1
-        ] = struct.pack("B", int(value))
+        self._writer._put(self._offset + index, struct.pack("B", int(value)))
 
 
 class StructListOut(OutList, Generic[S]):
@@ -576,9 +536,7 @@ class TableListOut(OutList, Generic[TO]):
         """Add value to list at index"""
         assert 0 <= index < self._size
         assert isinstance(value, self.table)
-        self._writer._data[
-            self._offset + index * 4 : self._offset + index * 4 + 1
-        ] = struct.pack("I", value._offset - 8)
+        self._writer._put(self._offset + index * 4, struct.pack("I", value._offset - 8))
 
     def add(self, index: int) -> TO:
         assert 0 <= index < self._size
@@ -597,9 +555,7 @@ class TextListOut(OutList):
         assert 0 <= index < self._size
         if not isinstance(value, TextOut):
             value = self._writer.construct_text(value)
-        self._writer._data[
-            self._offset + index * 4 : self._offset + index * 4 + 1
-        ] = struct.pack("I", value._offset - 8)
+        self._writer._put(self._offset + index * 4, struct.pack("I", value._offset - 8))
 
 
 class BytesListOut(OutList, Generic[TO]):
@@ -614,9 +570,7 @@ class BytesListOut(OutList, Generic[TO]):
         """Add value to list at index"""
         assert 0 <= index < self._size
         assert isinstance(value, BytesOut)
-        self._writer._data[
-            self._offset + index * 4 : self._offset + index * 4 + 1
-        ] = struct.pack("I", value._offset - 8)
+        self._writer._put(self._offset + index * 4, struct.pack("I", value._offset - 8))
 
 
 class UnionListOut(OutList, Generic[UO]):
@@ -642,6 +596,9 @@ class Writer:
     def _write(self, v: bytes):
         self._data[self._used : self._used + len(v)] = v
         self._used += len(v)
+
+    def _put(self, offset: int, value: bytes):
+        self._data[offset : offset + len(value)] = value
 
     def __init__(self):
         self._data = bytearray(b"\0" * 256)

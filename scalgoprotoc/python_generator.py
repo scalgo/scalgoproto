@@ -46,8 +46,8 @@ class Generator:
     def __init__(self, documents: Documents, out: TextIO, import_prefix: str) -> None:
         self.documents: Documents = documents
         self.out: TextIo = out
-        if import_prefix and import_prefix[-1] != '.':
-            import_prefix += '.'
+        if import_prefix and import_prefix[-1] != ".":
+            import_prefix += "."
         self.import_prefix: str = import_prefix
 
     def out_list_type(self, node: Value) -> str:
@@ -246,6 +246,7 @@ class Generator:
                 % (uname, self.out_list_type(node))
             )
             self.output_doc(node, "        ")
+            self.o("        assert self._writer._used == self._offset + self._SIZE")
             self.generate_inplace_list_constructor(node)
             self.o("        self._set_inplace_list(%d, size)" % (node.offset))
             self.o("        return l")
@@ -466,6 +467,7 @@ class Generator:
         elif not node.table.empty:
             self.o("    def add_%s(self) -> %sOut:" % (uname, node.table.name))
             self.output_doc(node, "        ")
+            self.o("        assert self._writer._used == self._offset + self._SIZE")
             self.o(
                 "        self._set_uint32(%d, %d)"
                 % (node.offset, len(node.table.default))
@@ -545,6 +547,7 @@ class Generator:
             )
         self.output_doc(node, "        ")
         if node.inplace:
+            self.o("        assert self._writer._used == self._offset + self._SIZE")
             self.o("        self._add_inplace_text(%d, text)" % (node.offset))
         else:
             self.o("        self._set_text(%d, t)" % (node.offset))
@@ -563,6 +566,7 @@ class Generator:
             )
         self.output_doc(node, "        ")
         if node.inplace:
+            self.o("        assert self._writer._used == self._end")
             self.o("        self._set(%d, len(value))" % (idx))
             self.o("        writer._add_inplace_text(value)")
         else:
@@ -605,6 +609,7 @@ class Generator:
             )
         self.output_doc(node, "        ")
         if node.inplace:
+            self.o("        assert self._writer._used == self._offset + self._SIZE")
             self.o("        self._add_inplace_bytes(%d, value)" % (node.offset))
         else:
             self.o("        self._set_bytes(%d, b)" % (node.offset))
@@ -623,6 +628,7 @@ class Generator:
             )
         self.output_doc(node, "        ")
         if node.inplace:
+            self.o("        assert self._writer._used == self._end")
             self.o("        self._set(%d, len(value))" % (idx))
             self.o("        writer._add_inplace_bytes(value)")
         else:
@@ -863,6 +869,7 @@ class Generator:
         self.output_doc(table, "    ")
         self.o("    __slots__ = []")
         self.o("    _MAGIC: typing_.ClassVar[int] = 0x%08X" % table.magic)
+        self.o("    _SIZE: typing_.ClassVar[int] = %d" % len(table.default))
         self.o()
         self.o(
             "    def __init__(self, writer: scalgoproto.Writer, withHeader: bool) -> None:"
@@ -990,7 +997,9 @@ class Generator:
 
         for (d, imp) in imports.items():
             doc = self.documents.by_id[d]
-            self.o("from %s%s import %s" % (self.import_prefix, doc.name, ", ".join(imp)))
+            self.o(
+                "from %s%s import %s" % (self.import_prefix, doc.name, ", ".join(imp))
+            )
 
         for node in ast:
             if node.document != 0:
@@ -1040,5 +1049,7 @@ def setup(subparsers) -> None:
     cmd = subparsers.add_parser("py", help="Generate python code")
     cmd.add_argument("schema", help="schema to generate things from")
     cmd.add_argument("output", help="where do we store the output")
-    cmd.add_argument("--import-prefix", help="Prefix to put infront of imports", default="")
+    cmd.add_argument(
+        "--import-prefix", help="Prefix to put infront of imports", default=""
+    )
     cmd.set_defaults(func=run)
