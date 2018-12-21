@@ -719,24 +719,39 @@ class Generator:
         else:
             raise ICE()
 
-    def generate_union_copy(self, union:Union) -> None:
-        self.o("    def _copy(self, i:%sIn) -> None:"%union.name)
+    def generate_union_copy(self, union: Union) -> None:
+        self.o("    def _copy(self, i:%sIn) -> None:" % union.name)
         self.o("        if False:")
         self.o("            pass")
         for node in union.members:
             uuname = snake(self.value(node.identifier))
-            self.o("        elif i.is_%s:"%uuname)
+            self.o("        elif i.is_%s:" % uuname)
             if node.list_:
-                self.o("            self.add_%s(len(i.%s))._copy(i.%s)"%(uuname, uuname, uuname))
-            elif node.type_.type == TokenType.TEXT or node.type_.type == TokenType.BYTES:
-                self.o("            self.add_%s(i.%s)"%(uuname, uuname))
+                self.o(
+                    "            self.add_%s(len(i.%s))._copy(i.%s)"
+                    % (uuname, uuname, uuname)
+                )
+            elif (
+                node.type_.type == TokenType.TEXT or node.type_.type == TokenType.BYTES
+            ):
+                self.o("            self.add_%s(i.%s)" % (uuname, uuname))
             elif node.table:
                 if node.table.empty:
                     self.o("            self.add_%s()")
                 else:
-                    self.o("            self.add_%s()._copy(i.%s)"%(uuname, uuname))
+                    self.o("            self.add_%s()._copy(i.%s)" % (uuname, uuname))
             else:
                 raise ICE()
+        self.o()
+
+    def generate_union_str(self, union: Union) -> None:
+        self.o("    def __str__(self) ->  str:")
+        self.o("        o = []")
+        for node in union.members:
+            uname = snake(self.value(node.identifier))
+            self.o("        if self.is_%s:" % uname)
+            self.o("            o.append('%s: '+str(self.%s))" % (uname, uname))
+        self.o("        return '{%s}'%(', '.join(o))")
         self.o()
 
     def generate_union(self, union: Union) -> None:
@@ -794,6 +809,7 @@ class Generator:
                 self.generate_union_text_in(member, uuname)
             else:
                 raise ICE()
+        self.generate_union_str(union)
         self.o()
 
         self.o("class %sOut(scalgoproto.UnionOut):" % union.name)
@@ -852,33 +868,56 @@ class Generator:
         self.generate_union_copy(union)
         self.o()
 
-
-    def generate_table_copy(self, table:Table) -> None:
-        self.o("    def _copy(self, i:%sIn) -> None:"%table.name)
+    def generate_table_copy(self, table: Table) -> None:
+        self.o("    def _copy(self, i:%sIn) -> None:" % table.name)
         for ip in (True, False):
             for node in table.members:
                 uname = snake(self.value(node.identifier))
-                if bool(node.inplace) != ip: continue
+                if bool(node.inplace) != ip:
+                    continue
                 if node.list_:
-                    self.o("        if i.has_%s:"%uname)
-                    self.o("            self.add_%s(len(i.%s))._copy(i.%s)"%(uname, uname, uname))
-                elif node.type_.type in typeMap or  node.type_.type == TokenType.BOOL or node.enum or node.struct or node.type_.type == TokenType.TEXT or node.type_.type == TokenType.BYTES:
+                    self.o("        if i.has_%s:" % uname)
+                    self.o(
+                        "            self.add_%s(len(i.%s))._copy(i.%s)"
+                        % (uname, uname, uname)
+                    )
+                elif (
+                    node.type_.type in typeMap
+                    or node.type_.type == TokenType.BOOL
+                    or node.enum
+                    or node.struct
+                    or node.type_.type == TokenType.TEXT
+                    or node.type_.type == TokenType.BYTES
+                ):
                     if node.optional:
-                        self.o("        if i.has_%s:"%uname)
-                        self.o("            self.%s = i.%s"%(uname, uname))
+                        self.o("        if i.has_%s:" % uname)
+                        self.o("            self.%s = i.%s" % (uname, uname))
                     else:
-                        self.o("        self.%s = i.%s"%(uname, uname))
+                        self.o("        self.%s = i.%s" % (uname, uname))
                 elif node.table:
-                    self.o("        if i.has_%s:"%(uname))
+                    self.o("        if i.has_%s:" % (uname))
                     if node.table.empty:
                         self.o("            self.add_%s()")
                     else:
-                        self.o("            self.add_%s()._copy(i.%s)"%(uname, uname))
+                        self.o("            self.add_%s()._copy(i.%s)" % (uname, uname))
                 elif node.union:
-                    self.o("        if i.has_%s:"%(uname))
-                    self.o("            self.%s._copy(i.%s)"%(uname, uname))
+                    self.o("        if i.has_%s:" % (uname))
+                    self.o("            self.%s._copy(i.%s)" % (uname, uname))
                 else:
                     raise ICE()
+        self.o()
+
+    def generate_table_str(self, table: Table) -> None:
+        self.o("    def __str__(self) ->  str:")
+        self.o("        o = []")
+        for node in table.members:
+            uname = snake(self.value(node.identifier))
+            if node.optional:
+                self.o("        if i.has_%s:" % uname)
+                self.o("            o.append('%s: '+str(self.%s))" % (uname, uname))
+            else:
+                self.o("        o.append('%s: '+str(self.%s))" % (uname, uname))
+        self.o("        return '{%s}'%(', '.join(o))")
         self.o()
 
     def generate_table(self, table: Table) -> None:
@@ -910,9 +949,9 @@ class Generator:
         )
         self.o("        super().__init__(reader, offset, size)")
         self.o()
-
         for node in table.members:
             self.generate_value_in(table, node)
+        self.generate_table_str(table)
         self.o()
 
         # Generate Table writer

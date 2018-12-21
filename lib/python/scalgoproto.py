@@ -72,6 +72,9 @@ class ListIn(Sequence[B]):
             raise IndexError()
         return self._getter(self._reader, self._offset, idx)
 
+    def __str__(self) -> str:
+        return "[%s]" % (", ".join(map(str, self)))
+
 
 class UnionIn(object):
     __slots__ = ["_reader", "_type", "_offset", "_size"]
@@ -675,7 +678,7 @@ class Writer:
         self._write(b"\0")
         return TextOut(o)
 
-    def copy(self, t:Type[TO], i:TI) -> TO:
+    def copy(self, t: Type[TO], i: TI) -> TO:
         res = t(self, True)
         res._copy(i)
         return res
