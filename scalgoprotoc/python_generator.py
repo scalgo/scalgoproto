@@ -719,6 +719,26 @@ class Generator:
         else:
             raise ICE()
 
+    def generate_union_copy(self, union:Union) -> None:
+        self.o("    def _copy(self, i:%sIn) -> None:"%union.name)
+        self.o("        if False:")
+        self.o("            pass")
+        for node in union.members:
+            uuname = snake(self.value(node.identifier))
+            self.o("        elif i.is_%s:"%uuname)
+            if node.list_:
+                self.o("            self.add_%s(len(i.%s))._copy(i.%s)"%(uuname, uuname, uuname))
+            elif node.type_.type == TokenType.TEXT or node.type_.type == TokenType.BYTES:
+                self.o("            self.add_%s(i.%s)"%(uuname, uuname))
+            elif node.table:
+                if node.table.empty:
+                    self.o("            self.add_%s()")
+                else:
+                    self.o("            self.add_%s()._copy(i.%s)"%(uuname, uuname))
+            else:
+                raise ICE()
+        self.o()
+
     def generate_union(self, union: Union) -> None:
         # Recursively generate direct contained members
         for value in union.members:
@@ -801,6 +821,7 @@ class Generator:
             else:
                 raise ICE()
             idx += 1
+        self.generate_union_copy(union)
         self.o()
 
         self.o("class %sInplaceOut(scalgoproto.UnionOut):" % union.name)
@@ -828,6 +849,36 @@ class Generator:
             else:
                 raise ICE()
             idx += 1
+        self.generate_union_copy(union)
+        self.o()
+
+
+    def generate_table_copy(self, table:Table) -> None:
+        self.o("    def _copy(self, i:%sIn) -> None:"%table.name)
+        for ip in (True, False):
+            for node in table.members:
+                uname = snake(self.value(node.identifier))
+                if bool(node.inplace) != ip: continue
+                if node.list_:
+                    self.o("        if i.has_%s:"%uname)
+                    self.o("            self.add_%s(len(i.%s))._copy(i.%s)"%(uname, uname, uname))
+                elif node.type_.type in typeMap or  node.type_.type == TokenType.BOOL or node.enum or node.struct or node.type_.type == TokenType.TEXT or node.type_.type == TokenType.BYTES:
+                    if node.optional:
+                        self.o("        if i.has_%s:"%uname)
+                        self.o("            self.%s = i.%s"%(uname, uname))
+                    else:
+                        self.o("        self.%s = i.%s"%(uname, uname))
+                elif node.table:
+                    self.o("        if i.has_%s:"%(uname))
+                    if node.table.empty:
+                        self.o("            self.add_%s()")
+                    else:
+                        self.o("            self.add_%s()._copy(i.%s)"%(uname, uname))
+                elif node.union:
+                    self.o("        if i.has_%s:"%(uname))
+                    self.o("            self.%s._copy(i.%s)"%(uname, uname))
+                else:
+                    raise ICE()
         self.o()
 
     def generate_table(self, table: Table) -> None:
@@ -884,6 +935,7 @@ class Generator:
         self.o()
         for node in table.members:
             self.generate_value_out(table, node)
+        self.generate_table_copy(table)
         self.o()
 
     def generate_struct(self, node: Struct) -> None:

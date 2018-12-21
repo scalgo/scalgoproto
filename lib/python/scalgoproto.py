@@ -675,6 +675,11 @@ class Writer:
         self._write(b"\0")
         return TextOut(o)
 
+    def copy(self, t:Type[TO], i:TI) -> TO:
+        res = t(self, True)
+        res._copy(i)
+        return res
+
     def finalize(self, root: TableOut) -> bytes:
         """Return finalized message given root object"""
         self._data[0:8] = struct.pack("<II", MESSAGE_MAGIC, root._offset - 8)
