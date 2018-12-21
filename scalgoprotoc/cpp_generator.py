@@ -958,7 +958,7 @@ class Generator:
                         continue
                     imports.add(self.documents.by_id[u.document].name)
 
-            for i in imports:
+            for i in sorted(list(imports)):
                 self.o('#include "%s.hh"' % i)
 
         for node in ast:
@@ -973,8 +973,8 @@ class Generator:
                     or isinstance(node, Union)
                 ):
                     self.switch_file(node.name, output)
-                    for u in node.uses:
-                        self.o('#include "%s.hh"' % u.name)
+                    for u in sorted(list(map(lambda u: u.name, node.uses))):
+                        self.o('#include "%s.hh"' % u)
 
             if isinstance(node, Struct):
                 self.generate_struct(node)
