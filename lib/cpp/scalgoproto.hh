@@ -597,6 +597,24 @@ private:
 	}
 public:
 	Writer(size_t capacity=256): size(8) {reserve(capacity);}
+	Writer(const Writer &) = delete;
+	Writer & operator=(const Writer &) = delete;
+	Writer(Writer && o) : data(o.data), size(o.size), capacity(o.capacity) {
+		o.data = nullptr;
+		o.size = 0;
+		o.capacity = 0;
+	}
+	Writer & operator=(Writer && o) {
+		if (data) free(data);
+		data = o.data;
+		size = o.size;
+		capacity = o.capacity;
+		o.data = nullptr;
+		o.size = 0;
+		o.capacity = 0;
+		return *this;
+	}
+	
 	~Writer() {
 		if (data) free(data);
 		data = nullptr;
