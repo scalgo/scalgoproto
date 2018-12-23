@@ -966,5 +966,10 @@ std::pair<const char *, size_t> Writer::finalize(const TableOut & root) {
 	return std::make_pair(data, size);
 }
 
+template <typename O>
+void copy(O out, O::IN in) {
+	out.copy_(in);
+}
+
 } //namespace scalgoproto
 #endif //__SCALGOPROTO_HH__
