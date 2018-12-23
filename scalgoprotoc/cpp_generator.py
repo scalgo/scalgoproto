@@ -702,6 +702,41 @@ class Generator:
         self.switch_namespace("scalgoproto")
         self.o(mm)
 
+    def generate_union_copy(self, union: Union, inplace: bool) -> None:
+        self.o(
+            "\tvoid copy_(%sIn<%s> i) {" % (union.name, "true" if inplace else "false")
+        )
+        self.o("\t\tswitch (i.type()) {")
+        for node in union.members:
+            lname = lcamel(self.value(node.identifier))
+            uname = ucamel(lname)
+            c = "%sType::%s" % (union.name, lname)
+            if node.list_:
+                self.o(
+                    "\t\tcase %s: add%s(i.%s().size()).copy_(i.%s()); break;"
+                    % (c, uname, lname, lname)
+                )
+            elif node.type_.type == TokenType.TEXT:
+                self.o("\t\tcase %s: add%s(i.%s()); break;" % (c, uname, lname))
+            elif node.type_.type == TokenType.BYTES:
+                self.o(
+                    "\t\tcase %s: add%s((const char *)i.%s().first, i.%s().second); break;"
+                    % (c, uname, lname, lname)
+                )
+            elif node.table:
+                if node.table.empty:
+                    self.o("\t\tcase %s: set%s(); break;" % (c, uname))
+                else:
+                    self.o(
+                        "\t\tcase %s: add%s().copy_(i.%s()); break;" % (c, uname, lname)
+                    )
+            else:
+                raise ICE()
+        self.o("\t\tdefault: break;")
+        self.o("\t\t}")
+        self.o("\t}")
+        self.o()
+
     def generate_union(self, union: Union) -> None:
         # Recursively generate direct contained members
         for value in union.members:
@@ -729,6 +764,7 @@ class Generator:
         self.o("protected:")
         self.o("\tusing scalgoproto::UnionIn<inplace>::UnionIn;")
         self.o("public:")
+        self.o("\tusing IN=%sIn;" % union.name)
         self.o("\tusing Type = %sType;" % union.name)
         self.o("\tType type() const noexcept {return (Type)this->type_;}")
         for member in union.members:
@@ -763,6 +799,9 @@ class Generator:
             self.o("protected:")
             self.o("\tusing scalgoproto::%sUnionOut::%sUnionOut;" % (prefix, prefix))
             self.o("public:")
+            self.o(
+                "\tusing IN=%sIn<%s>;" % (union.name, "true" if inplace else "false")
+            )
             idx = 1
             for member in union.members:
                 n = self.value(member.identifier)
@@ -778,12 +817,61 @@ class Generator:
                 else:
                     raise ICE()
                 idx += 1
+            self.generate_union_copy(union, inplace)
             self.o("};")
             self.output_metamagic(
                 "template <> struct MetaMagic<%s%sOut> {using t=UnionTag;};"
                 % (self.qualify(union, True), prefix)
             )
             self.o("")
+
+    def generate_table_copy(self, table: Table) -> None:
+        self.o("\tvoid copy_(%sIn i) {" % (table.name))
+        for ip in (True, False):
+            for node in table.members:
+                lname = lcamel(self.value(node.identifier))
+                uname = ucamel(lname)
+                if bool(node.inplace) != ip:
+                    continue
+                if node.list_:
+                    self.o(
+                        "\t\tif (i.has%s()) add%s(i.%s().size()).copy_(i.%s());"
+                        % (uname, uname, lname, lname)
+                    )
+                elif (
+                    node.type_.type in typeMap
+                    or node.type_.type == TokenType.BOOL
+                    or node.enum
+                    or node.struct
+                ):
+                    if node.optional:
+                        self.o(
+                            "\t\tif (i.has%s()) set%s(i.%s());" % (uname, uname, lname)
+                        )
+                    else:
+                        self.o("\t\tset%s(i.%s());" % (uname, lname))
+                elif node.table:
+                    if node.table.empty:
+                        self.o("\t\tif (i.has%s()) add%s();" % (uname, uname))
+                    else:
+                        self.o(
+                            "\t\tif (i.has%s()) add%s().copy_(i.%s());"
+                            % (uname, uname, lname)
+                        )
+                elif node.union:
+                    self.o(
+                        "\t\tif (i.has%s()) %s().copy_(i.%s());" % (uname, lname, lname)
+                    )
+                elif node.type_.type == TokenType.TEXT:
+                    self.o("\t\tif (i.has%s()) add%s(i.%s());" % (uname, uname, lname))
+                elif node.type_.type == TokenType.BYTES:
+                    self.o(
+                        "\t\tif (i.has%s()) add%s((const char*)i.%s().first, i.%s().second);"
+                        % (uname, uname, lname, lname)
+                    )
+                else:
+                    raise ICE()
+        self.o("\t}")
 
     def generate_table(self, table: Table) -> None:
         # Recursively generate direct contained members
@@ -815,6 +903,7 @@ class Generator:
         )
         self.o("public:")
         self.o("\tstatic constexpr std::uint32_t MAGIC = 0x%08X;" % (table.magic))
+        self.o("\tusing IN=%sIn;" % table.name)
         for node in table.members:
             self.generate_value_in(node)
         self.o("};")
@@ -831,6 +920,7 @@ class Generator:
         self.o("public:")
         self.o("\tstatic constexpr std::uint32_t SIZE = %d;" % (len(table.default)))
         self.o("\tstatic constexpr std::uint32_t MAGIC = 0x%08X;" % (table.magic))
+        self.o("\tusing IN=%sIn;" % (table.name))
         self.o("protected:")
         self.o(
             '\t%sOut(scalgoproto::Writer & writer, bool withHeader): scalgoproto::TableOut(writer, withHeader, MAGIC, "%s", SIZE) {}'
@@ -839,6 +929,7 @@ class Generator:
         self.o("public:")
         for node in table.members:
             self.generate_value_out(node, "%sOut" % table.name)
+        self.generate_table_copy(table)
         self.o("};")
         self.output_metamagic(
             "template <> struct MetaMagic<%sOut> {using t=TableTag;};"

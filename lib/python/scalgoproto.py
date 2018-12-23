@@ -562,12 +562,9 @@ class TextListOut(OutList):
 
 
 class BytesListOut(OutList, Generic[TO]):
-    def __init__(
-        self, writer: "Writer", t: Type[TO], size: int, with_header: bool = True
-    ) -> None:
+    def __init__(self, writer: "Writer", size: int, with_header: bool = True) -> None:
         """Private constructor. Use factory methods on writer"""
         super().__init__(writer, b"\0\0\0\0" * size, size, with_header)
-        self.table = t
 
     def __setitem__(self, index: int, value: TO) -> None:
         """Add value to list at index"""

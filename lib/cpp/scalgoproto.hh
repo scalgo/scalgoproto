@@ -36,6 +36,9 @@ struct BytesTag;
 struct UnionTag;
 struct UnknownTag;
 
+template <typename T>
+class ListOut;
+
 template <typename, typename>
 class ListAccessHelp;
 
@@ -158,6 +161,7 @@ protected:
 
 template <typename T>
 struct ListAccessHelp<BoolTag, T> : public In {
+	using IN = bool;
 	static constexpr bool optional = false;
 	static constexpr bool hasAdd = false;
 	static constexpr size_t mult = 0;
@@ -183,10 +187,15 @@ struct ListAccessHelp<BoolTag, T> : public In {
 			memcpy(byte, &v, 1);
 		}
 	};
+
+	static void copy(Writer & writer, std::uint32_t offset,
+			const Reader &, const char * start,
+			std::uint32_t size);
 };
 
 template <typename T>
 struct ListAccessHelp<PodTag, T>: public In {
+	using IN = T;
 	static constexpr bool optional = false;
 	static constexpr bool hasAdd = false;
 	static constexpr size_t mult = sizeof(T);
@@ -203,10 +212,15 @@ struct ListAccessHelp<PodTag, T>: public In {
 	public:
 		void operator=(const T & value) noexcept {memcpy(location, &value, sizeof(T));}
 	};
+
+	static void copy(Writer & writer, std::uint32_t offset, 
+					const Reader &, const char * start, 
+					std::uint32_t size);
 };
 
 template <typename T>
 struct ListAccessHelp<EnumTag, T>: public In {
+	using IN = T;
 	static constexpr bool optional = true;
 	static constexpr bool hasAdd = false;
 	static constexpr size_t mult = 1;
@@ -227,10 +241,15 @@ struct ListAccessHelp<EnumTag, T>: public In {
 	public:
 		void operator=(const T & value) noexcept {memcpy(location, &value, sizeof(T));}
 	};
+
+	static void copy(Writer & writer, std::uint32_t offset, 
+				const Reader &, const char * start, 
+				std::uint32_t size);
 };
 
 template <typename T>
 struct ListAccessHelp<TextTag, T>: public In {
+	using IN = std::string_view;
 	static constexpr bool optional = true;
 	static constexpr bool hasAdd = false;
 	static constexpr size_t mult = 4;
@@ -256,10 +275,15 @@ struct ListAccessHelp<TextTag, T>: public In {
 		T operator=(const T & value) noexcept {memcpy(location, &value.offset_, 4); return value;}
 		TextOut operator=(std::string_view t);
 	};
+
+	static void copy(Writer & writer, std::uint32_t offset, 
+			const Reader &, const char * start, 
+			std::uint32_t size);
 };
 
 template <typename T>
 struct ListAccessHelp<BytesTag, T>: public In {
+	using IN = std::pair<const void *, size_t>;
 	static constexpr bool optional = true;
 	static constexpr bool hasAdd = false;
 	static constexpr size_t mult = 4;
@@ -282,10 +306,15 @@ struct ListAccessHelp<BytesTag, T>: public In {
 	public:
 		void operator=(const T & value) noexcept {memcpy(location, &value.offset_, 4);}
 	};
+
+	static void copy(Writer & writer, std::uint32_t offset, 
+			const Reader &, const char * start, 
+			std::uint32_t size);
 };
 
 template <typename T>
 struct ListAccessHelp<TableTag, T>: public In {
+	using IN=typename T::IN;
 	static constexpr bool optional = true;
 	static constexpr bool hasAdd = true;
 	static constexpr size_t mult = 4;
@@ -315,10 +344,15 @@ struct ListAccessHelp<TableTag, T>: public In {
 			memcpy(location, &o, 4);
 		}
 	};
+
+	static void copy(Writer & writer, std::uint32_t offset, 
+			const Reader &, const char * start, 
+			std::uint32_t size);
 };
 
 template <typename T>
 struct ListAccessHelp<UnionTag, T>: public In {
+	using IN=typename T::IN;
 	static constexpr bool optional = true;
 	static constexpr bool hasAdd = false;
 
@@ -338,6 +372,10 @@ struct ListAccessHelp<UnionTag, T>: public In {
 		assert(type != 0 && off != 0);
 		return getObject_<T>(reader, type, off);
 	}
+
+	static void copy(Writer & writer, std::uint32_t offset,
+				const Reader &, const char * start,
+				std::uint32_t size);
 
 	using Setter = T;
 };
@@ -400,12 +438,15 @@ public:
 };
 
 
+
 template <typename T>
 class ListIn : public In {
 	friend class In;
 	const Reader & reader_;
 	const char * start_;
 	const std::uint32_t size_;
+	template <typename>
+	friend class ListOut;
 
 	ListIn(const Reader & reader, Ptr p) noexcept : reader_(reader), start_(p.start), size_(p.size) {}
 	using A = ListAccess<T>;
@@ -564,6 +605,11 @@ public:
 	}
 
 	uint32_t size() const noexcept {return size_;}
+
+	void copy_(const ListIn<typename A::IN> in) {
+		assert(in.size() == size());
+		A::copy(writer_, offset_, in.reader_, in.start_,  size_);
+	}
 };
 
 template <typename A>
@@ -803,10 +849,31 @@ template <typename T>
 ListAccessHelp<BoolTag, T>::Setter::Setter(Writer & writer, std::uint32_t offset, std::uint32_t index): byte(writer.data + offset + (index >> 3)), bit(index & 7) {}
 
 template <typename T>
+void ListAccessHelp<BoolTag, T>::copy(Writer & writer, std::uint32_t offset,
+			const Reader &, const char * start,
+			std::uint32_t size) {
+	memcpy(writer.data + offset, start, (size + 7) >> 3);
+}
+
+template <typename T>
 ListAccessHelp<PodTag, T>::Setter::Setter(Writer & writer, std::uint32_t offset, std::uint32_t index) : location(writer.data + offset + index * sizeof(T)) {}
 
 template <typename T>
+void ListAccessHelp<PodTag, T>::copy(Writer & writer, std::uint32_t offset,
+					const Reader &, const char * start,
+					std::uint32_t size) {
+	memcpy(writer.data + offset, start, size * sizeof(T));
+}
+
+template <typename T>
 ListAccessHelp<EnumTag, T>::Setter ::Setter(Writer & writer, std::uint32_t offset, std::uint32_t index) : location(writer.data + offset + index * sizeof(T)) {}
+
+template <typename T>
+void ListAccessHelp<EnumTag, T>::copy(Writer & writer, std::uint32_t offset,
+				const Reader &, const char * start,
+				std::uint32_t size) {
+	memcpy(writer.data + offset, start, size*sizeof(T));
+}
 
 template <typename T>
 ListAccessHelp<TextTag, T>::Setter::Setter(Writer & writer, std::uint32_t offset, std::uint32_t index) :  writer(writer), location(writer.data + offset + index * 4) {}
@@ -818,9 +885,38 @@ TextOut ListAccessHelp<TextTag, T>::Setter::operator=(std::string_view t) {
 	return value;
 }
 
+template <typename T>
+void ListAccessHelp<TextTag, T>::copy(Writer & writer, std::uint32_t offset, 
+			const Reader & reader, const char * start, 
+			std::uint32_t size) {
+	for (size_t index=0; index < size; ++index) {
+		std::uint32_t off;
+		memcpy(&off, start + index * 4, 4);
+		if (off == 0) continue;
+		auto t = getText_(reader, reader.getPtr_<TEXTMAGIC, 1, 1>(off));
+		auto v = writer.constructText(t);
+		uint32_t o = v.offset_;
+		memcpy(writer.data + offset + 4*index, &o, 4);
+	}
+}
 
 template <typename T>
 ListAccessHelp<BytesTag, T>::Setter::Setter(Writer & writer, std::uint32_t offset, std::uint32_t index) : location(writer.data + offset + index * 4) {}
+
+template <typename T>
+void ListAccessHelp<BytesTag, T>::copy(Writer & writer, std::uint32_t offset,
+			const Reader & reader, const char * start,
+			std::uint32_t size) {
+	for (size_t index=0; index < size; ++index) {
+		std::uint32_t off;
+		memcpy(&off, start + index * 4, 4);
+		if (off == 0) continue;
+		auto b = getBytes_(reader.getPtr_<BYTESMAGIC>(off));
+		auto v = writer.constructBytes(b.first, b.second);
+		uint32_t o = v.offset_;
+		memcpy(writer.data + offset + 4*index, &o, 4);
+	}
+}
 
 template <typename T>
 ListAccessHelp<TableTag, T>::Setter::Setter(Writer & writer, std::uint32_t offset, std::uint32_t index) : location(writer.data + offset + index * 4) {}
@@ -831,6 +927,37 @@ T ListAccessHelp<TableTag, T>::add(Writer & w, std::uint32_t offset, std::uint32
 	uint32_t o = ans.offset_ - 8;
 	memcpy(w.data + offset + index * 4, &o, 4);
 	return ans;
+}
+
+template <typename T>
+void ListAccessHelp<TableTag, T>::copy(Writer & writer, std::uint32_t offset,
+			const Reader & reader, const char * start,
+			std::uint32_t size) {
+	for (size_t index=0; index < size; ++index) {
+		std::uint32_t off;
+		memcpy(&off, start + index * 4, 4);
+		if (off == 0) continue;
+		auto t = getObject_<typename T::IN>(reader, reader.getPtr_<T::MAGIC>(off));
+		auto v = writer.construct<T>();
+		v.copy_(t);
+		uint32_t o = v.offset_;
+		memcpy(writer.data + offset + 4*index, &o, 4);
+	}
+}
+
+template <typename T>
+void ListAccessHelp<UnionTag, T>::copy(Writer & writer, std::uint32_t offset,
+			const Reader & reader, const char * start,
+			std::uint32_t size) {
+	for (size_t index=0; index < size; ++index) {
+		std::uint16_t type;
+		std::uint32_t off;
+		memcpy(&type, start + index * 6, 2);
+		memcpy(&off, start + index * 6+2, 4);
+		if (type == 0 || off == 0) continue;
+		auto t = getObject_<typename T::IN>(reader, type, off);
+		T(writer, offset, index).copy_(t);
+	}
 }
 
 std::pair<const char *, size_t> Writer::finalize(const TableOut & root) {
