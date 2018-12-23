@@ -408,17 +408,21 @@ class Generator:
             self.o("\t}")
 
     def generate_table_out(self, node: Value, uname: str, outer: str) -> None:
+        self.o("\tbool has%s() const noexcept {return getInner_<std::uint32_t, %d>() != 0;}"%(uname, node.offset))
+        self.o("")
         if not node.inplace:
             self.o(
                 "\t%s & set%s(%sOut value) noexcept {"
                 % (outer, uname, self.qualify(node.table))
             )
+            self.o("\t\tassert(!has%s());" % (uname))
             self.o(
                 "\t\tsetInner_<std::uint32_t, %d>(getOffset_(value)-8);" % (node.offset)
             )
             self.o("\t\treturn *this;")
             self.o("\t}")
             self.o("\t%sOut add%s() noexcept {" % (self.qualify(node.table), uname))
+            self.o("\t\tassert(!has%s());" % (uname))
             self.o(
                 "\t\tauto res = writer_.construct<%sOut>();"
                 % (self.qualify(node.table),)
@@ -430,6 +434,7 @@ class Generator:
             self.o("\t}")
         elif not node.table.empty:
             self.o("\t%sOut add%s() noexcept {" % (self.qualify(node.table), uname))
+            self.o("\t\tassert(!has%s());" % (uname))
             self.o(
                 "\t\tsetInner_<std::uint32_t, %d>(%sOut::SIZE);"
                 % (node.offset, self.qualify(node.table))
@@ -501,6 +506,7 @@ class Generator:
         self.o("\t}")
 
     def generate_text_out(self, node: Value, uname: str, outer: str) -> None:
+        self.o("\tbool has%s() const noexcept {return getInner_<std::uint32_t, %d>() != 0;}"%(uname, node.offset))
         if node.inplace:
             self.o("\tvoid add%s(std::string_view text) noexcept {" % (uname))
             self.o("\t\tsetInner_<std::uint32_t, %d>(text.size());" % (node.offset))
@@ -561,6 +567,7 @@ class Generator:
         self.o("\t}")
 
     def generate_bytes_out(self, node: Value, uname: str, outer: str) -> None:
+        self.o("\tbool has%s() const noexcept {return getInner_<std::uint32_t, %d>() != 0;}"%(uname, node.offset))
         if node.inplace:
             self.o("\tvoid add%s(const char * data, size_t size) noexcept {" % (uname,))
             self.o("\t\tsetInner_<std::uint32_t, %d>(size);" % (node.offset,))
@@ -627,6 +634,7 @@ class Generator:
         self.o("\t}")
 
     def generate_union_out(self, node: Value, uname: str) -> None:
+        self.o("\tbool has%s() const noexcept {return getInner_<std::uint16_t, %d>() != 0;}"%(uname, node.offset))
         if node.inplace:
             self.o(
                 "\t%sInplaceOut %s() const noexcept {"

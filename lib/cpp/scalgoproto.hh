@@ -967,7 +967,7 @@ std::pair<const char *, size_t> Writer::finalize(const TableOut & root) {
 }
 
 template <typename O>
-void copy(O out, O::IN in) {
+void copy(O out, typename O::IN in) {
 	out.copy_(in);
 }
 
