@@ -912,8 +912,8 @@ class Generator:
         self.o("        o = []")
         for node in table.members:
             uname = snake(self.value(node.identifier))
-            if node.optional:
-                self.o("        if i.has_%s:" % uname)
+            if node.optional or node.table or node.union:
+                self.o("        if self.has_%s:" % uname)
                 self.o("            o.append('%s: '+str(self.%s))" % (uname, uname))
             else:
                 self.o("        o.append('%s: '+str(self.%s))" % (uname, uname))
