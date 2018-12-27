@@ -525,7 +525,6 @@ class Annotater:
                 )
                 self.structs[name] = node
                 node.bytes = bytes
-                print("struct %s of size %d" % (name, bytes), file=sys.stderr)
             elif isinstance(node, Enum):
                 self.context = "enum %s" % self.value(node.identifier)
                 name = self.validate_uname(node.identifier)
@@ -533,10 +532,6 @@ class Annotater:
                 self.attach_namespace(node)
                 self.visit_enum(node)
                 self.enums[name] = node
-                print(
-                    "enum %s with %s members" % (name, len(node.annotatedValues)),
-                    file=sys.stderr,
-                )
             elif isinstance(node, Table):
                 self.context = "table %s" % self.value(node.identifier)
                 name = self.validate_uname(node.identifier)
@@ -550,10 +545,6 @@ class Annotater:
                 node.empty = len(node.members) == 0
 
                 self.tables[name] = node
-                print(
-                    "table %s of size >= %d" % (name, len(node.default) + 8),
-                    file=sys.stderr,
-                )
             elif isinstance(node, Union):
                 self.context = "union %s" % self.value(node.identifier)
                 name = self.validate_uname(node.identifier)
@@ -561,7 +552,6 @@ class Annotater:
                 self.attach_namespace(node)
                 self.visit_content(name, node.members, ContentType.UNION, False)
                 self.unions[name] = node
-                print("union %s" % name, file=sys.stderr)
             elif isinstance(node, Namespace):
                 self.namespace[node.document] = node.namespace
             else:
