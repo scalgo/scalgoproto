@@ -737,7 +737,7 @@ class Generator:
                 self.o("            self.add_%s(i.%s)" % (uuname, uuname))
             elif node.table:
                 if node.table.empty:
-                    self.o("            self.add_%s()")
+                    self.o("            self.add_%s()"%(uuname))
                 else:
                     self.o("            self.add_%s()._copy(i.%s)" % (uuname, uuname))
             else:
