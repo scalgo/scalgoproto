@@ -565,12 +565,10 @@ class Generator:
                 % (uname)
             )
         self.output_doc(node, "        ")
-        if node.inplace:
-            self.o("        assert self._writer._used == self._end")
-            self.o("        self._set(%d, len(value))" % (idx))
-            self.o("        writer._add_inplace_text(value)")
+        if inplace:
+            self.o("        self._add_inplace_text(%d, value)" % (idx))
         else:
-            self.o("        self._set_text(%d, t)" % (idx))
+            self.o("        self._set_text(%d, value)" % (idx))
         self.o()
 
     def generate_bytes_in(self, node: Value, uname: str) -> None:
@@ -737,7 +735,7 @@ class Generator:
                 self.o("            self.add_%s(i.%s)" % (uuname, uuname))
             elif node.table:
                 if node.table.empty:
-                    self.o("            self.add_%s()"%(uuname))
+                    self.o("            self.add_%s()" % (uuname))
                 else:
                     self.o("            self.add_%s()._copy(i.%s)" % (uuname, uuname))
             else:

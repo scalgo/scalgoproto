@@ -451,6 +451,13 @@ class UnionOut(object):
             v = self._writer.construct_bytes(v)
         self._set(idx, v._offset - 8)
 
+    def _add_inplace_text(self, idx: int, v: str) -> None:
+        assert self._writer._used == self._end
+        tt = v.encode("utf-8")
+        self._set(idx, len(tt))
+        self._writer._reserve(len(tt) + 1)
+        self._writer._write(tt)
+        self._writer._write(b"\0")
 
 class OutList:
     _offset: int = 0

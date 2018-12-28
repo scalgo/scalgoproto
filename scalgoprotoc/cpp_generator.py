@@ -408,7 +408,10 @@ class Generator:
             self.o("\t}")
 
     def generate_table_out(self, node: Value, uname: str, outer: str) -> None:
-        self.o("\tbool has%s() const noexcept {return getInner_<std::uint32_t, %d>() != 0;}"%(uname, node.offset))
+        self.o(
+            "\tbool has%s() const noexcept {return getInner_<std::uint32_t, %d>() != 0;}"
+            % (uname, node.offset)
+        )
         self.o("")
         if not node.inplace:
             self.o(
@@ -506,7 +509,10 @@ class Generator:
         self.o("\t}")
 
     def generate_text_out(self, node: Value, uname: str, outer: str) -> None:
-        self.o("\tbool has%s() const noexcept {return getInner_<std::uint32_t, %d>() != 0;}"%(uname, node.offset))
+        self.o(
+            "\tbool has%s() const noexcept {return getInner_<std::uint32_t, %d>() != 0;}"
+            % (uname, node.offset)
+        )
         if node.inplace:
             self.o("\tvoid add%s(std::string_view text) noexcept {" % (uname))
             self.o("\t\tsetInner_<std::uint32_t, %d>(text.size());" % (node.offset))
@@ -567,7 +573,10 @@ class Generator:
         self.o("\t}")
 
     def generate_bytes_out(self, node: Value, uname: str, outer: str) -> None:
-        self.o("\tbool has%s() const noexcept {return getInner_<std::uint32_t, %d>() != 0;}"%(uname, node.offset))
+        self.o(
+            "\tbool has%s() const noexcept {return getInner_<std::uint32_t, %d>() != 0;}"
+            % (uname, node.offset)
+        )
         if node.inplace:
             self.o("\tvoid add%s(const char * data, size_t size) noexcept {" % (uname,))
             self.o("\t\tsetInner_<std::uint32_t, %d>(size);" % (node.offset,))
@@ -634,7 +643,10 @@ class Generator:
         self.o("\t}")
 
     def generate_union_out(self, node: Value, uname: str) -> None:
-        self.o("\tbool has%s() const noexcept {return getInner_<std::uint16_t, %d>() != 0;}"%(uname, node.offset))
+        self.o(
+            "\tbool has%s() const noexcept {return getInner_<std::uint16_t, %d>() != 0;}"
+            % (uname, node.offset)
+        )
         if node.inplace:
             self.o(
                 "\t%sInplaceOut %s() const noexcept {"
