@@ -11,8 +11,10 @@ An gramma for a schema is defined below:
     Identifier = UIdentifier | LIdentifier
     UIdentifier = "[A-Z][0-9a-zA-Z]*"
     LIdentifier = "[a-z][0-0a-zA-Z]*"
-    Enum = "enum" UIdentifier "{" EnumItem* "}" Split
+    Enum = "enum" UIdentifier EnumContent Split
+    EnumContent = "{" EnumItem* "}"
     EnumItem = LIdentifier Split
+    BriefEnum = "enum" EnumContent
     Struct = "struct" UIdentifier "{" StructItem* "}" Split
     StructItem = LIdentifier ":" (BasicType | UIdentifier) Split
     BasicType = "U8" | "I8" | "U16" | "I16" | "U32" | "I32" | "U64" | "I64" | "F32" | "F64" | "Bool"
@@ -29,5 +31,5 @@ An gramma for a schema is defined below:
     TableItem = LIdentifier (TableContent | TableItemDesc) Split
     TableItemDesc = ":" TableItemMod* TableItemType ("=" Number)?
     TableItemMod = "list" | "optional" | "inplace"
-    TableItemType = BasicType | "Text" | "Bytes" | UIdentifier | BriefUnion | BriefTable
+    TableItemType = BasicType | "Text" | "Bytes" | UIdentifier | BriefUnion | BriefTable | BriefEnum
     Number = "-?[0-9]*(\.[0-9]*)?(e-?[0-9]+)?
