@@ -561,7 +561,7 @@ class Generator:
             self.o("    def %s(self, value: str) -> None:" % (uname))
         else:
             self.o(
-                "    def %s(self, t: typing_.Union[scalgoproto.TextOut, str]) -> None:"
+                "    def %s(self, value: typing_.Union[scalgoproto.TextOut, str]) -> None:"
                 % (uname)
             )
         self.output_doc(node, "        ")
