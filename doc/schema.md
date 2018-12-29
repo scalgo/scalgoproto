@@ -18,14 +18,16 @@ An gramma for a schema is defined below:
     BasicType = "U8" | "I8" | "U16" | "I16" | "U32" | "I32" | "U64" | "I64" | "F32" | "F64" | "Bool"
     Union = "union" UIdentifier UnionContent Split
     UnionContent = "{" UnionItem * "}" 
-    UnionItem = LIdentifier (TableContent | UnionItemType) Split
-    UnionItemType = ":" "list"? (BriefTable | BriefUnion | 
+    UnionItem = LIdentifier (TableContent | UnionItemDesc) Split
+    UnionItemDesc = ":" "list"? (BriefTable | BriefUnion | 
     UIdentifier | "Text" | "Bytes") 
     BriefUnion = "union" UnionContent
     Table = "table" UIdentifier TableId TableContent Split
     TableContent = "{" TableItem * "}"
     TableId = "@[0-9A-F]{8,8}"
     BriefTable = "table" TableId? TableContent
-    TableItem = LIdentifier (TableContent | TableItemType) Split
-    TableItemType = ":" ("list" | "optional" | "inplace") * (BasicType | "Text" | "Bytes" | UIdentifier | BriefUnion | BriefTable) ("=" Number)?
+    TableItem = LIdentifier (TableContent | TableItemDesc) Split
+    TableItemDesc = ":" TableItemMod * TableItemType ("=" Number)?
+    TableItemMod = "list" | "optional" | "inplace"
+    TableItemType = BasicType | "Text" | "Bytes" | UIdentifier | BriefUnion | BriefTable
     Number = "-?[0-9]*(\.[0-9]*)?(e-?[0-9]+)?
