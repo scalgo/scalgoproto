@@ -1,4 +1,4 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: t; python-indent-offset: 4; coding: utf-8 -*-
+# -*- mode: python; tab-width: 4; indent-tabs-mode: nil; python-indent-offset: 4; coding: utf-8 -*-
 """
 Validate a schema
 """
@@ -793,10 +793,10 @@ class Generator:
             self.o(
                 "\tbool is%s() const noexcept {return type() == Type::%s;}" % (uname, n)
             )
-            if member.table:
-                self.generate_union_table_in(member, uname)
-            elif member.list_:
+            if member.list_:
                 self.generate_union_list_in(member, uname)
+            elif member.table:
+                self.generate_union_table_in(member, uname)
             elif member.type_.type == TokenType.BYTES:
                 self.generate_union_bytes_in(member, uname)
             elif member.type_.type == TokenType.TEXT:
@@ -826,10 +826,10 @@ class Generator:
             for member in union.members:
                 n = self.value(member.identifier)
                 uname = ucamel(n)
-                if member.table:
-                    self.generate_union_table_out(member, uname, inplace, idx)
-                elif member.list_:
+                if member.list_:
                     self.generate_union_list_out(member, uname, inplace, idx)
+                elif member.table:
+                    self.generate_union_table_out(member, uname, inplace, idx)
                 elif member.type_.type == TokenType.BYTES:
                     self.generate_union_bytes_out(member, uname, inplace, idx)
                 elif member.type_.type == TokenType.TEXT:
