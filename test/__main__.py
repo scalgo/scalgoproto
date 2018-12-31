@@ -1,4 +1,4 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: t; python-indent-offset: 4; coding: utf-8 -*-
+# -*- mode: python; tab-width: 4; indent-tabs-mode: nil; python-indent-offset: 4; coding: utf-8 -*-
 """
 Test that everything works
 """
@@ -52,9 +52,9 @@ def runPySetup(schemas: List[str]) -> bool:
     return True
 
 
-def runPy(name: str, bin: str) -> bool:
+def runPy(name: str, bin: str, mod="test_base.py") -> bool:
     subprocess.check_call(
-        ["python3", "test/py.py", name, bin], env={"PYTHONPATH": "lib/python:tmp"}
+        ["python3", "test/%s"%mod, name, bin], env={"PYTHONPATH": "lib/python:tmp:test"}
     )
     return True
 
@@ -188,7 +188,7 @@ def main():
     runTest("validate complex2", lambda: runValidate("test/complex2.spr"))
     if runTest(
         "cpp setup",
-        lambda: runCppSetup(["test/base.spr", "test/complex2.spr"], "test/cpp.cc"),
+        lambda: runCppSetup(["test/base.spr", "test/complex2.spr"], "test/test_base.cc"),
     ):
         runTest(
             "cpp out default simple",
@@ -211,7 +211,7 @@ def main():
         runTest("cpp in extend2", lambda: runCpp("in_extend2", "test/extend2.bin"))
         runTest("cpp out complex2", lambda: runCpp("out_complex2", "test/complex2.bin"))
         runTest("cpp in complex2", lambda: runCpp("in_complex2", "test/complex2.bin"))
-    if runTest("py setup", lambda: runPySetup(["test/base.spr", "test/complex2.spr"])):
+    if runTest("py setup", lambda: runPySetup(["test/base.spr", "test/complex2.spr", "test/union.spr"])):
         runTest(
             "py out default simple",
             lambda: runPy("out_default", "test/simple_default.bin"),

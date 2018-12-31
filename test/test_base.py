@@ -1,4 +1,4 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: t; python-indent-offset: 4; coding: utf-8 -*-
+# -*- mode: python; tab-width: 4; indent-tabs-mode: nil; python-indent-offset: 4; coding: utf-8 -*-
 import sys
 
 import scalgoproto
@@ -907,7 +907,6 @@ def main() -> None:
     ans = False
     test = sys.argv[1]
     path = sys.argv[2]
-    ans = False
     if test == "out_default":
         ans = test_out_default(path)
     elif test == "out":
@@ -939,5 +938,5 @@ def main() -> None:
     if not ans:
         sys.exit(1)
 
-
-main()
+if __name__ == "__main__":
+    main()
