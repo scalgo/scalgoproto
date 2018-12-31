@@ -36,6 +36,8 @@ struct BytesTag;
 struct UnionTag;
 struct UnknownTag;
 
+using Bytes = std::pair<const char *, size_t>;
+
 template <typename T>
 class ListOut;
 
@@ -132,6 +134,8 @@ private:
 public:
 	Reader(const char * data, size_t size) noexcept : data(data), size(size) {};
 
+	explicit Reader(scalgoproto::Bytes bytes) noexcept : data(bytes.first), size(bytes.second) {};
+	
 	template <typename T>
 	T root() const {
 		std::uint32_t magic, offset;
@@ -152,7 +156,7 @@ protected:
 		return std::string_view(p.start, p.size);
 	}
 
-	static std::pair<const void *, size_t> getBytes_(Ptr p) noexcept {return {(void*)p.start, (size_t)p.size};}
+	static Bytes getBytes_(Ptr p) noexcept {return Bytes(p.start, p.size);}
 
 	template <typename T>
 	static std::pair<const T *, size_t> getListRaw_(Ptr p) noexcept {return {reinterpret_cast<const T *>(p.start), (size_t)p.size};}
@@ -254,6 +258,7 @@ struct ListAccessHelp<TextTag, T>: public In {
 	static constexpr bool hasAdd = false;
 	static constexpr size_t mult = 4;
 	static constexpr int def = 0;
+	
 	static bool has(const char * start, std::uint32_t index) noexcept {
 		std::uint32_t off;
 		memcpy(&off, start + index * 4, 4);
@@ -283,7 +288,7 @@ struct ListAccessHelp<TextTag, T>: public In {
 
 template <typename T>
 struct ListAccessHelp<BytesTag, T>: public In {
-	using IN = std::pair<const void *, size_t>;
+	using IN = Bytes;
 	static constexpr bool optional = true;
 	static constexpr bool hasAdd = false;
 	static constexpr size_t mult = 4;
@@ -293,7 +298,7 @@ struct ListAccessHelp<BytesTag, T>: public In {
 		memcpy(&off, start + index * 4, 4);
 		return off != 0;
 	}
-	static std::pair<const void *, size_t> get(const Reader & reader, const char * start, std::uint32_t index) noexcept {
+	static Bytes get(const Reader & reader, const char * start, std::uint32_t index) noexcept {
 		std::uint32_t off;
 		memcpy(&off, start + index * 4, 4);
 		assert(off != 0);
@@ -303,8 +308,10 @@ struct ListAccessHelp<BytesTag, T>: public In {
 		template <typename> friend class ListOut;
 		Setter(Writer & writer, std::uint32_t offset, std::uint32_t index);
 		char * const location;
+		Writer & writer;
 	public:
 		void operator=(const T & value) noexcept {memcpy(location, &value.offset_, 4);}
+		void operator=(Bytes bytes) noexcept;
 	};
 
 	static void copy(Writer & writer, std::uint32_t offset, 
@@ -577,7 +584,7 @@ struct MetaMagic<std::string_view> {using t=TextTag;};
 template <>
 struct MetaMagic<BytesOut> {using t=BytesTag;};
 template <>
-struct MetaMagic<std::pair<const void *, size_t>> {using t=BytesTag;};
+struct MetaMagic<Bytes> {using t=BytesTag;};
 
 template <typename T>
 class ListOut {
@@ -597,11 +604,13 @@ public:
 		return typename A::Setter(writer_, offset_, index);
 	}
 
-	T add(size_t index) {
+	template <typename ... TT>
+	T add(size_t index, TT ... vv) {
 		if constexpr(A::hasAdd)
-			return A::add(writer_, offset_, index);
-		else
+			return A::add(writer_, offset_, index, std::forward<TT>(vv)...);
+		else {
 			throw Error();
+		}
 	}
 
 	uint32_t size() const noexcept {return size_;}
@@ -676,7 +685,7 @@ public:
 		return size == 8;
 	}
 	
-	inline std::pair<const char *, size_t> finalize(const TableOut & root);
+	inline Bytes finalize(const TableOut & root);
 	
 	template <typename T>
 	T construct() {
@@ -702,6 +711,10 @@ public:
 		write((uint32_t)size, o.offset_+4);
 		memcpy(this->data+o.offset_+8, data, size);
 		return o;
+	}
+
+	BytesOut constructBytes(Bytes b) {
+		return constructBytes(b.first, b.second);
 	}
 
 	template <typename T>
@@ -901,7 +914,7 @@ void ListAccessHelp<TextTag, T>::copy(Writer & writer, std::uint32_t offset,
 }
 
 template <typename T>
-ListAccessHelp<BytesTag, T>::Setter::Setter(Writer & writer, std::uint32_t offset, std::uint32_t index) : location(writer.data + offset + index * 4) {}
+ListAccessHelp<BytesTag, T>::Setter::Setter(Writer & writer, std::uint32_t offset, std::uint32_t index) : location(writer.data + offset + index * 4), writer(writer) {}
 
 template <typename T>
 void ListAccessHelp<BytesTag, T>::copy(Writer & writer, std::uint32_t offset,
@@ -916,6 +929,11 @@ void ListAccessHelp<BytesTag, T>::copy(Writer & writer, std::uint32_t offset,
 		uint32_t o = v.offset_;
 		memcpy(writer.data + offset + 4*index, &o, 4);
 	}
+}
+
+template <typename T>
+void ListAccessHelp<BytesTag, T>::Setter::operator=(Bytes bytes) noexcept {
+	(*this) = writer.constructBytes(bytes);	
 }
 
 template <typename T>
@@ -960,7 +978,7 @@ void ListAccessHelp<UnionTag, T>::copy(Writer & writer, std::uint32_t offset,
 	}
 }
 
-std::pair<const char *, size_t> Writer::finalize(const TableOut & root) {
+Bytes Writer::finalize(const TableOut & root) {
 	write((std::uint32_t)0xB5C0C4B3, 0);
 	write(root.offset_ - 8, 4);
 	return std::make_pair(data, size);

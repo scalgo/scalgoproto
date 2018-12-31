@@ -70,7 +70,7 @@ class Generator:
         elif node.type_.type == TokenType.TEXT:
             typeName = "std::string_view"
         elif node.type_.type == TokenType.BYTES:
-            typeName = "std::pair<const void *, size_t>"
+            typeName = "scalgoproto::Bytes"
         else:
             raise ICE()
         return (typeName, rawType)
@@ -557,7 +557,7 @@ class Generator:
         self.o("\t}")
         self.o("\t")
         self.output_doc(node, "\t")
-        self.o("\tstd::pair<const void*, size_t> %s()  {" % (lcamel(uname)))
+        self.o("\tscalgoproto::Bytes %s()  {" % (lcamel(uname)))
         self.o(
             "\t\treturn getBytes_(getPtr_<%s, scalgoproto::BYTESMAGIC, %d>());"
             % (bs(node.inplace), node.offset)
@@ -566,7 +566,7 @@ class Generator:
 
     def generate_union_bytes_in(self, node: Value, uname: str) -> None:
         self.output_doc(node, "\t")
-        self.o("\tstd::pair<const void*, size_t> %s() {" % (lcamel(uname)))
+        self.o("\tscalgoproto::Bytes %s() {" % (lcamel(uname)))
         self.o(
             "\t\treturn scalgoproto::In::getBytes_(this->template getPtr_<scalgoproto::BYTESMAGIC>());"
         )
@@ -581,6 +581,9 @@ class Generator:
             self.o("\tvoid add%s(const char * data, size_t size) noexcept {" % (uname,))
             self.o("\t\tsetInner_<std::uint32_t, %d>(size);" % (node.offset,))
             self.o("\t\taddInplaceBytes_(writer_, offset_+SIZE, data, size);")
+            self.o("\t}")
+            self.o("\tvoid add%s(scalgoproto::Bytes bytes) noexcept {" % (uname,))
+            self.o("\t\tadd%s(bytes.first, bytes.second);"%(uname, ));
         else:
             self.o("\t%s & set%s(scalgoproto::BytesOut b) noexcept {" % (outer, uname))
             self.o("\t\tsetInner_<std::uint32_t, %d>(getOffset_(b));" % (node.offset,))
@@ -595,6 +598,16 @@ class Generator:
                 "\t\tsetInner_<std::uint32_t, %d>(getOffset_(res));" % (node.offset,)
             )
             self.o("\t\treturn res;")
+            self.o("\t}")
+            self.o(
+                "\tscalgoproto::BytesOut add%s(scalgoproto::Bytes bytes) noexcept {"
+                % (uname,)
+            )
+            self.o("\t\treturn add%s(bytes.first, bytes.second);"%(uname, ))
+            self.o(
+                "\t\tsetInner_<std::uint32_t, %d>(getOffset_(res));" % (node.offset,)
+            )
+            self.o("\t\treturn res;")
         self.o("\t}")
 
     def generate_union_bytes_out(
@@ -605,6 +618,9 @@ class Generator:
             self.o("\t\tsetType_(%d);" % (idx,))
             self.o("\t\tsetSize_(size);")
             self.o("\t\taddInplaceBytes_(writer_, next_, data, size);")
+            self.o("\t}")
+            self.o("\tvoid add%s(scalgoproto::Bytes bytes) noexcept {" % (uname,))
+            self.o("\t\tadd%s(bytes.first, bytes.second);"%(uname, ))
         else:
             self.o("\tvoid set%s(scalgoproto::BytesOut b) noexcept {" % (uname,))
             self.o("\t\tsetType_(%d);" % (idx,))
@@ -617,6 +633,12 @@ class Generator:
             self.o("\t\tauto res = writer_.constructBytes(data, size);")
             self.o("\t\tset%s(res);" % (uname,))
             self.o("\t\treturn res;")
+            self.o("\t}")
+            self.o(
+                "\tscalgoproto::BytesOut add%s(scalgoproto::Bytes bytes) noexcept {"
+                % (uname,)
+            )
+            self.o("\t\treturn add%s(bytes.first, bytes.second);" % (uname,))
         self.o("\t}")
 
     def generate_union_in(self, node: Value, uname: str) -> None:
