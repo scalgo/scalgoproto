@@ -7,7 +7,7 @@
 #include <vector>
 #include <cstring>
 
-constexpr bool writeMode = false;
+constexpr bool writeMode = true;
 
 inline bool validateOut(const char * data, size_t size, const char * file) {
 	if (writeMode) {
