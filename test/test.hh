@@ -38,7 +38,26 @@ inline std::vector<char> readIn(const char * file) {
 	return o;
 }
 
+bool operator!=(const std::pair<const char *, size_t> & l, const std::pair<const char *, size_t> & r) {
+	if (l.second != r.second) return true;
+	return memcmp(l.first, r.first, l.second) != 0;
+}
+
+std::ostream & operator<<(std::ostream & o, std::pair<const char *, size_t> i) {
+	char b[123];
+	b[0] = 'b';
+	b[1] = '"';
+	memcpy(b+2, i.first, i.second);
+	b[i.second+2] = '"';
+	b[i.second+3] = '\0';
+	return o << b;
+}
+
 #define xstr(a) str(a)
 #define str(a) #a
 #define REQUIRE(e, v) if ((e) != (v)) {std::cout << "Error '" << str(e) << "' gave " << (e) << " expected " << v << std::endl; return 1;}
+#define REQUIRE2(b, e, v) \
+if (!b) {std::cout << "Error '" << str(b) << "' must be true " << v << std::endl; return 1;} \
+if ((e) != (v)) {std::cout << "Error '" << str(e) << "' gave " << (e) << " expected " << v << std::endl; return 1;}
+
 #define REQUIREQ(e, v) if ((e) != (v)) {std::cout << "Error '" << str(e) << "' wrong result" << std::endl; return 1;}

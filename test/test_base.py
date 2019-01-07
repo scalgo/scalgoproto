@@ -87,6 +87,18 @@ def require(v, e) -> bool:
     return True
 
 
+def require2(b, v, e) -> bool:
+    if not b:
+        print("Precondition not met", file=sys.stderr)
+        return True
+
+    if e == v:
+        return False
+
+    print("Error expected '%s' found '%s'" % (e, v), file=sys.stderr)
+    return True
+
+
 def test_out_default(path: str) -> bool:
     w = scalgoproto.Writer()
     s = w.construct_table(base.SimpleOut)

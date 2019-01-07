@@ -1,0 +1,41 @@
+table Table1 @4D01E573 {
+	a: U32;
+}
+
+union Union1 {
+	v1: Text;
+	v2: Bytes;
+	v3: Table1;
+	v4: table @E5A52417 {
+		a: U32;
+	};
+	v5: list Text;
+	v6: list Bytes;
+	v7: list Table1;
+	v8: list table @E5A52417 {
+		a: U32;
+	};
+	v9: list U32;
+	v10: list Bool;
+}
+
+table Table2 @B0E60C5B {
+	a: inplace Union1;
+	b: Union1; # create using add
+	c: Union1; # create using assigin
+	d: Union1; # create using copy
+	e: Union1; # create using copy from implace
+}
+
+table Table3 @8E5C0658 {
+	v1: Table2;
+	v2: Table2;
+	v3: Table2;
+	v4: Table2;
+	v5: Table2;
+	v6: Table2;
+	v7: Table2;
+	v8: Table2;
+	v9: Table2;
+	v10: Table2;
+}

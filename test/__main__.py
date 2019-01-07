@@ -54,7 +54,8 @@ def runPySetup(schemas: List[str]) -> bool:
 
 def runPy(name: str, bin: str, mod="test_base.py") -> bool:
     subprocess.check_call(
-        ["python3", "test/%s"%mod, name, bin], env={"PYTHONPATH": "lib/python:tmp:test"}
+        ["python3", "test/%s" % mod, name, bin],
+        env={"PYTHONPATH": "lib/python:tmp:test"},
     )
     return True
 
@@ -128,7 +129,7 @@ def main():
             good,
         )
 
-        # Test struct types
+    # Test struct types
     for (bad, good) in (
         ("optional U32", "U32"),
         ("U64 = 7", "U64"),
@@ -139,7 +140,7 @@ def main():
     ):
         runNeg("bad struct member type %s" % bad, "struct Monkey {a: %s}", bad, good)
 
-        # Test table id
+    # Test table id
     for (bad, good) in (
         ("0x1234567", "@8908828A"),
         ("@8908828X", "@8908828A"),
@@ -211,6 +212,14 @@ def main():
         runTest("cpp in extend2", lambda: runCpp("in_extend2", "test/extend2.bin"))
         runTest("cpp out complex2", lambda: runCpp("out_complex2", "test/complex2.bin"))
         runTest("cpp in complex2", lambda: runCpp("in_complex2", "test/complex2.bin"))
+
+    if runTest(
+           "cpp union setup",
+           lambda: runCppSetup(["test/union.spr"], "test/test_union.cc"),
+    ):
+       runTest("cpp out union", lambda: runCpp("out", "test/union.bin"))
+       runTest("cpp in union", lambda: runCpp("in", "test/union.bin"))
+
     if runTest("py setup", lambda: runPySetup(["test/base.spr", "test/complex2.spr", "test/union.spr"])):
         runTest(
             "py out default simple",
@@ -232,6 +241,15 @@ def main():
         runTest("py in extend1", lambda: runPy("in_extend1", "test/extend1.bin"))
         runTest("py out extend2", lambda: runPy("out_extend2", "test/extend2.bin"))
         runTest("py in extend2", lambda: runPy("in_extend2", "test/extend2.bin"))
+
+    if runTest("py setup union", lambda: runPySetup(["test/union.spr"])):
+        runTest(
+            "py out union",
+            lambda: runPy("out_union", "test/union.bin", "test_union.py"),
+        )
+        runTest(
+            "py in union", lambda: runPy("in_union", "test/union.bin", "test_union.py")
+        )
 
     print("=" * 80)
     if not failures:
