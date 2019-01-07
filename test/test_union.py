@@ -157,6 +157,8 @@ def test_in_union(path: str) -> bool:
     r = scalgoproto.Reader(o)
     i = r.root(union.Table3In)
 
+    print(i)
+
     if require(i.has_v1, True):
         return False
     if require(i.has_v1, True):
