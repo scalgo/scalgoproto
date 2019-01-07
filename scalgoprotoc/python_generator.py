@@ -212,8 +212,8 @@ class Generator:
             )
         elif node.table:
             self.o(
-                "        l = scalgoproto.TableListOut[%sOut](self._writer, size, False)"
-                % (node.table)
+                "        l = scalgoproto.TableListOut[%sOut](self._writer, %sOut, size, False)"
+                % (node.table.name, node.table.name)
             )
         elif node.type_.type == TokenType.TEXT:
             self.o("        l = scalgoproto.TextListOut(self._writer, size, False)")
@@ -221,13 +221,19 @@ class Generator:
             self.o("        l = scalgoproto.BytesListOut(self._writer, size, False)")
 
     def generate_list_out(self, node: Value, uname: str) -> None:
+        it = "scalgoproto.ListIn[%s]" % self.in_list_help(node, "")[0]
+        ot = self.out_list_type(node)
         if not node.inplace:
             self.o("    @scalgoproto.Adder")
             self.o(
-                "    def %s(self, value: %s) -> None:"
-                % (uname, self.out_list_type(node))
+                "    def %s(self, value: typing_.Union[%s,%s]) -> None:"
+                % (uname, it, ot)
             )
             self.output_doc(node, "        ")
+            self.o("        if isinstance(value, scalgoproto.ListIn):")
+            self.o("            self.add_%s(len(value))._copy(value)" % (uname))
+            self.o("            return")
+            self.o("        assert isinstance(value, scalgoproto.OutList)")
             self.o("        self._set_list(%d, value)" % (node.offset))
             self.o()
 
@@ -241,6 +247,13 @@ class Generator:
             self.o("        return res")
             self.o()
         else:
+            self.o("    @scalgoproto.Adder")
+            self.o("    def %s(self, value: %s) -> None:" % (uname, it))
+            self.output_doc(node, "        ")
+            self.o("        assert isinstance(value, scalgoproto.ListIn)")
+            self.o("        add_%s(len(value))._copy(value)" % (uname))
+            self.o()
+
             self.o(
                 "    def add_%s(self, size: int) -> %s:"
                 % (uname, self.out_list_type(node))
@@ -255,13 +268,35 @@ class Generator:
     def generate_union_list_out(
         self, node: Value, uname: str, idx: int, inplace: bool
     ) -> None:
+        it = "scalgoproto.ListIn[%s]" % self.in_list_help(node, "")[0]
+        ot = self.out_list_type(node)
         if not inplace:
             self.o("    @scalgoproto.Adder")
-            self.o("    def %s(self, value: %s):" % (uname, self.out_list_type(node)))
+            self.o("    def %s(self, value: typing_.Union[%s,%s]):" % (uname, ot, it))
             self.output_doc(node, "        ")
+            self.o("        if isinstance(value, scalgoproto.ListIn):")
+            self.o("            self.add_%s(len(value))._copy(value)" % (uname))
+            self.o("            return")
+            self.o("        assert isinstance(value, scalgoproto.OutList)")
             self.o("        self._set(%d, value._offset - 8)" % (idx,))
             self.o()
+
+            self.o(
+                "    def add_%s(self, size:int) -> %s:"
+                % (uname, self.out_list_type(node))
+            )
+            self.output_doc(node, "        ")
+            self.o("        res = self._writer.%s" % self.out_list_constructor(node))
+            self.o("        self._set(%d, res._offset - 8)" % (idx,))
+            self.o("        return res")
+            self.o()
         else:
+            self.o("    @scalgoproto.Adder")
+            self.o("    def %s(self, value: %s) -> None:" % (uname, it))
+            self.output_doc(node, "        ")
+            self.o("        assert isinstance(value, scalgoproto.ListIn)")
+            self.o("        add_%s(len(value))._copy(value)" % (uname))
+            self.o()
             self.o(
                 "    def add_%s(self, size: int) -> %s:"
                 % (uname, self.out_list_type(node))
@@ -451,8 +486,19 @@ class Generator:
     def generate_table_out(self, node: Value, uname: str) -> None:
         if not node.inplace:
             self.o("    @scalgoproto.Adder")
-            self.o("    def %s(self, value: %sOut) -> None:" % (uname, node.table.name))
+            self.o(
+                "    def %s(self, value: typing_.Union[%sOut, %sIn]) -> None:"
+                % (uname, node.table.name, node.table.name)
+            )
             self.output_doc(node, "        ")
+            self.o("        if isinstance(value, %sIn):" % (node.table.name))
+            self.o("            v = value")
+            self.o(
+                "            value = self._writer.construct_table(%sOut)"
+                % node.table.name
+            )
+            self.o("            value._copy(v)")
+            self.o("        assert isinstance(value, %sOut)" % (node.table.name))
             self.o("        self._set_table(%d, value)" % (node.offset))
             self.o()
             self.o("    def add_%s(self) -> %sOut:" % (uname, node.table.name))
@@ -465,6 +511,12 @@ class Generator:
             self.o()
 
         elif not node.table.empty:
+            self.o("    @scalgoproto.Adder")
+            self.o("    def %s(self, value: %sIn) -> None:" % (uname, node.table.name))
+            self.output_doc(node, "        ")
+            self.o("        assert isinstance(value, %sIn)" % (node.table.name))
+            self.o("        self.add_%s()._copy(value)" % (uname,))
+            self.o()
             self.o("    def add_%s(self) -> %sOut:" % (uname, node.table.name))
             self.output_doc(node, "        ")
             self.o("        assert self._writer._used == self._offset + self._SIZE")
@@ -491,8 +543,19 @@ class Generator:
             self.o()
         elif not inplace:
             self.o("    @scalgoproto.Adder")
-            self.o("    def %s(self, value: %sOut) -> None:" % (uname, table.name))
+            self.o(
+                "    def %s(self, value: typing_.Union[%sOut,%sIn]) -> None:"
+                % (uname, table.name, table.name)
+            )
             self.output_doc(node, "        ")
+            self.o("        if isinstance(value, %sIn):" % (node.table.name))
+            self.o("            v = value")
+            self.o(
+                "            value = self._writer.construct_table(%sOut)"
+                % node.table.name
+            )
+            self.o("            value._copy(v)")
+            self.o("        assert isinstance(value, %sOut)" % (node.table.name))
             self.o("        self._set(%d, value._offset - 8)" % (idx))
             self.o()
             self.o("    def add_%s(self) -> %sOut:" % (uname, table.name))
@@ -504,6 +567,12 @@ class Generator:
             self.o("        return res")
             self.o()
         else:
+            self.o("    @scalgoproto.Adder")
+            self.o("    def %s(self, value: %sIn) -> None:" % (uname, node.table.name))
+            self.output_doc(node, "        ")
+            self.o("        assert isinstance(value, %sIn)" % (node.table.name))
+            self.o("        self.add_%s()._copy(value)" % (uname,))
+            self.o()
             self.o("    def add_%s(self) -> %sOut:" % (uname, table.name))
             self.output_doc(node, "        ")
             self.o("        assert self._end == self._writer._used")
@@ -602,7 +671,7 @@ class Generator:
             self.o("    def %s(self, value: bytes) -> None:" % (uname))
         else:
             self.o(
-                "    def %s(self, b: typing_.Union[scalgoproto.BytesOut, bytes]) -> None:"
+                "    def %s(self, value: typing_.Union[scalgoproto.BytesOut, bytes]) -> None:"
                 % (uname)
             )
         self.output_doc(node, "        ")
@@ -610,7 +679,7 @@ class Generator:
             self.o("        assert self._writer._used == self._offset + self._SIZE")
             self.o("        self._add_inplace_bytes(%d, value)" % (node.offset))
         else:
-            self.o("        self._set_bytes(%d, b)" % (node.offset))
+            self.o("        self._set_bytes(%d, value)" % (node.offset))
         self.o()
 
     def generate_union_bytes_out(
@@ -621,16 +690,14 @@ class Generator:
             self.o("    def %s(self, value: bytes) -> None:" % (uname))
         else:
             self.o(
-                "    def %s(self, b: typing_.Union[scalgoproto.BytesOut, bytes]) -> None:"
+                "    def %s(self, value: typing_.Union[scalgoproto.BytesOut, bytes]) -> None:"
                 % (uname)
             )
         self.output_doc(node, "        ")
-        if node.inplace:
-            self.o("        assert self._writer._used == self._end")
-            self.o("        self._set(%d, len(value))" % (idx))
-            self.o("        writer._add_inplace_bytes(value)")
+        if inplace:
+            self.o("        self._add_inplace_bytes(%d, value)" % (idx))
         else:
-            self.o("        self._set_bytes(%d, b)" % (idx))
+            self.o("        self._set_bytes(%d, value)" % (idx))
         self.o()
 
     def generate_union_in(self, node: Value, uname: str, table: Table) -> None:
@@ -797,10 +864,10 @@ class Generator:
             self.o("    def is_%s(self) -> bool:" % (uuname,))
             self.o("        return self.type == %sIn.Type.%s" % (union.name, n.upper()))
             self.o()
-            if member.table:
-                self.generate_union_table_in(member, uuname)
-            elif member.list_:
+            if member.list_:
                 self.generate_union_list_in(member, uuname)
+            elif member.table:
+                self.generate_union_table_in(member, uuname)
             elif member.type_.type == TokenType.BYTES:
                 self.generate_union_bytes_in(member, uuname)
             elif member.type_.type == TokenType.TEXT:
@@ -824,10 +891,10 @@ class Generator:
         idx = 1
         for member in union.members:
             uuname = snake(self.value(member.identifier))
-            if member.table:
-                self.generate_union_table_out(member, uuname, idx, False)
-            elif member.list_:
+            if member.list_:
                 self.generate_union_list_out(member, uuname, idx, False)
+            elif member.table:
+                self.generate_union_table_out(member, uuname, idx, False)
             elif member.type_.type == TokenType.BYTES:
                 self.generate_union_bytes_out(member, uuname, idx, False)
             elif member.type_.type == TokenType.TEXT:
@@ -852,10 +919,10 @@ class Generator:
         idx = 1
         for member in union.members:
             uuname = snake(self.value(member.identifier))
-            if member.table:
-                self.generate_union_table_out(member, uuname, idx, True)
-            elif member.list_:
+            if member.list_:
                 self.generate_union_list_out(member, uuname, idx, True)
+            elif member.table:
+                self.generate_union_table_out(member, uuname, idx, True)
             elif member.type_.type == TokenType.BYTES:
                 self.generate_union_bytes_out(member, uuname, idx, True)
             elif member.type_.type == TokenType.TEXT:
@@ -958,6 +1025,7 @@ class Generator:
         self.o("    __slots__ = []")
         self.o("    _MAGIC: typing_.ClassVar[int] = 0x%08X" % table.magic)
         self.o("    _SIZE: typing_.ClassVar[int] = %d" % len(table.default))
+        self.o("    _IN = %sIn" % (table.name))
         self.o()
         self.o(
             "    def __init__(self, writer: scalgoproto.Writer, withHeader: bool) -> None:"

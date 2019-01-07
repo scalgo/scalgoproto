@@ -459,6 +459,13 @@ class UnionOut(object):
         self._writer._write(tt)
         self._writer._write(b"\0")
 
+    def _add_inplace_bytes(self, idx: int, t: bytes) -> None:
+        assert self._writer._used == self._end
+        self._set(idx, len(t))
+        self._writer._reserve(len(t))
+        self._writer._write(t)
+
+
 class OutList:
     _offset: int = 0
     _size: int = 0
@@ -477,6 +484,11 @@ class OutList:
 
     def __len__(self):
         return self._size
+
+    def _copy(self, inp: ListIn) -> None:
+        assert self._size == inp._size
+        for i in range(self._size):
+            self[i] = inp[i]
 
 
 class BasicListOut(OutList, Generic[B]):
@@ -545,6 +557,9 @@ class TableListOut(OutList, Generic[TO]):
     def __setitem__(self, index: int, value: TO) -> None:
         """Add value to list at index"""
         assert 0 <= index < self._size
+        if isinstance(value, self.table._IN):
+            self.add(index)._copy(value)
+            return
         assert isinstance(value, self.table)
         self._writer._put(self._offset + index * 4, struct.pack("I", value._offset - 8))
 
@@ -568,15 +583,16 @@ class TextListOut(OutList):
         self._writer._put(self._offset + index * 4, struct.pack("I", value._offset - 8))
 
 
-class BytesListOut(OutList, Generic[TO]):
+class BytesListOut(OutList):
     def __init__(self, writer: "Writer", size: int, with_header: bool = True) -> None:
         """Private constructor. Use factory methods on writer"""
         super().__init__(writer, b"\0\0\0\0" * size, size, with_header)
 
-    def __setitem__(self, index: int, value: TO) -> None:
+    def __setitem__(self, index: int, value: Union[BytesOut, bytes]) -> None:
         """Add value to list at index"""
         assert 0 <= index < self._size
-        assert isinstance(value, BytesOut)
+        if not isinstance(value, BytesOut):
+            value = self._writer.construct_bytes(value)
         self._writer._put(self._offset + index * 4, struct.pack("I", value._offset - 8))
 
 
