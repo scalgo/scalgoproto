@@ -209,6 +209,12 @@ class Generator:
             )
             self.o("\t\treturn res;")
         self.o("\t}")
+        self.o(
+            "\tscalgoproto::ListOut<%s> add%s(scalgoproto::ListIn<%s> in) noexcept {"
+            % (typeName, uname, self.in_list_types(node)[0])
+        )
+        self.o("\t\treturn add%s(in.size()).copy_(in);" % uname)
+        self.o("\t}")
 
     def generate_union_list_out(
         self, node: Value, uname: str, inplace: bool, idx: int
@@ -237,6 +243,12 @@ class Generator:
             self.o("\t\tauto res = writer_.constructList<%s>(size);" % typeName)
             self.o("\t\tset%s(res);" % (uname))
             self.o("\t\treturn res;")
+        self.o("\t}")
+        self.o(
+            "\tscalgoproto::ListOut<%s> add%s(scalgoproto::ListIn<%s> in) noexcept {"
+            % (typeName, uname, self.in_list_types(node)[0])
+        )
+        self.o("\t\treturn add%s(in.size()).copy_(in);" % uname)
         self.o("\t}")
 
     def generate_bool_in(self, node: Value, uname: str) -> None:
@@ -435,6 +447,12 @@ class Generator:
             )
             self.o("\t\treturn res;")
             self.o("\t}")
+            self.o(
+                "\t%sOut add%s(%sIn in) noexcept {"
+                % (self.qualify(node.table), uname, self.qualify(node.table))
+            )
+            self.o("\t\treturn add%s().copy_(in);" % (uname))
+            self.o("\t}")
         elif not node.table.empty:
             self.o("\t%sOut add%s() noexcept {" % (self.qualify(node.table), uname))
             self.o("\t\tassert(!has%s());" % (uname))
@@ -446,6 +464,12 @@ class Generator:
                 "\t\treturn addInplaceTable_<%sOut>(writer_, offset_+SIZE);"
                 % self.qualify(node.table)
             )
+            self.o("\t}")
+            self.o(
+                "\t%sOut add%s(%sIn in) noexcept {"
+                % (self.qualify(node.table), uname, self.qualify(node.table))
+            )
+            self.o("\t\treturn add%s().copy_(in);" % (uname))
             self.o("\t}")
         else:
             self.o("\t%s & set%s() noexcept {" % (uname, outer))
@@ -477,6 +501,12 @@ class Generator:
             self.o("\t\tset%s(res);" % (uname,))
             self.o("\t\treturn res;")
             self.o("\t}")
+            self.o(
+                "\t%sOut add%s(%sIn in) noexcept {"
+                % (self.qualify(node.table), uname, self.qualify(node.table))
+            )
+            self.o("\t\treturn add%s().copy_(in);" % (uname))
+            self.o("\t}")
         else:
             self.o("\t%sOut add%s() noexcept {" % (self.qualify(node.table), uname))
             self.o("\t\tsetType_(%d);" % (idx))
@@ -485,6 +515,12 @@ class Generator:
                 "\t\treturn addInplaceTable_<%sOut>(writer_, next_);"
                 % (self.qualify(node.table))
             )
+            self.o("\t}")
+            self.o(
+                "\t%sOut add%s(%sIn in) noexcept {"
+                % (self.qualify(node.table), uname, self.qualify(node.table))
+            )
+            self.o("\t\treturn add%s().copy_(in);" % (uname))
             self.o("\t}")
 
     def generate_text_in(self, node: Value, uname: str) -> None:
@@ -583,7 +619,7 @@ class Generator:
             self.o("\t\taddInplaceBytes_(writer_, offset_+SIZE, data, size);")
             self.o("\t}")
             self.o("\tvoid add%s(scalgoproto::Bytes bytes) noexcept {" % (uname,))
-            self.o("\t\tadd%s(bytes.first, bytes.second);"%(uname, ));
+            self.o("\t\tadd%s(bytes.first, bytes.second);" % (uname,))
         else:
             self.o("\t%s & set%s(scalgoproto::BytesOut b) noexcept {" % (outer, uname))
             self.o("\t\tsetInner_<std::uint32_t, %d>(getOffset_(b));" % (node.offset,))
@@ -603,11 +639,7 @@ class Generator:
                 "\tscalgoproto::BytesOut add%s(scalgoproto::Bytes bytes) noexcept {"
                 % (uname,)
             )
-            self.o("\t\treturn add%s(bytes.first, bytes.second);"%(uname, ))
-            self.o(
-                "\t\tsetInner_<std::uint32_t, %d>(getOffset_(res));" % (node.offset,)
-            )
-            self.o("\t\treturn res;")
+            self.o("\t\treturn add%s(bytes.first, bytes.second);" % (uname,))
         self.o("\t}")
 
     def generate_union_bytes_out(
@@ -620,7 +652,7 @@ class Generator:
             self.o("\t\taddInplaceBytes_(writer_, next_, data, size);")
             self.o("\t}")
             self.o("\tvoid add%s(scalgoproto::Bytes bytes) noexcept {" % (uname,))
-            self.o("\t\tadd%s(bytes.first, bytes.second);"%(uname, ))
+            self.o("\t\tadd%s(bytes.first, bytes.second);" % (uname,))
         else:
             self.o("\tvoid set%s(scalgoproto::BytesOut b) noexcept {" % (uname,))
             self.o("\t\tsetType_(%d);" % (idx,))
@@ -868,7 +900,7 @@ class Generator:
             self.o("")
 
     def generate_table_copy(self, table: Table) -> None:
-        self.o("\tvoid copy_(%sIn i) {" % (table.name))
+        self.o("\t%sOut & copy_(%sIn i) {" % (table.name, table.name))
         for ip in (True, False):
             for node in table.members:
                 lname = lcamel(self.value(node.identifier))
@@ -913,6 +945,7 @@ class Generator:
                     )
                 else:
                     raise ICE()
+        self.o("\t\treturn *this;")
         self.o("\t}")
 
     def generate_table(self, table: Table) -> None:

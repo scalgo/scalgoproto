@@ -615,9 +615,10 @@ public:
 
 	uint32_t size() const noexcept {return size_;}
 
-	void copy_(const ListIn<typename A::IN> in) {
+	ListOut & copy_(const ListIn<typename A::IN> in) {
 		assert(in.size() == size());
 		A::copy(writer_, offset_, in.reader_, in.start_,  size_);
+		return *this;
 	}
 };
 
@@ -958,7 +959,7 @@ void ListAccessHelp<TableTag, T>::copy(Writer & writer, std::uint32_t offset,
 		auto t = getObject_<typename T::IN>(reader, reader.getPtr_<T::MAGIC>(off));
 		auto v = writer.construct<T>();
 		v.copy_(t);
-		uint32_t o = v.offset_;
+		uint32_t o = v.offset_ - 8;
 		memcpy(writer.data + offset + 4*index, &o, 4);
 	}
 }
