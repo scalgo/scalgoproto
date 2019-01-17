@@ -815,7 +815,10 @@ class Generator:
         for node in union.members:
             uname = snake(self.value(node.identifier))
             self.o("        if self.is_%s:" % uname)
-            self.o("            o.append('%s: '+str(self.%s))" % (uname, uname))
+            if node.table and node.table.empty:
+                self.o("            o.append('%s')" % (uname))
+            else:
+                self.o("            o.append('%s: '+str(self.%s))" % (uname, uname))
         self.o("        return '{%s}'%(', '.join(o))")
         self.o()
 
