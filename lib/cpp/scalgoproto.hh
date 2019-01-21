@@ -747,17 +747,20 @@ protected:
 	template <typename T>
 	static T addInplaceTable_(Writer & writer, size_t start) noexcept {
 		assert(writer.size == start);
+		(void)start;
 		return T(writer, false);
 	}
 
 	static void addInplaceBytes_(Writer & writer, size_t start, const char *data, size_t size) noexcept {
 		assert(writer.size == start);
+		(void)start;
 		writer.expand(size);
 		memcpy(writer.data+start, data, size);
 	}
 
 	static void addInplaceText_(Writer & writer, size_t start, std::string_view str) noexcept {
 		assert(writer.size == start);
+		(void)start;
 		writer.expand(str.size()+1);
 		memcpy(writer.data+start, str.data(), str.size());
 		writer.data[start+str.size()] = 0;
@@ -766,8 +769,9 @@ protected:
 	template < typename T>
 	static ListOut<T> addInplaceList_(Writer & writer, size_t start, size_t size) noexcept {
 		assert(writer.size == start);
+		(void)start;
 		using A = ListAccess<T>;
-		ListOut<T> o(writer, start, size);
+		ListOut<T> o(writer, writer.size, size);
 		size_t bsize = computeSize<A::mult>(size);
 		writer.expand(bsize);
 		memset(writer.data+o.offset_, A::def, bsize);
