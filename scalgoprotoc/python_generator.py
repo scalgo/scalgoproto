@@ -170,7 +170,7 @@ class Generator:
     def generate_list_in(self, node: Value, uname: str) -> None:
         self.o("    @property")
         self.o("    def has_%s(self) -> bool:" % (uname,))
-        self.o("        return self._get_uint32(%d, 0) != 0" % (node.offset,))
+        self.o("        return self._get_uint48(%d) != 0" % (node.offset,))
         (tn, acc) = self.in_list_help(
             node,
             "*self._get_ptr%s(%d, scalgoproto.LIST_MAGIC)"
@@ -278,7 +278,7 @@ class Generator:
             self.o("            self.add_%s(len(value))._copy(value)" % (uname))
             self.o("            return")
             self.o("        assert isinstance(value, scalgoproto.OutList)")
-            self.o("        self._set(%d, value._offset - 8)" % (idx,))
+            self.o("        self._set(%d, value._offset - 10)" % (idx,))
             self.o()
 
             self.o(
@@ -287,7 +287,7 @@ class Generator:
             )
             self.output_doc(node, "        ")
             self.o("        res = self._writer.%s" % self.out_list_constructor(node))
-            self.o("        self._set(%d, res._offset - 8)" % (idx,))
+            self.o("        self._set(%d, res._offset - 10)" % (idx,))
             self.o("        return res")
             self.o()
         else:
@@ -453,7 +453,7 @@ class Generator:
     def generate_table_in(self, node: Value, uname: str) -> None:
         self.o("    @property")
         self.o("    def has_%s(self) -> bool:" % (uname,))
-        self.o("        return self._get_uint32(%d, 0) != 0" % (node.offset))
+        self.o("        return self._get_uint48(%d) != 0" % (node.offset))
         self.o()
         if not node.table.empty:
             self.o("    @property")
@@ -521,7 +521,7 @@ class Generator:
             self.output_doc(node, "        ")
             self.o("        assert self._writer._used == self._offset + self._SIZE")
             self.o(
-                "        self._set_uint32(%d, %d)"
+                "        self._set_uint48(%d, %d)"
                 % (node.offset, len(node.table.default))
             )
             self.o("        return %sOut(self._writer, False)" % node.table.name)
@@ -529,7 +529,7 @@ class Generator:
         else:
             self.o("    def add_%s(self) -> None:" % (uname))
             self.output_doc(node, "        ")
-            self.o("        self._set_uint32(%d, %d)" % (node.offset, 0))
+            self.o("        self._set_uint48(%d, %d)" % (node.offset, 0))
             self.o()
 
     def generate_union_table_out(
@@ -556,14 +556,14 @@ class Generator:
             )
             self.o("            value._copy(v)")
             self.o("        assert isinstance(value, %sOut)" % (node.table.name))
-            self.o("        self._set(%d, value._offset - 8)" % (idx))
+            self.o("        self._set(%d, value._offset - 10)" % (idx))
             self.o()
             self.o("    def add_%s(self) -> %sOut:" % (uname, table.name))
             self.output_doc(node, "        ")
             self.o(
                 "        res = self._writer.construct_table(%sOut)" % node.table.name
             )
-            self.o("        self._set(%d, res._offset - 8)" % (idx,))
+            self.o("        self._set(%d, res._offset - 10)" % (idx,))
             self.o("        return res")
             self.o()
         else:
@@ -583,7 +583,7 @@ class Generator:
     def generate_text_in(self, node: Value, uname: str) -> None:
         self.o("    @property")
         self.o("    def has_%s(self) -> bool:" % (uname,))
-        self.o("        return self._get_uint32(%d, 0) != 0" % (node.offset,))
+        self.o("        return self._get_uint48(%d) != 0" % (node.offset,))
         self.o()
         self.o("    @property")
         self.o("    def %s(self) -> str:" % (uname))
@@ -643,7 +643,7 @@ class Generator:
     def generate_bytes_in(self, node: Value, uname: str) -> None:
         self.o("    @property")
         self.o("    def has_%s(self) -> bool:" % (uname,))
-        self.o("        return self._get_uint32(%d, 0) != 0" % (node.offset,))
+        self.o("        return self._get_uint48(%d) != 0" % (node.offset,))
         self.o()
         self.o("    @property")
         self.o("    def %s(self) -> bytes:" % (uname))
@@ -711,12 +711,12 @@ class Generator:
         self.o("        assert self.has_%s" % (uname))
         if node.inplace:
             self.o(
-                "        return %sIn(self._reader, self._get_uint16(%d, 0), self._offset + self._size, self._get_uint32(%d, 0))"
+                "        return %sIn(self._reader, self._get_uint16(%d, 0), self._offset + self._size, self._get_uint48(%d))"
                 % (node.union.name, node.offset, node.offset + 2)
             )
         else:
             self.o(
-                "        return %sIn(self._reader, self._get_uint16(%d, 0), self._get_uint32(%d, 0))"
+                "        return %sIn(self._reader, self._get_uint16(%d, 0), self._get_uint48(%d))"
                 % (node.union.name, node.offset, node.offset + 2)
             )
         self.o()
