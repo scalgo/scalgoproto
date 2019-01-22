@@ -302,8 +302,8 @@ class Annotater:
                     self.error(v.list_, "Not allowed in structs")
                 if v.optional:
                     self.error(v.optional, "Lists are alwayes optional")
-                default.append(b"\0\0\0\0")
-                v.bytes = 4
+                default.append(b"\0\0\0\0\0\0")
+                v.bytes = 6
                 v.offset = bytes
             elif t == ContentType.UNION and v.type_.type in (
                 TokenType.BOOL,
@@ -399,8 +399,8 @@ class Annotater:
                     self.error(v.optional, "Are alwayes optional")
                 if t == ContentType.STRUCT:
                     self.error(v.type_, "Not allowed in structs")
-                default.append(b"\0\0\0\0")
-                v.bytes = 4
+                default.append(b"\0\0\0\0\0\0")
+                v.bytes = 6
                 v.offset = bytes
             elif typeName in self.enums or v.direct_enum:
                 if v.inplace:
@@ -443,8 +443,8 @@ class Annotater:
                     self.error(v.type_, "tables not allowed in structs")
                 if v.optional:
                     self.error(v.optional, "Lists are alwayes optional")
-                default.append(b"\0\0\0\0")
-                v.bytes = 4
+                default.append(b"\0\0\0\0\0\0")
+                v.bytes = 6
                 v.offset = bytes
                 v.table = v.direct_table or self.tables[typeName]
                 if not v.direct_table:
@@ -454,8 +454,8 @@ class Annotater:
                     self.error(v.type_, "Unions not allowed in structs")
                 if v.optional:
                     self.error(v.optional, "Unions are alwayes optional")
-                default.append(b"\0\0\0\0\0\0")
-                v.bytes = 6
+                default.append(b"\0\0\0\0\0\0\0\0")
+                v.bytes = 8
                 v.offset = bytes
                 v.union = v.direct_union or self.unions[typeName]
                 if not v.direct_union:

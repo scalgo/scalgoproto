@@ -31,6 +31,24 @@ S = TypeVar("S", bound=StructType)
 TT = TypeVar("TT")
 
 
+def split48_(v: int) -> Tuple[int, int]:
+    return (v & 0xFFFFFFFF, v >> 32)
+
+
+def pack48_(v: int) -> bytes:
+    l, h = split48_(v)
+    return struct.pack("<IH", l, h)
+
+
+def join48_(l: int, h: int) -> int:
+    return l + (h << 32)
+
+
+def unpack48_(v: bytes) -> int:
+    l, h = struct.unpack("<IH", v)
+    return join48_(l, h)
+
+
 class Adder(Generic[B]):
     def __init__(self, fset: Callable[[TT, B], None]) -> None:
         self.fset = fset
@@ -89,7 +107,7 @@ class UnionIn(object):
     def _get_ptr(self, magic: int) -> Tuple[int, int]:
         if self._size:
             return (self._offset, self._size)
-        return (self._offset + 8, self._reader._read_size(self._offset, magic))
+        return (self._offset + 10, self._reader._read_size(self._offset, magic))
 
 
 class TableIn(object):
@@ -104,10 +122,8 @@ class TableIn(object):
         self._offset = offset
         self._size = size
 
-    def _get_uint32_f(self, o: int) -> int:
-        return struct.unpack(
-            "<I", self._reader._data[self._offset + o : self._offset + o + 4]
-        )[0]
+    def _get_uint48_f(self, o: int) -> int:
+        return unpack48_(self._reader._data[self._offset + o : self._offset + o + 6])
 
     def _get_int8(self, o: int, d: int) -> int:
         return (
@@ -163,6 +179,13 @@ class TableIn(object):
             else d
         )
 
+    def _get_uint48(self, o: int) -> int:
+        return (
+            unpack48_(self._reader._data[self._offset + o : self._offset + o + 6])
+            if o < self._size
+            else 0
+        )
+
     def _get_int64(self, o: int, d: int) -> int:
         return (
             struct.unpack(
@@ -207,12 +230,12 @@ class TableIn(object):
         )
 
     def _get_ptr(self, o: int, magic: int) -> Tuple[int, int]:
-        off = self._get_uint32_f(o)
+        off = self._get_uint48_f(o)
         size = self._reader._read_size(off, magic)
-        return (off + 8, size)
+        return (off + 10, size)
 
     def _get_ptr_inplace(self, o: int, magic: int) -> Tuple[int, int]:
-        size = self._get_uint32_f(o)
+        size = self._get_uint48_f(o)
         return (self._offset + self._size, size)
 
 
@@ -224,24 +247,23 @@ class Reader(object):
         self._data = data
 
     def _read_size(self, offset: int, magic: int):
-        m, size = struct.unpack("<II", self._data[offset : offset + 8])
+        m, sizelow, sizehigh = struct.unpack("<IIH", self._data[offset : offset + 10])
         if m != magic:
             raise Exception("Bad magic")
-        return size
+        return join48_(sizelow, sizehigh)
 
     def _get_table_list(self, t: Type[TI], off: int, size: int) -> ListIn[TI]:
         def getter(r: "Reader", s: int, i: int) -> TI:
-            ooo = struct.unpack("<I", r._data[s + 4 * i : s + 4 * i + 4])[0]
+            ooo = unpack48_(r._data[s + 6 * i : s + 6 * i + 6])
             sss = r._read_size(ooo, t._MAGIC)
-            return t(r, ooo + 8, sss)
+            return t(r, ooo + 10, sss)
 
         return ListIn[TI](
             self,
             size,
             off,
             getter,
-            lambda r, s, i: struct.unpack("<I", r._data[s + 4 * i : s + 4 * i + 4])[0]
-            != 0,
+            lambda r, s, i: unpack48_(r._data[s + 6 * i : s + 6 * i + 6]) != 0,
         )
 
     def _get_bool_list(self, off: int, size: int) -> ListIn[bool]:
@@ -297,41 +319,40 @@ class Reader(object):
 
     def _get_text_list(self, off: int, size: int) -> ListIn[str]:
         def getter(r: "Reader", s: int, i: int) -> str:
-            ooo = struct.unpack("<I", r._data[s + 4 * i : s + 4 * i + 4])[0]
+            ooo = unpack48_(r._data[s + 6 * i : s + 6 * i + 6])
             sss = r._read_size(ooo, TEXT_MAGIC)
-            return r._data[ooo + 8 : ooo + 8 + sss].decode("utf-8")
+            return r._data[ooo + 10 : ooo + 10 + sss].decode("utf-8")
 
         return ListIn[str](
             self,
             size,
             off,
             getter,
-            lambda r, s, i: struct.unpack("<I", r._data[s + 4 * i : s + 4 * i + 4])[0]
-            != 0,
+            lambda r, s, i: unpack48_(r._data[s + 6 * i : s + 6 * i + 6]) != 0,
         )
 
     def _get_bytes_list(self, off: int, size: int) -> ListIn[bytes]:
         def getter(r: "Reader", s: int, i: int) -> bytes:
-            ooo = struct.unpack("<I", r._data[s + 4 * i : s + 4 * i + 4])[0]
+            ooo = unpack48_(r._data[s + 6 * i : s + 6 * i + 6])
             sss = r._read_size(ooo, BYTES_MAGIC)
-            return r._data[ooo + 8 : ooo + 8 + sss]
+            return r._data[ooo + 10 : ooo + 10 + sss]
 
         return ListIn[bytes](
             self,
             size,
             off,
             getter,
-            lambda r, s, i: struct.unpack("<I", r._data[s + 4 * i : s + 4 * i + 4])[0]
-            != 0,
+            lambda r, s, i: unpack48_(r._data[s + 6 * i : s + 6 * i + 6]) != 0,
         )
 
     def root(self, type: Type[TI]) -> TI:
         """Return root node of message, of type type"""
-        magic, offset = struct.unpack("<II", self._data[0:8])
+        magic, offsetlow, offsethigh = struct.unpack("<IIH", self._data[0:10])
+        offset = join48_(offsetlow, offsethigh)
         if magic != MESSAGE_MAGIC:
             raise Exception("Bad magic")
         size = self._read_size(offset, type._MAGIC)
-        return type(self, offset + 8, size)
+        return type(self, offset + 10, size)
 
 
 class TextOut(object):
@@ -351,9 +372,10 @@ class TableOut(object):
     def __init__(self, writer: "Writer", with_weader: bool, default: bytes) -> None:
         """Private constructor. Use factory methods on writer"""
         self._writer = writer
-        self._writer._reserve(len(default) + 8)
+        self._writer._reserve(len(default) + 10)
         if with_weader:
-            writer._write(struct.pack("<II", self._MAGIC, len(default)))
+            sizelow, sizehigh = split48_(len(default))
+            writer._write(struct.pack("<IIH", self._MAGIC, sizelow, sizehigh))
         self._offset = writer._used
         writer._write(default)
 
@@ -375,6 +397,9 @@ class TableOut(object):
     def _set_uint32(self, o: int, v: int) -> None:
         self._writer._put(self._offset + o, struct.pack("<I", v))
 
+    def _set_uint48(self, o: int, v: int) -> None:
+        self._writer._put(self._offset + o, pack48_(v))
+
     def _set_int64(self, o: int, v: int) -> None:
         self._writer._put(self._offset + o, struct.pack("<q", v))
 
@@ -394,20 +419,20 @@ class TableOut(object):
         self._writer._data[self._offset + o] &= ~(1 << b)
 
     def _set_table(self, o: int, v: TO) -> None:
-        self._writer._put(self._offset + o, struct.pack("<I", v._offset - 8))
+        self._writer._put(self._offset + o, pack48_(v._offset - 10))
 
     def _set_text(self, o: int, v: Union[TextOut, str]) -> None:
         if not isinstance(v, TextOut):
             v = self._writer.construct_text(v)
-        self._writer._put(self._offset + o, struct.pack("<I", v._offset - 8))
+        self._writer._put(self._offset + o, pack48_(v._offset - 10))
 
     def _set_bytes(self, o: int, v: Union[BytesOut, bytes]) -> None:
         if not isinstance(v, BytesOut):
             v = self._writer.construct_bytes(v)
-        self._writer._put(self._offset + o, struct.pack("<I", v._offset - 8))
+        self._writer._put(self._offset + o, pack48_(v._offset - 10))
 
     def _set_list(self, o: int, v: "OutList") -> None:
-        self._writer._put(self._offset + o, struct.pack("<I", v._offset - 8))
+        self._writer._put(self._offset + o, pack48_(v._offset - 10))
 
     def _get_uint16(self, o: int) -> int:
         return struct.unpack(
@@ -416,18 +441,18 @@ class TableOut(object):
 
     def _add_inplace_text(self, o: int, t: str) -> None:
         tt = t.encode("utf-8")
-        self._writer._put(self._offset + o, struct.pack("<I", len(tt)))
+        self._writer._put(self._offset + o, pack48_(len(tt)))
         self._writer._reserve(len(tt) + 1)
         self._writer._write(tt)
         self._writer._write(b"\0")
 
     def _add_inplace_bytes(self, o: int, t: bytes) -> None:
-        self._writer._put(self._offset + o, struct.pack("<I", len(t)))
+        self._writer._put(self._offset + o, pack48_(len(t)))
         self._writer._reserve(len(t))
         self._writer._write(t)
 
     def _set_inplace_list(self, o: int, size: int) -> None:
-        self._writer._put(self._offset + o, struct.pack("<I", size))
+        self._writer._put(self._offset + o, pack48_(size))
 
 
 class UnionOut(object):
@@ -439,17 +464,18 @@ class UnionOut(object):
         self._end = end
 
     def _set(self, idx: int, offset: int) -> None:
-        self._writer._put(self._offset, struct.pack("<HI", idx, offset))
+        offsetlow, offsethigh = split48_(offset)
+        self._writer._put(self._offset, struct.pack("<HIH", idx, offsetlow, offsethigh))
 
     def _set_text(self, idx: int, v: Union[TextOut, str]) -> None:
         if not isinstance(v, TextOut):
             v = self._writer.construct_text(v)
-        self._set(idx, v._offset - 8)
+        self._set(idx, v._offset - 10)
 
     def _set_bytes(self, idx: int, v: Union[BytesOut, bytes]) -> None:
         if not isinstance(v, BytesOut):
             v = self._writer.construct_bytes(v)
-        self._set(idx, v._offset - 8)
+        self._set(idx, v._offset - 10)
 
     def _add_inplace_text(self, idx: int, v: str) -> None:
         assert self._writer._used == self._end
@@ -475,9 +501,10 @@ class OutList:
     ) -> None:
         """Private constructor. Use factory methods on writer"""
         self._writer = writer
-        writer._reserve(len(d) + 8)
+        writer._reserve(len(d) + 10)
         if with_weader:
-            writer._write(struct.pack("<II", LIST_MAGIC, size))
+            sizelow, sizehigh = split48_(size)
+            writer._write(struct.pack("<IIH", LIST_MAGIC, sizelow, sizehigh))
         self._offset = writer._used
         self._size = size
         writer._write(d)
@@ -551,7 +578,7 @@ class TableListOut(OutList, Generic[TO]):
         self, writer: "Writer", t: Type[TO], size: int, with_header: bool = True
     ) -> None:
         """Private constructor. Use factory methods on writer"""
-        super().__init__(writer, b"\0\0\0\0" * size, size, with_header)
+        super().__init__(writer, b"\0\0\0\0\0\0" * size, size, with_header)
         self.table = t
 
     def __setitem__(self, index: int, value: TO) -> None:
@@ -561,7 +588,7 @@ class TableListOut(OutList, Generic[TO]):
             self.add(index)._copy(value)
             return
         assert isinstance(value, self.table)
-        self._writer._put(self._offset + index * 4, struct.pack("I", value._offset - 8))
+        self._writer._put(self._offset + index * 6, pack48_(value._offset - 10))
 
     def add(self, index: int) -> TO:
         assert 0 <= index < self._size
@@ -573,27 +600,27 @@ class TableListOut(OutList, Generic[TO]):
 class TextListOut(OutList):
     def __init__(self, writer: "Writer", size: int, with_header: bool = True) -> None:
         """Private constructor. Use factory methods on writer"""
-        super().__init__(writer, b"\0\0\0\0" * size, size, with_header)
+        super().__init__(writer, b"\0\0\0\0\0\0" * size, size, with_header)
 
     def __setitem__(self, index: int, value: Union[TextOut, str]) -> None:
         """Add value to list at index"""
         assert 0 <= index < self._size
         if not isinstance(value, TextOut):
             value = self._writer.construct_text(value)
-        self._writer._put(self._offset + index * 4, struct.pack("I", value._offset - 8))
+        self._writer._put(self._offset + index * 6, pack48_(value._offset - 10))
 
 
 class BytesListOut(OutList):
     def __init__(self, writer: "Writer", size: int, with_header: bool = True) -> None:
         """Private constructor. Use factory methods on writer"""
-        super().__init__(writer, b"\0\0\0\0" * size, size, with_header)
+        super().__init__(writer, b"\0\0\0\0\0\0" * size, size, with_header)
 
     def __setitem__(self, index: int, value: Union[BytesOut, bytes]) -> None:
         """Add value to list at index"""
         assert 0 <= index < self._size
         if not isinstance(value, BytesOut):
             value = self._writer.construct_bytes(value)
-        self._writer._put(self._offset + index * 4, struct.pack("I", value._offset - 8))
+        self._writer._put(self._offset + index * 6, pack48_(value._offset - 10))
 
 
 class UnionListOut(OutList, Generic[UO]):
@@ -601,11 +628,11 @@ class UnionListOut(OutList, Generic[UO]):
         self, writer: "Writer", u: Type[UO], size: int, with_header: bool = True
     ) -> None:
         """Private constructor. Use factory methods on writer"""
-        super().__init__(writer, b"\0\0\0\0\0\0" * size, size, with_header)
+        super().__init__(writer, b"\0\0\0\0\0\0\0\0" * size, size, with_header)
         self._u = u
 
     def __getitem__(self, index: int) -> B:
-        return self._u(self._writer, self._offset + index * 6)
+        return self._u(self._writer, self._offset + index * 8)
 
 
 class Writer:
@@ -625,7 +652,7 @@ class Writer:
 
     def __init__(self):
         self._data = bytearray(b"\0" * 256)
-        self._used = 8
+        self._used = 10
 
     def construct_table(self, t: Type[TO]) -> TO:
         """Construct a table of the given type"""
@@ -683,16 +710,18 @@ class Writer:
         return UnionListOut[UO](self, u, size)
 
     def construct_bytes(self, b: bytes) -> BytesOut:
-        self._reserve(len(b) + 8)
-        self._write(struct.pack("<II", BYTES_MAGIC, len(b)))
+        self._reserve(len(b) + 10)
+        sizelow, sizehigh = split48_(len(b))
+        self._write(struct.pack("<IIH", BYTES_MAGIC, sizelow, sizehigh))
         o = self._used
         self._write(b)
         return BytesOut(o)
 
     def construct_text(self, t: str) -> TextOut:
         tt = t.encode("utf-8")
-        self._reserve(len(tt) + 9)
-        self._write(struct.pack("<II", TEXT_MAGIC, len(tt)))
+        self._reserve(len(tt) + 11)
+        sizelow, sizehigh = split48_(len(tt))
+        self._write(struct.pack("<IIH", TEXT_MAGIC, sizelow, sizehigh))
         o = self._used
         self._write(tt)
         self._write(b"\0")
@@ -705,5 +734,6 @@ class Writer:
 
     def finalize(self, root: TableOut) -> bytes:
         """Return finalized message given root object"""
-        self._data[0:8] = struct.pack("<II", MESSAGE_MAGIC, root._offset - 8)
+        offsetlow, offsethigh = split48_(root._offset - 10)
+        self._data[0:10] = struct.pack("<IIH", MESSAGE_MAGIC, offsetlow, offsethigh)
         return self._data[0 : self._used]

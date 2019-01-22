@@ -130,7 +130,7 @@ class Generator:
         lname = lcamel(uname)
         typeName, rawType = self.in_list_types(node)
         self.o("\tbool has%s() const noexcept {" % (uname))
-        self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;" % (node.offset))
+        self.o("\t\treturn get48_<%d>() != 0;" % (node.offset))
         self.o("\t}")
         self.o("\t")
         self.output_doc(node, "\t")
@@ -184,7 +184,7 @@ class Generator:
                 "\tscalgoproto::ListOut<%s> add%s(size_t size) noexcept {"
                 % (typeName, uname)
             )
-            self.o("\t\tsetInner_<std::uint32_t, %d>(size);" % (node.offset))
+            self.o("\t\tset48_<%d>(size);" % (node.offset))
             self.o(
                 "\t\treturn addInplaceList_<%s>(writer_, offset_ + SIZE, size);"
                 % (typeName)
@@ -194,9 +194,7 @@ class Generator:
                 "\t%s & set%s(scalgoproto::ListOut<%s> value) noexcept {"
                 % (outer, uname, typeName)
             )
-            self.o(
-                "\t\tsetInner_<std::uint32_t, %d>(getOffset_(value)-8);" % (node.offset)
-            )
+            self.o("\t\tset48_<%d>(getOffset_(value)-10);" % (node.offset))
             self.o("\t\treturn * this;")
             self.o("\t}")
             self.o(
@@ -204,9 +202,7 @@ class Generator:
                 % (typeName, uname)
             )
             self.o("\t\tauto res = writer_.constructList<%s>(size);" % typeName)
-            self.o(
-                "\t\tsetInner_<std::uint32_t, %d>(getOffset_(res)-8);" % (node.offset)
-            )
+            self.o("\t\tset48_<%d>(getOffset_(res)-10);" % (node.offset))
             self.o("\t\treturn res;")
         self.o("\t}")
         self.o(
@@ -234,7 +230,7 @@ class Generator:
                 % (uname, typeName)
             )
             self.o("\t\tsetType_(%d);" % (idx))
-            self.o("\t\tsetObject_(getOffset_(value)-8);")
+            self.o("\t\tsetObject_(getOffset_(value)-10);")
             self.o("\t}")
             self.o(
                 "\tscalgoproto::ListOut<%s> add%s(size_t size) noexcept {"
@@ -387,7 +383,7 @@ class Generator:
 
     def generate_table_in(self, node: Value, uname: str) -> None:
         self.o("\tbool has%s() const noexcept {" % (uname))
-        self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;" % (node.offset))
+        self.o("\t\treturn get48_<%d>() != 0;" % (node.offset))
         self.o("\t}")
         self.o("\t")
         if not node.table.empty:
@@ -421,7 +417,7 @@ class Generator:
 
     def generate_table_out(self, node: Value, uname: str, outer: str) -> None:
         self.o(
-            "\tbool has%s() const noexcept {return getInner_<std::uint32_t, %d>() != 0;}"
+            "\tbool has%s() const noexcept {return get48_<%d>() != 0;}"
             % (uname, node.offset)
         )
         self.o("")
@@ -431,9 +427,7 @@ class Generator:
                 % (outer, uname, self.qualify(node.table))
             )
             self.o("\t\tassert(!has%s());" % (uname))
-            self.o(
-                "\t\tsetInner_<std::uint32_t, %d>(getOffset_(value)-8);" % (node.offset)
-            )
+            self.o("\t\tset48_<%d>(getOffset_(value)-10);" % (node.offset))
             self.o("\t\treturn *this;")
             self.o("\t}")
             self.o("\t%sOut add%s() noexcept {" % (self.qualify(node.table), uname))
@@ -442,9 +436,7 @@ class Generator:
                 "\t\tauto res = writer_.construct<%sOut>();"
                 % (self.qualify(node.table),)
             )
-            self.o(
-                "\t\tsetInner_<std::uint32_t, %d>(getOffset_(res)-8);" % (node.offset)
-            )
+            self.o("\t\tset48_<%d>(getOffset_(res)-10);" % (node.offset))
             self.o("\t\treturn res;")
             self.o("\t}")
             self.o(
@@ -457,8 +449,7 @@ class Generator:
             self.o("\t%sOut add%s() noexcept {" % (self.qualify(node.table), uname))
             self.o("\t\tassert(!has%s());" % (uname))
             self.o(
-                "\t\tsetInner_<std::uint32_t, %d>(%sOut::SIZE);"
-                % (node.offset, self.qualify(node.table))
+                "\t\tset48_<%d>(%sOut::SIZE);" % (node.offset, self.qualify(node.table))
             )
             self.o(
                 "\t\treturn addInplaceTable_<%sOut>(writer_, offset_+SIZE);"
@@ -474,7 +465,7 @@ class Generator:
         else:
             self.o("\t%s & set%s() noexcept {" % (uname, outer))
             self.o("\t\tassert(!has%s());" % (uname))
-            self.o("\t\tsetInner_<std::uint32_t, %d>(0);" % (node.offset))
+            self.o("\t\tset48_<%d>(0);" % (node.offset))
             self.o("\t\treturn *this;")
             self.o("\t}")
 
@@ -492,7 +483,7 @@ class Generator:
                 % (uname, self.qualify(node.table))
             )
             self.o("\t\tsetType_(%d);" % (idx))
-            self.o("\t\tsetObject_(getOffset_(value)-8);")
+            self.o("\t\tsetObject_(getOffset_(value)-10);")
             self.o("\t}")
             self.o("\t%sOut add%s() noexcept {" % (self.qualify(node.table), uname))
             self.o(
@@ -525,7 +516,7 @@ class Generator:
 
     def generate_text_in(self, node: Value, uname: str) -> None:
         self.o("\tbool has%s() const noexcept {" % (uname))
-        self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;" % (node.offset))
+        self.o("\t\treturn get48_<%d>() != 0;" % (node.offset))
         self.o("\t}")
         self.o("\t")
         self.output_doc(node, "\t")
@@ -546,23 +537,23 @@ class Generator:
 
     def generate_text_out(self, node: Value, uname: str, outer: str) -> None:
         self.o(
-            "\tbool has%s() const noexcept {return getInner_<std::uint32_t, %d>() != 0;}"
+            "\tbool has%s() const noexcept {return get48_<%d>() != 0;}"
             % (uname, node.offset)
         )
         if node.inplace:
             self.o("\tvoid add%s(std::string_view text) noexcept {" % (uname))
-            self.o("\t\tsetInner_<std::uint32_t, %d>(text.size());" % (node.offset))
+            self.o("\t\tset48_<%d>(text.size());" % (node.offset))
             self.o("\t\taddInplaceText_(writer_, offset_+SIZE, text);")
         else:
             self.o("\t%s set%s(scalgoproto::TextOut t) noexcept {" % (outer, uname))
-            self.o("\t\tsetInner_<std::uint32_t, %d>(getOffset_(t));" % (node.offset))
+            self.o("\t\tset48_<%d>(getOffset_(t));" % (node.offset))
             self.o("\t\treturn *this;")
             self.o("\t}")
             self.o(
                 "\tscalgoproto::TextOut add%s(std::string_view t) noexcept {" % (uname)
             )
             self.o("\t\tauto res = writer_.constructText(t);")
-            self.o("\t\tsetInner_<std::uint32_t, %d>(getOffset_(res));" % (node.offset))
+            self.o("\t\tset48_<%d>(getOffset_(res));" % (node.offset))
             self.o("\t\treturn res;")
         self.o("\t}")
 
@@ -589,7 +580,7 @@ class Generator:
 
     def generate_bytes_in(self, node: Value, uname: str) -> None:
         self.o("\tbool has%s() const noexcept {" % (uname))
-        self.o("\t\treturn getInner_<std::uint32_t, %d>(0) != 0;" % (node.offset))
+        self.o("\t\treturn get48_<%d>() != 0;" % (node.offset))
         self.o("\t}")
         self.o("\t")
         self.output_doc(node, "\t")
@@ -610,19 +601,19 @@ class Generator:
 
     def generate_bytes_out(self, node: Value, uname: str, outer: str) -> None:
         self.o(
-            "\tbool has%s() const noexcept {return getInner_<std::uint32_t, %d>() != 0;}"
+            "\tbool has%s() const noexcept {return get48_<%d>() != 0;}"
             % (uname, node.offset)
         )
         if node.inplace:
             self.o("\tvoid add%s(const char * data, size_t size) noexcept {" % (uname,))
-            self.o("\t\tsetInner_<std::uint32_t, %d>(size);" % (node.offset,))
+            self.o("\t\tset48_<%d>(size);" % (node.offset,))
             self.o("\t\taddInplaceBytes_(writer_, offset_+SIZE, data, size);")
             self.o("\t}")
             self.o("\tvoid add%s(scalgoproto::Bytes bytes) noexcept {" % (uname,))
             self.o("\t\tadd%s(bytes.first, bytes.second);" % (uname,))
         else:
             self.o("\t%s & set%s(scalgoproto::BytesOut b) noexcept {" % (outer, uname))
-            self.o("\t\tsetInner_<std::uint32_t, %d>(getOffset_(b));" % (node.offset,))
+            self.o("\t\tset48_<%d>(getOffset_(b));" % (node.offset,))
             self.o("\t\treturn *this;")
             self.o("\t}")
             self.o(
@@ -630,9 +621,7 @@ class Generator:
                 % (uname,)
             )
             self.o("\t\tauto res = writer_.constructBytes(data, size);")
-            self.o(
-                "\t\tsetInner_<std::uint32_t, %d>(getOffset_(res));" % (node.offset,)
-            )
+            self.o("\t\tset48_<%d>(getOffset_(res));" % (node.offset,))
             self.o("\t\treturn res;")
             self.o("\t}")
             self.o(
@@ -686,12 +675,12 @@ class Generator:
         self.o("\t\tassert(has%s());" % (uname))
         if node.inplace:
             self.o(
-                "\t\treturn getObject_<%sIn<true>>(reader_, getInner_<std::uint16_t, %d>(), start_ + size_, getInner_<std::uint32_t, %d>());"
+                "\t\treturn getObject_<%sIn<true>>(reader_, getInner_<std::uint16_t, %d>(), start_ + size_, get48_<%d>());"
                 % (self.qualify(node.union), node.offset, node.offset + 2)
             )
         else:
             self.o(
-                "\t\treturn getObject_<%sIn<false>>(reader_, getInner_<std::uint16_t, %d>(), getInner_<std::uint32_t, %d>());"
+                "\t\treturn getObject_<%sIn<false>>(reader_, getInner_<std::uint16_t, %d>(), get48_<%d>());"
                 % (self.qualify(node.union), node.offset, node.offset + 2)
             )
         self.o("\t}")
@@ -993,7 +982,7 @@ class Generator:
         self.o("\tfriend class scalgoproto::Out;")
         self.o("\tfriend class scalgoproto::Writer;")
         self.o("public:")
-        self.o("\tstatic constexpr std::uint32_t SIZE = %d;" % (len(table.default)))
+        self.o("\tstatic constexpr std::uint64_t SIZE = %d;" % (len(table.default)))
         self.o("\tstatic constexpr std::uint32_t MAGIC = 0x%08X;" % (table.magic))
         self.o("\tusing IN=%sIn;" % (table.name))
         self.o("protected:")
