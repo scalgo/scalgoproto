@@ -88,6 +88,8 @@ class ListIn(Sequence[B]):
             idx += self._size
         if not 0 <= idx < self._size:
             raise IndexError()
+        if not self.has(idx):
+            raise IndexError()
         return self._getter(self._reader, self._offset, idx)
 
     def __str__(self) -> str:
