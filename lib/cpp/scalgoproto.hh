@@ -773,6 +773,14 @@ protected:
 		memcpy(writer.data+start, data, size);
 	}
 
+	static char * addInplaceBytes_(Writer & writer, size_t start, size_t size) noexcept {
+		assert(writer.size == start);
+		(void)start;
+		writer.expand(size);
+		return writer.data+start;
+	}
+
+	
 	static void addInplaceText_(Writer & writer, size_t start, std::string_view str) noexcept {
 		assert(writer.size == start);
 		(void)start;

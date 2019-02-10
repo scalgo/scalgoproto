@@ -611,6 +611,9 @@ class Generator:
             self.o("\t}")
             self.o("\tvoid add%s(scalgoproto::Bytes bytes) noexcept {" % (uname,))
             self.o("\t\tadd%s(bytes.first, bytes.second);" % (uname,))
+            self.o("\t}")
+            self.o("\tchar * add%s(size_t size) noexcept {" % (uname, ))
+            self.o("\t\treturn addInplaceBytes_(writer_, offset_+SIZE, size);")
         else:
             self.o("\t%s & set%s(scalgoproto::BytesOut b) noexcept {" % (outer, uname))
             self.o("\t\tset48_<%d>(getOffset_(b));" % (node.offset,))
