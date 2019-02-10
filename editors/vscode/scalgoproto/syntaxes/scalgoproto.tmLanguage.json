@@ -1,0 +1,322 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "scalgoproto",
+	"patterns": [
+		{"include": "#comment"},
+		{"include": "#namespace-decl"},
+		{"include": "#import-decl"},
+		{"include": "#enum-decl"},
+		{"include": "#struct-decl"},
+		{"include": "#union-decl"},
+		{"include": "#table-decl"}
+	],
+	"repository": {
+		"basic-type": {
+			"patterns": [{
+				"name": "entity.name.function",
+				"match": "\\b(U8|I8|U16|I16|U32|I32|U64|I64|F32|F64|Bool|Text|Bytes)\\b"
+			}]
+		},
+		"line-comment": {
+			"begin": "(?=(//|#))",
+			"end": "\\n",
+			"name": "comment.line.double-slash.scalgoproto"
+	  	},
+		"block-comment": {
+			"begin": "(?=/\\*)",
+			"end": "(?<!/)\\*/",
+	  		"name": "comment.block.scalgoproto"
+		},
+		"doc-comment": {
+			"begin": "(?=/\\*\\*)",
+			"end": "(?<!/)\\*/",
+	  		"name": "comment.block.documentation.scalgoproto"
+		},
+		"comment": {
+			"patterns": [
+			  {"include": "#doc-comment"},
+			  {"include": "#line-comment"},
+			  {"include": "#block-comment"}
+			]
+		},
+		"nsn": {
+			"match": "\\b(?!(namespace)\\W)([_a-zA-Z]\\w*)\\b",
+			"name": "entity.name.section.scalgoproto"
+	  	},
+		"namespace-decl": {
+			"begin": "\\b(namespace)\\b",
+			"beginCaptures": {
+			  "1": {
+				"name": "keyword.control.scalgoproto"
+			  }
+			},
+			"end": ";",
+			"patterns": [
+			  {"include": "#nsn" }
+			]
+		},
+		"import-decl": {
+			"begin": "\\b(import)\\b",
+			"beginCaptures": {
+			  "1": {
+				"name": "keyword.control.scalgoproto"
+			  }
+			},
+			"end": ";",
+			"patterns": [
+			  {"include": "#nsn" }
+			]
+		},
+		"uname": {
+			"patterns": [{
+				"match": "\\b(?!(U8|I8|U16|I16|U32|I32|U64|I64|F32|F64|Bool|Text|Bytes)\\W)[A-Z][a-zA-Z0-9]*\\b",
+				"name": "entity.name.type.scalgoproto"
+			},{
+				"match": "\\b([a-z0-9_][_a-zA-Z0-9]\\w*)\\b",
+				"name": "invalid.baduname.scalgoproto"
+			}]
+		 },
+		 "lname": {
+			"patterns": [{
+				"match": "\\b(?!(namespace,struct,enum,union,inplace,list,table)\\W)[a-z][a-zA-Z0-9]*\\b",
+				"name": "entity.name.tag.scalgoproto"
+			},{
+				"match": "\\b([A-Z0-9_][_a-zA-Z0-9]\\w*)\\b",
+				"name": "invalid.badlname.scalgoproto"
+			}]
+		 },
+		 "brief-enum-decl": {
+			"begin": "\\b(enum)\\b",
+			"beginCaptures": {
+			  "1": {
+				"name": "keyword.control.scalgoproto"
+			  }
+			},
+			"end": "(?<=})",
+			"patterns": [
+				{"include": "#comment"},
+				{"include": "#invalidmagic"},
+				{
+					"begin": "{",
+					"end": "}",
+					"patterns": [
+						{"include": "#comments"},
+						{"include": "#lname"}
+					]
+		 	 }]
+		},
+		"enum-decl": {
+			"begin": "\\b(enum)\\b",
+			"beginCaptures": {
+			  "1": {
+				"name": "keyword.control.scalgoproto"
+			  }
+			},
+			"end": "(?<=})",
+			"patterns": [
+				{"include": "#uname"},
+				{"include": "#comment"},
+				{"include": "#invalidmagic"},
+				{
+					"begin": "{",
+					"end": "}",
+					"patterns": [
+						{"include": "#comments"},
+						{"include": "#lname"}
+					]
+		 	 }]
+		},
+		"struct-field-end": {
+			"begin": ":",
+			"end": "(;|,)",
+			"patterns": [
+				{"include": "#comments"},
+				{"include": "#brief-struct-decl"},
+				{"include": "#brief-enum-decl"},
+				{"include": "#basic-type"},
+				{"include": "#uname"}
+			]
+		},
+		"struct-members": {
+			"patterns": [
+				{"include": "#comments"},
+				{"include": "#lname"},
+				{"include": "#struct-field-end"},
+				{"include": "#brief-struct-decl"}
+			]
+		},
+		"brief-struct-decl": {
+			"begin": "\\W(struct)\\b",
+			"beginCaptures": {
+				"1": {
+				  "name": "keyword.control.scalgoproto"
+				}
+			},
+			"end": "(?<=})",
+			"patterns": [
+				{"include": "#comment"},
+				{"include": "#invalidmagic"},
+				{
+					"begin": "{",
+					"end": "}",
+					"patterns": [
+						{"include": "#struct-members"}
+					]
+				}
+			]
+		},
+		"struct-decl": {
+			"begin": "\\b(struct)\\b",
+			"beginCaptures": {
+				"1": {
+				  "name": "keyword.control.scalgoproto"
+				}
+			},
+			"end": "(?<=})",
+			"patterns": [
+				{"include": "#uname"},
+				{"include": "#comment"},
+				{"include": "#invalidmagic"},
+				{
+					"begin": "{",
+					"end": "}",
+					"patterns": [
+						{"include": "#struct-members"}
+					]
+				}
+			]
+		},
+		"union-table-field-end": {
+			"begin": ":",
+			"end": "(;|,)",
+			"patterns": [
+				{
+					"name": "keyword.control.scalgoproto",
+					"match": "(inplace|list|optional)"
+				},
+				{"include": "#brief-struct-decl"},
+				{"include": "#brief-table-decl"},
+				{"include": "#brief-union-decl"},
+				{"include": "#brief-enum-decl"},
+				{"include": "#ultra-brief-table-decl"},
+				{"include": "#comments"},
+				{"include": "#uname"},
+				{"include": "#basic-type"}
+			]
+		},
+		"union-tabel-members": {
+			"patterns": [
+				{"include": "#comments"},
+				{"include": "#lname"},
+				{"include": "#union-table-field-end"},
+				{"include": "#ultra-brief-table-decl"}
+			]
+		},
+		"brief-table-decl": {
+			"begin": "\\b(table)\\b",
+			"beginCaptures": {
+				"1": {
+				  "name": "keyword.control.scalgoproto"
+				}
+			},
+			"end": "(?<=})",
+			"patterns": [
+				{"include": "#comment"},
+				{"include": "#magic"},
+				{
+					"begin": "{",
+					"end": "}",
+					"patterns": [
+						{"include":"#union-tabel-members"}
+					]
+				}
+			]
+		},
+		"ultra-brief-table-decl": {
+			"begin": "{",
+			"end": "}",
+			"patterns": [
+				{"include":"#union-tabel-members"}
+			]
+		},
+		"table-decl": {
+			"scopeName": "scalgoproto.table",
+			"begin": "\\b(table)\\b",
+			"beginCaptures": {
+				"1": {
+				  "name": "keyword.control.scalgoproto"
+				}
+			},
+			"end": "(?<=})",
+			"patterns": [
+				{"include": "#uname"},
+				{"include": "#comment"},
+				{"include": "#magic"},
+				{
+					"begin": "{",
+					"end": "}",
+					"patterns": [
+						{"include":"#union-tabel-members"}
+					]
+				}
+			]
+		},
+		"brief-union-decl": {
+			"begin": "\\b(union)\\b",
+			"beginCaptures": {
+				"1": {
+				  "name": "keyword.control.scalgoproto"
+				}
+			},
+			"end": "(?<=})",
+			"patterns": [
+				{"include": "#comment"},
+				{"include": "#invalidmagic"},
+				{
+					"begin": "{",
+					"end": "}",
+					"patterns": [
+						{"include":"#union-tabel-members"}
+					]
+				}
+			]
+		},
+		"union-decl": {
+			"scopeName": "scalgoproto.union",
+			"begin": "\\b(union)\\b",
+			"beginCaptures": {
+				"1": {
+				  "name": "keyword.control.scalgoproto"
+				}
+			},
+			"end": "(?<=})",
+			"patterns": [
+				{"include": "#uname"},
+				{"include": "#comment"},
+				{"include": "#invalidmagic"},
+				{
+					"begin": "{",
+					"end": "}",
+					"patterns": [
+						{"include":"#union-tabel-members"}
+					]
+				}
+			]
+		},
+		"invalidmagic": {
+			"patterns": [{
+				"name": "invalid.badmagic.scalgoproto",
+				"match": "\\@[0-9a-zA-Z]*"
+			}]
+		},
+		"magic": {
+			"patterns": [{
+				"name": "constant.language.scalgoproto",
+				"match": "(\\@[0-9A-F]{8,8})\\b "
+			}, {
+				"include": "@invalidmagic"
+			}]
+		}
+	},
+	"scopeName": "source.spr"
+}

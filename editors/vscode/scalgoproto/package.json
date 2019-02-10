@@ -1,0 +1,26 @@
+{
+    "name": "scalgoproto",
+    "displayName": "scalgoproto",
+    "description": "scalgoproto language support",
+    "version": "0.0.1",
+    "publisher": "scalgo",
+    "engines": {
+        "vscode": "^1.31.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [{
+            "id": "scalgoproto",
+            "aliases": ["scalgoproto", "scalgoproto"],
+            "extensions": [".spr"],
+            "configuration": "./language-configuration.json"
+        }],
+        "grammars": [{
+            "language": "scalgoproto",
+            "scopeName": "source.spr",
+            "path": "./syntaxes/scalgoproto.tmLanguage.json"
+        }]
+    }
+}
