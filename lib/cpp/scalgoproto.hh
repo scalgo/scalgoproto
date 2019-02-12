@@ -616,6 +616,7 @@ public:
 
 	template <typename ... TT>
 	T add(size_t index, TT ... vv) {
+		assert(index < size_);
 		if constexpr(A::hasAdd)
 			return A::add(writer_, offset_, index, std::forward<TT>(vv)...);
 		else {
