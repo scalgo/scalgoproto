@@ -402,15 +402,19 @@ class ListIn;
 template <typename T>
 class ListInIterator {
 private:
-	const Reader & reader;
+	const Reader * reader;
 	const char * start;
 	std::uint64_t index;
 	using A = ListAccess<T>;
 	friend class ListIn<T>;
-	ListInIterator(const Reader & reader, const char * start, std::uint64_t index) noexcept : reader(reader), start(start), index(index) {}
+	ListInIterator(const Reader & reader, const char * start, std::uint64_t index) noexcept : reader(&reader), start(start), index(index) {}
 public:
 	using value_type = T;
 	using size_type = std::size_t;
+	using difference_type = int;
+	using pointer = T*;
+	using reference = T&;
+	using iterator_category = std::random_access_iterator_tag;
 
 	ListInIterator(const ListInIterator &) = default;
 	ListInIterator(ListInIterator &&) = default;
@@ -427,7 +431,7 @@ public:
 	value_type operator*() const noexcept {
 		if constexpr(A::optional)
 			assert(A::has(start, index));
-		return A::get(reader, start, index);
+		return A::get(*reader, start, index);
 	}
 
 	//Compare
@@ -443,10 +447,14 @@ public:
 	ListInIterator & operator--() noexcept {index--; return *this;}
 	ListInIterator operator++(int) noexcept {ListInIterator t=*this; index++; return t;}
 	ListInIterator operator--(int)  noexcept {ListInIterator t=*this; index--; return t;}
-	ListInIterator operator+(int delta) const noexcept {ListInIterator t=*this; t += delta; return t;}
-	ListInIterator operator-(int delta) const noexcept {ListInIterator t=*this; t -= delta; return t;}
-	ListInIterator & operator+=(int delta) noexcept {index += delta; return *this;}
-	ListInIterator & operator-=(int delta) noexcept {index -= delta; return *this;}
+	ListInIterator operator+(difference_type delta) const noexcept {ListInIterator t=*this; t += delta; return t;}
+	ListInIterator operator-(difference_type delta) const noexcept {ListInIterator t=*this; t -= delta; return t;}
+	ListInIterator & operator+=(difference_type delta) noexcept {index += delta; return *this;}
+	ListInIterator & operator-=(difference_type delta) noexcept {index -= delta; return *this;}
+
+	difference_type operator-(ListInIterator & o) const noexcept {
+		return difference_type(index) - difference_type(o.index);
+	}
 };
 
 
