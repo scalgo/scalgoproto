@@ -211,6 +211,16 @@ class Generator:
         )
         self.o("\t\treturn add%s(in.size()).copy_(in);" % uname)
         self.o("\t}")
+        self.o(
+            "\tscalgoproto::ListOut<%s> add%s(const %s * data, size_t size) noexcept {"
+            % (typeName, uname, typeName)
+        )
+        self.o("\t\tauto v = add%s(size);" % uname)
+        self.o("\t\tfor (size_t i = 0; i < size; ++i) {")
+        self.o("\t\t\tv[i] = data[i];")
+        self.o("\t\t}")
+        self.o("\t\treturn v;")
+        self.o("\t}")
 
     def generate_union_list_out(
         self, node: Value, uname: str, inplace: bool, idx: int
