@@ -594,7 +594,7 @@ class Generator:
         self.o("\t}")
         self.o("\t")
         self.output_doc(node, "\t")
-        self.o("\tscalgoproto::Bytes %s()  {" % (lcamel(uname)))
+        self.o("\tscalgoproto::Bytes %s() const {" % (lcamel(uname)))
         self.o(
             "\t\treturn getBytes_(getPtr_<%s, scalgoproto::BYTESMAGIC, %d>());"
             % (bs(node.inplace), node.offset)
@@ -603,7 +603,7 @@ class Generator:
 
     def generate_union_bytes_in(self, node: Value, uname: str) -> None:
         self.output_doc(node, "\t")
-        self.o("\tscalgoproto::Bytes %s() {" % (lcamel(uname)))
+        self.o("\tscalgoproto::Bytes %s() const {" % (lcamel(uname)))
         self.o(
             "\t\treturn scalgoproto::In::getBytes_(this->template getPtr_<scalgoproto::BYTESMAGIC>());"
         )
