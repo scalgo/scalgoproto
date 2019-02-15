@@ -122,7 +122,7 @@ private:
 	template <std::uint32_t magic, std::uint64_t mult=1, std::uint64_t add=0>
 	Ptr getPtr_(std::uint64_t offset) const {
 		// Validate that the offset is within the reader boundary
-		if ( offset + 10 >= size) throw Error();
+		if (offset + 10 > size) throw Error();
 		// Check that we have the right magic
 		std::uint32_t read_magic;
 		memcpy(&read_magic, data+offset, 4);
