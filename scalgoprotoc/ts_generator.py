@@ -601,7 +601,7 @@ class Generator:
         self.o()
 
     def generate(self, ast: List[AstNode]) -> None:
-        imports: Dict[str, Set[str]] = {}
+        imports: Dict[int, Set[str]] = {}
         for node in ast:
             if node.document != 0:
                 continue
