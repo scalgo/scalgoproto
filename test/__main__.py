@@ -310,6 +310,15 @@ def main():
         # runTest("ts out extend2", lambda: runTs("out_extend2", "test/extend2.bin"))
         runTest("py in extend2", lambda: runTs("in_extend2", "test/extend2.bin"))
 
+    if runTest("ts setup union", lambda: runTsSetup(["test/union.spr"])):
+        # runTest(
+        #     "ts out union",
+        #     lambda: runTs("out_union", "test/union.bin", "test_union.ts"),
+        # )
+        runTest(
+            "ts in union", lambda: runTs("in_union", "test/union.bin", "test_union.ts")
+        )
+
     print("=" * 80)
     if not failures:
         print("ALL GOOD")
