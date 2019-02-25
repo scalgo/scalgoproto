@@ -346,4 +346,63 @@ export class Reader {
 	}
 }
 
-export class Writer {}
+export abstract class TableOut {
+	static readonly _MAGIC: number = 0;
+	static readonly _SIZE: number = 0;
+	_offset: number = 0;
+
+	constructor(public _writer: Writer,
+				public withHeader: boolean,
+				def: string,
+				magic: number) {
+		this._writer._reserve(def.length + (withHeader ? 10 : 0))
+		if (withHeader) this._writer._data.setUint32(this._writer._size, magic, true);
+		this._writer._writeUint48(this._writer._size + 4,
+								  def.length) this._writer._size += 10 this._offset =
+		  this._writer._size
+		// writer._write(default)
+	}
+};
+
+export class Writer {
+	_buffer: ArrayBuffer;
+	_data: DataView;
+	_size: number;
+
+	constructor(data: ArrayBuffer) {
+		this._buffer = new ArrayBuffer(1024);
+		this._data = new DataView(data);
+		this._size = 10;
+	}
+
+	_reserve(o: number) {
+		if (this._size + o <= this._buffer.byteLength) return;
+		const nb = new ArrayBuffer(this._buffer.byteLength * 2);
+		const nd = new Uint8Array(nb);
+		nd.set(new Uint8Array(this._buffer));
+		this._buffer = nb;
+		this._data = new DataView(this._buffer);
+	}
+
+	_writeUint48(o: number, v: number) {
+		const hi = v / 2 ** 32 | 0;
+		const lo = (v - hi * 2 ** 32) | 0;
+		this._data.setUint32(o, lo, true);
+		this._data.setUint16(o + 4, hi, true);
+	}
+
+	_writeInt64(o: number, v: number) {
+		let hi = v / 2 ** 32 | 0;
+		if (v < 0) --hi;
+		const lo = (v - hi * 2 ** 32) | 0;
+		this._data.setUint32(o, lo, true);
+		this._data.setInt32(o + 4, hi, true);
+	}
+
+	_writeUint64(o: number, v: number) {
+		const hi = v / 2 ** 32 | 0;
+		const lo = (v - hi * 2 ** 32) | 0;
+		this._data.setUint32(o, lo, true);
+		this._data.setUint32(o + 4, hi, true);
+	}
+}

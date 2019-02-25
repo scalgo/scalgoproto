@@ -480,8 +480,8 @@ class Generator:
             return
 
         # Generate table reader
+        self.output_doc(table, "\t")
         self.o("export class %sIn extends scalgoproto.TableIn {" % table.name)
-        self.output_doc(table, "    ")
         self.o("\tstatic readonly _MAGIC = 0x%08X;" % table.magic)
         self.o()
         self.o(
@@ -497,6 +497,29 @@ class Generator:
         self.o("}")
         self.o()
 
+        # Generate Table writer
+        self.output_doc(table, "\t")
+        self.o("export class %sOut extends scalgoproto.TableOut {" % table.name)
+        self.o("\tstatic readonly _MAGIC = 0x%08X;" % table.magic)
+        self.o("\tstatic readonly _SIZE = %d;" % len(table.default))
+        self.o("\tstatic readonly _IN = %sIn;" % (table.name))
+        self.o()
+        self.o(
+            "\t/** Private constructor. Call factory methods on scalgoproto.Reader to construct instances */"
+        )
+        self.o("\tconstructor(writer: scalgoproto.Writer, withHeader: boolean) {")
+        self.o(
+            '\t\tsuper(writer, withHeader, "%s", %sOut._MAGIC);'
+            % (cescape(table.default), table.name)
+        )
+        self.o("\t}")
+        self.o()
+        # for node in table.members:
+        #     self.generate_value_out(table, node)
+        # self.generate_table_copy(table)
+        self.o("}")
+        self.o()
+
     def generate_struct(self, node: Struct) -> None:
         # Recursively generate direct contained members
         for value in node.members:
@@ -508,6 +531,7 @@ class Generator:
         self.o("export class %s extends scalgoproto.StructType {" % node.name)
         ctor = []
         read = []
+        write = []
         for v in node.members:
             thing = ("", "", "", 0, 0, "")
             n = lcamel(self.value(v.identifier))
@@ -522,48 +546,90 @@ class Generator:
 
                 if v.type_.type == TokenType.I8:
                     read.append("reader._data.getInt8(offset + %d)" % (v.offset))
+                    write.append(
+                        "writer._data.setInt8(offset + %d, ins.%s)" % (v.offset, n)
+                    )
                 elif v.type_.type == TokenType.I16:
                     read.append("reader._data.getInt16(offset + %d, true)" % (v.offset))
+                    write.append(
+                        "writer._data.setInt16(offset + %d, ins.%s, true)"
+                        % (v.offset, n)
+                    )
                 elif v.type_.type == TokenType.I32:
                     read.append("reader._data.getInt32(offset + %d, true)" % (v.offset))
+                    write.append(
+                        "writer._data.setInt32(offset + %d, ins.%s, true)"
+                        % (v.offset, n)
+                    )
                 elif v.type_.type == TokenType.I64:
                     read.append("reader._readInt64(offset + %d)" % (v.offset))
+                    write.append(
+                        "writer._writeInt64(offset + %d, ins.%s)" % (v.offset, n)
+                    )
                 elif v.type_.type == TokenType.U8:
                     read.append("reader._data.getUint8(offset + %d)" % (v.offset))
+                    write.append(
+                        "writer._data.setUint8(offset + %d, ins.%s)" % (v.offset, n)
+                    )
                 elif v.type_.type == TokenType.U16:
                     read.append(
                         "reader._data.getUint16(offset + %d, true)" % (v.offset)
+                    )
+                    write.append(
+                        "writer._data.setUint16(offset + %d, ins.%s, true)"
+                        % (v.offset, n)
                     )
                 elif v.type_.type == TokenType.UI32:
                     read.append(
                         "reader._data.getUint32(offset + %d, true)" % (v.offset)
                     )
+                    write.append(
+                        "writer._data.setUint32(offset + %d, ins.%s, true)"
+                        % (v.offset, n)
+                    )
                 elif v.type_.type == TokenType.UI64:
                     read.append("reader._readUint64(offset + %d)" % (v.offset))
+                    write.append(
+                        "writer._writeUint64(offset + %d, ins.%s)" % (v.offset, n)
+                    )
                 elif v.type_.type == TokenType.F32:
                     read.append(
                         "reader._data.getFloat32(offset + %d, true)" % (v.offset)
+                    )
+                    write.append(
+                        "writer._data.setFloat32(offset + %d, ins.%s, true)"
+                        % (v.offset, n)
                     )
                 elif v.type_.type == TokenType.F64:
                     read.append(
                         "reader._data.getFloat64(offset + %d, true)" % (v.offset)
                     )
+                    write.append(
+                        "writer._data.setFloat64(offset + %d, ins.%s, true)"
+                        % (v.offset, n)
+                    )
                 elif v.type_.type == TokenType.BOOL:
                     read.append("reader._data.getUint8(offset + %d) != 0" % (v.offset))
+                    write.append(
+                        "writer._data.setUint8(offset + %d, ins.%s ? 1 : 0)"
+                        % (v.offset, n)
+                    )
             elif v.enum:
                 ctor.append("public %s: %s = 0" % (n, v.enum.name))
-                # write.append("writer._data[offset + %d] = int(ins.%s)" % (v.offset, n))
                 read.append(
                     "reader._data.getUint8(offset + %d) as %s" % (v.offset, v.enum.name)
+                )
+                write.append(
+                    "writer._data.setUint8(offset + %d, +ins.%s)" % (v.offset, n)
                 )
             elif v.struct:
                 ctor.append(
                     "public %s: %s = new %s()" % (n, v.struct.name, v.struct.name)
                 )
-                # write.append(
-                #     "%s._write(writer, offset + %d, ins.%s)"
-                #     % (v.struct.name, v.offset, n)
-                # )
+                write.append(
+                    "%s._write(writer, offset + %d, ins.%s)"
+                    % (v.struct.name, v.offset, n)
+                )
                 read.append("%s._read(reader, offset + %d)" % (v.struct.name, v.offset))
             else:
                 raise ICE()
@@ -575,17 +641,18 @@ class Generator:
             "\tstatic _write(writer: scalgoproto.Writer, offset: number, ins: %s) {"
             % node.name
         )
-
+        for line in write:
+            self.o("\t\t%s;" % line)
         self.o("\t}")
         self.o()
         self.o(
             "\tstatic _read(reader: scalgoproto.Reader, offset: number) : %s {"
             % node.name
         )
-        self.o("        return new %s(" % node.name)
+        self.o("\t\treturn new %s(" % node.name)
         for line in read:
-            self.o("            %s," % line)
-        self.o("        )")
+            self.o("\t\t\t%s," % line)
+        self.o("\t\t);")
         self.o("\t}")
         self.o("}")
         self.o()
