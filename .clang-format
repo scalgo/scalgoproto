@@ -1,0 +1,50 @@
+---
+BasedOnStyle: LLVM
+
+Language:        Cpp
+IndentWidth:     4
+Standard:        Cpp11
+TabWidth:        4
+UseTab:          ForContinuationAndIndentation
+SortIncludes:	 true
+SortUsingDeclarations: true
+ColumnLimit: 	  90
+IndentCaseLabels: false
+NamespaceIndentation: None
+SpaceBeforeParens: ControlStatements
+AllowShortIfStatementsOnASingleLine: true
+AllowShortBlocksOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: All
+AllowShortLoopsOnASingleLine: true
+AlwaysBreakAfterReturnType: None
+PointerAlignment: Middle
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeComma
+AlwaysBreakTemplateDeclarations: true
+AccessModifierOffset: -4
+# BreakInheritanceList: BeforeComma
+CommentPragmas: '^ -\*- mode'
+...
+
+Language: JavaScript
+BasedOnStyle: Mozilla
+JavaScriptQuotes: Single
+TabWidth:        4
+IndentWidth:     4
+UseTab:          ForContinuationAndIndentation
+BreakBeforeBraces: 'Custom'
+BraceWrapping: {
+    AfterClass: 'false'
+    AfterFunction : 'false'
+    BeforeCatch : 'false'
+    IndentBraces : 'false'
+}
+AllowShortIfStatementsOnASingleLine: true
+AllowShortBlocksOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: All
+AllowShortLoopsOnASingleLine: true
+ColumnLimit: 	  90
+IndentCaseLabels: false
