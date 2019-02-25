@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import json
 from typing import Callable, List
 
 failures = []
@@ -56,6 +57,35 @@ def runPy(name: str, bin: str, mod="test_base.py") -> bool:
     subprocess.check_call(
         ["python3", "test/%s" % mod, name, bin],
         env={"PYTHONPATH": "lib/python:tmp:test"},
+    )
+    return True
+
+
+def runTsSetup(schemas: List[str]) -> bool:
+    for schema in schemas:
+        subprocess.check_call(["python3", "-m", "scalgoprotoc", "ts", schema, "tmp"])
+    return True
+
+
+def runTs(name: str, bin: str, mod="test_base.ts") -> bool:
+    subprocess.check_call(
+        [
+            "./node_modules/.bin/ts-node",
+            "-r",
+            "tsconfig-paths/register",
+            "--compiler-options",
+            json.dumps(
+                {
+                    "module": "commonjs",
+                    "strict": True,
+                    "rootDirs": [os.path.abspath("lib/ts")],
+                }
+            ),
+            "./%s" % mod,
+            name,
+            bin,
+        ],
+        cwd="test/",
     )
     return True
 
@@ -189,7 +219,9 @@ def main():
     runTest("validate complex2", lambda: runValidate("test/complex2.spr"))
     if runTest(
         "cpp setup",
-        lambda: runCppSetup(["test/base.spr", "test/complex2.spr"], "test/test_base.cc"),
+        lambda: runCppSetup(
+            ["test/base.spr", "test/complex2.spr"], "test/test_base.cc"
+        ),
     ):
         runTest(
             "cpp out default simple",
@@ -214,13 +246,15 @@ def main():
         runTest("cpp in complex2", lambda: runCpp("in_complex2", "test/complex2.bin"))
 
     if runTest(
-           "cpp union setup",
-           lambda: runCppSetup(["test/union.spr"], "test/test_union.cc"),
+        "cpp union setup", lambda: runCppSetup(["test/union.spr"], "test/test_union.cc")
     ):
-       runTest("cpp out union", lambda: runCpp("out", "test/union.bin"))
-       runTest("cpp in union", lambda: runCpp("in", "test/union.bin"))
+        runTest("cpp out union", lambda: runCpp("out", "test/union.bin"))
+        runTest("cpp in union", lambda: runCpp("in", "test/union.bin"))
 
-    if runTest("py setup", lambda: runPySetup(["test/base.spr", "test/complex2.spr", "test/union.spr"])):
+    if runTest(
+        "py setup",
+        lambda: runPySetup(["test/base.spr", "test/complex2.spr", "test/union.spr"]),
+    ):
         runTest(
             "py out default simple",
             lambda: runPy("out_default", "test/simple_default.bin"),
@@ -250,6 +284,31 @@ def main():
         runTest(
             "py in union", lambda: runPy("in_union", "test/union.bin", "test_union.py")
         )
+
+    if runTest(
+        "ts setup",
+        lambda: runTsSetup(["test/base.spr", "test/complex2.spr", "test/union.spr"]),
+    ):
+        # runTest(
+        #     "ts out default simple",
+        #     lambda: runTs("out_default", "test/simple_default.bin"),
+        # )
+        runTest(
+            "ts in default simple",
+            lambda: runTs("in_default", "test/simple_default.bin"),
+        )
+        # runTest("ts out simple", lambda: runTs("out", "test/simple.bin"))
+        runTest("ts in simple", lambda: runTs("in", "test/simple.bin"))
+        # runTest("ts out complex", lambda: runTs("out_complex", "test/complex.bin"))
+        runTest("ts in complex", lambda: runTs("in_complex", "test/complex.bin"))
+        # runTest("ts out complex2", lambda: runTs("out_complex2", "test/complex2.bin"))
+        runTest("ts in complex2", lambda: runTs("in_complex2", "test/complex2.bin"))
+        # runTest("ts out inplace", lambda: runTs("out_inplace", "test/inplace.bin"))
+        runTest("ts in inplace", lambda: runTs("in_inplace", "test/inplace.bin"))
+        # runTest("ts out extend1", lambda: runTs("out_extend1", "test/extend1.bin"))
+        runTest("ts in extend1", lambda: runTs("in_extend1", "test/extend1.bin"))
+        # runTest("ts out extend2", lambda: runTs("out_extend2", "test/extend2.bin"))
+        runTest("py in extend2", lambda: runTs("in_extend2", "test/extend2.bin"))
 
     print("=" * 80)
     if not failures:
