@@ -530,7 +530,7 @@ class Generator:
         self.o("\t}")
         self.o("\t")
         self.output_doc(node, "\t")
-        self.o("\tstd::string_view %s() {" % (lcamel(uname)))
+        self.o("\tstd::string_view %s() const {" % (lcamel(uname)))
         self.o(
             "\t\treturn getText_(reader_, getPtr_<%s, scalgoproto::TEXTMAGIC, %d,  1, 1>());"
             % (bs(node.inplace), node.offset)
