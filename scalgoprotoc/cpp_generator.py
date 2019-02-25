@@ -211,16 +211,18 @@ class Generator:
         )
         self.o("\t\treturn add%s(in.size()).copy_(in);" % uname)
         self.o("\t}")
-        self.o(
-            "\tscalgoproto::ListOut<%s> add%s(const %s * data, size_t size) noexcept {"
-            % (typeName, uname, typeName)
-        )
-        self.o("\t\tauto v = add%s(size);" % uname)
-        self.o("\t\tfor (size_t i = 0; i < size; ++i) {")
-        self.o("\t\t\tv[i] = data[i];")
-        self.o("\t\t}")
-        self.o("\t\treturn v;")
-        self.o("\t}")
+
+        if node.type_.type in typeMap or node.struct or node.enum:
+            self.o(
+                "\tscalgoproto::ListOut<%s> add%s(const %s * data, size_t size) noexcept {"
+                % (typeName, uname, typeName)
+            )
+            self.o("\t\tauto v = add%s(size);" % uname)
+            self.o("\t\tfor (size_t i = 0; i < size; ++i) {")
+            self.o("\t\t\tv[i] = data[i];")
+            self.o("\t\t}")
+            self.o("\t\treturn v;")
+            self.o("\t}")
 
     def generate_union_list_out(
         self, node: Value, uname: str, inplace: bool, idx: int
@@ -622,7 +624,7 @@ class Generator:
             self.o("\tvoid add%s(scalgoproto::Bytes bytes) noexcept {" % (uname,))
             self.o("\t\tadd%s(bytes.first, bytes.second);" % (uname,))
             self.o("\t}")
-            self.o("\tchar * add%s(size_t size) noexcept {" % (uname, ))
+            self.o("\tchar * add%s(size_t size) noexcept {" % (uname,))
             self.o("\t\treturn addInplaceBytes_(writer_, offset_+SIZE, size);")
         else:
             self.o("\t%s & set%s(scalgoproto::BytesOut b) noexcept {" % (outer, uname))
