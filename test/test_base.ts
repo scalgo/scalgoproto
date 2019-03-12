@@ -81,7 +81,11 @@ export function readIn(path: string): ArrayBuffer {
 }
 
 export function require1<T>(v: T, e: T): boolean {
-	if (e === v) return false;
+	if (v instanceof ArrayBuffer) {
+		if (e instanceof ArrayBuffer && cb(v, e)) return false;
+	} else {
+		if (e === v) return false;
+	}
 	console.error('Error expected \'%s\' found \'%s\'', e, v);
 	return true;
 }
@@ -91,7 +95,11 @@ export function require2<T>(b: boolean, v: T, e: T): boolean {
 		console.error('Precondition not met');
 		return true
 	}
-	if (e == v) return false;
+	if (v instanceof ArrayBuffer) {
+		if (e instanceof ArrayBuffer && cb(v, e)) return false;
+	} else {
+		if (e === v) return false;
+	}
 
 	console.error('Error expected \'%s\' found \'%s\'', e, v);
 	return true;
@@ -354,8 +362,7 @@ function testInComplex(path: string): boolean {
 	if (require1(s.text !== null, true)) return false;
 	if (require1(s.myBytes !== null, true)) return false;
 	if (require1(s.text, 'text')) return false;
-	// if (require1(s.myBytes, b"bytes"))
-	//    return false;
+	if (require1(s.myBytes, bc('bytes'))) return false;
 	if (require1(s.member !== null, true)) return false;
 	const m = s.member!;
 	if (require1(m.id, 42)) return false;
@@ -392,9 +399,7 @@ function testInComplex(path: string): boolean {
 	const l5 = s.bytesList!;
 	if (require1(l5.length, 1)) return false;
 	if (require1(l5[0] !== null, true)) return false;
-	// if (require1(l5[0], b"bytes"))
-	//   return false;
-
+	if (require1(l5[0], bc('bytes'))) return false;
 	if (require1(s.memberList !== null, true)) return false;
 	const l6 = s.memberList!;
 	if (require1(l6.length, 3)) return false;
@@ -486,8 +491,7 @@ function testInComplex2(path: string): boolean {
 	if (require1(s.u2.isText, true)) return false;
 	if (require1(s.u2.text, 'text')) return false;
 	if (require1(s.u3.isMyBytes, true)) return false;
-	// if (require1(s.u3.myBytes, b"bytes"))
-	//    return false;
+	if (require1(s.u3.myBytes, bc('bytes'))) return false;
 	if (require1(s.u4.isEnumList, true)) return false;
 	const l = s.u4.enumList!;
 	if (require1(l.length, 2)) return false;
@@ -564,9 +568,7 @@ function testInInplace(path: string): boolean {
 	const b = s.b!;
 	if (require1(b.id, 46)) return false;
 	if (require1(b.b !== null, true)) return false;
-	// if (require1(b.b, b"hi"))
-	//    return false;
-
+	if (require1(b.b, bc('hi'))) return false;
 	if (require1(s.l !== null, true)) return false;
 	const l = s.l!;
 	if (require1(l.id, 47)) return false;

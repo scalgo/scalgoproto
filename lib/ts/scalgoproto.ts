@@ -15,7 +15,7 @@ export class ListIn<T> {
 				public acc: (start: number, index: number) => T) {}
 };
 
-const listHandler = {
+const listInHandler = {
 	get : <T>(obj: ListIn<T>, prop: string) : number | T => {
 		if (prop === 'length') return obj.size;
 		const index = +prop;
@@ -25,13 +25,15 @@ const listHandler = {
 	}
 };
 
+
+
 export abstract class UnionIn {
 	constructor(public _reader: Reader,
 				public _type: number,
 				public _offset: number,
 				public _size: number|null = null) {}
 
-	_get_ptr(magic: number): [ number, number ] {
+	_getPtr(magic: number): [ number, number ] {
 		if (this._size !== null) return [ this._offset, this._size ];
 		return [ this._offset + 10, this._reader._readSize(this._offset, magic) ];
 	}
@@ -46,80 +48,78 @@ export abstract class TableIn {
 	 */
 	constructor(public _reader: Reader, public _offset: number, public _size: number) {}
 
-	_get_uint48_f(o: number): number {
-		return this._reader._readUint48(o + this._offset);
-	}
+	_getUint48F(o: number): number { return this._reader._readUint48(o + this._offset); }
 
-	_get_int8(o: number, d: number): number {
+	_getInt8(o: number, d: number): number {
 		if (o >= this._size) return d;
 		return this._reader._data.getInt8(o + this._offset);
 	}
 
-	_get_uint8(o: number, d: number): number {
+	_getUint8(o: number, d: number): number {
 		if (o >= this._size) return d;
 		return this._reader._data.getUint8(o + this._offset);
 	}
 
-	_get_int16(o: number, d: number): number {
+	_getInt16(o: number, d: number): number {
 		if (o >= this._size) return d;
 		return this._reader._data.getInt16(o + this._offset, true);
 	}
 
-	_get_uint16(o: number, d: number): number {
+	_getUint16(o: number, d: number): number {
 		if (o >= this._size) return d;
 		return this._reader._data.getUint16(o + this._offset, true);
 	}
 
-	_get_int32(o: number, d: number): number {
+	_getInt32(o: number, d: number): number {
 		if (o >= this._size) return d;
 		return this._reader._data.getInt32(o + this._offset, true);
 	}
 
-	_get_uint32(o: number, d: number): number {
+	_getUint32(o: number, d: number): number {
 		if (o >= this._size) return d;
 		return this._reader._data.getUint32(o + this._offset, true);
 	}
 
-	_get_uint48(o: number): number {
+	_getUint48(o: number): number {
 		if (o >= this._size) return 0;
 		return this._reader._readUint48(o + this._offset);
 	}
 
-	_get_int64(o: number, d: number): number {
+	_getInt64(o: number, d: number): number {
 		if (o >= this._size) return d;
 		return this._reader._readInt64(o + this._offset);
 	}
 
-	_get_uint64(o: number, d: number): number {
+	_getUint64(o: number, d: number): number {
 		if (o >= this._size) return d;
 		return this._reader._readUint64(o + this._offset);
 	}
 
-	_get_float32(o: number, d: number): number {
+	_getFloat32(o: number, d: number): number {
 		if (o >= this._size) return d;
 		return this._reader._data.getFloat32(o + this._offset, true);
 	}
 
-	_get_float64(o: number, d: number): number {
+	_getFloat64(o: number, d: number): number {
 		if (o >= this._size) return d;
 		return this._reader._data.getFloat64(o + this._offset, true);
 	}
 
-	_get_bit(o: number, b: number, d: boolean): boolean {
+	_getBit(o: number, b: number, d: boolean): boolean {
 		if (o >= this._size) return d;
 		const v = this._reader._data.getUint8(o + this._offset);
 		return (v & (1 << b)) != 0;
 	}
 
-	_get_ptr(o: number, magic: number): [ number, number ] {
-		const off = this._get_uint48(o);
+	_getPtr(o: number, magic: number): [ number, number ] {
+		const off = this._getUint48(o);
 		if (off == 0) return [ 0, 0 ];
 		const size = this._reader._readSize(off, magic);
 		return [ off + 10, size ];
 	}
 
-	_get_ptr_inplace(o: number, magic: number): [ number, number ] {
-		const size = this._get_uint48(o);
+	_getPtrInplace(o: number, magic: number): [ number, number ] {
+		const size = this._getUint48(o);
 		if (size == 0) return [ 0, 0 ];
 		return [ this._offset + this._size, size ];
 	}
@@ -184,124 +184,124 @@ export class Reader {
 		return ans;
 	}
 
-	_get_int8_list(o: number, s: number): ListIn<number> {
+	_getInt8List(o: number, s: number): ListIn<number> {
 		return new Proxy<ListIn<number>>(
 		  new ListIn<number>(
 			s, o, (s: number, i: number) => { return this._data.getInt8(s + i); }),
-		  listHandler);
+		  listInHandler);
 	}
 
-	_get_int16_list(o: number, s: number): ListIn<number> {
+	_getInt16List(o: number, s: number): ListIn<number> {
 		return new Proxy<ListIn<number>>(
 		  new ListIn<number>(
 			s,
 			o,
 			(s: number, i: number) => { return this._data.getInt16(s + i * 2, true); }),
-		  listHandler);
+		  listInHandler);
 	}
 
-	_get_int32_list(o: number, s: number): ListIn<number> {
+	_getInt32List(o: number, s: number): ListIn<number> {
 		return new Proxy<ListIn<number>>(
 		  new ListIn<number>(
 			s,
 			o,
 			(s: number, i: number) => { return this._data.getInt32(s + i * 4, true); }),
-		  listHandler);
+		  listInHandler);
 	}
 
-	_get_int64_list(o: number, s: number): ListIn<number> {
+	_getInt64List(o: number, s: number): ListIn<number> {
 		return new Proxy<ListIn<number>>(
 		  new ListIn<number>(
 			s, o, (s: number, i: number) => { return this._readInt64(s + i * 8); }),
-		  listHandler);
+		  listInHandler);
 	}
 
-	_get_uint8_list(o: number, s: number): ListIn<number> {
+	_getUint8List(o: number, s: number): ListIn<number> {
 		return new Proxy<ListIn<number>>(
 		  new ListIn<number>(
 			s, o, (s: number, i: number) => { return this._data.getUint8(s + i); }),
-		  listHandler);
+		  listInHandler);
 	}
 
-	_get_uint16_list(o: number, s: number): ListIn<number> {
+	_getUint16List(o: number, s: number): ListIn<number> {
 		return new Proxy<ListIn<number>>(
 		  new ListIn<number>(
 			s,
 			o,
 			(s: number, i: number) => { return this._data.getUint16(s + i * 2, true); }),
-		  listHandler);
+		  listInHandler);
 	}
 
-	_get_uint32_list(o: number, s: number): ListIn<number> {
+	_getUint32List(o: number, s: number): ListIn<number> {
 		return new Proxy<ListIn<number>>(
 		  new ListIn<number>(
 			s,
 			o,
 			(s: number, i: number) => { return this._data.getUint32(s + i * 4, true); }),
-		  listHandler);
+		  listInHandler);
 	}
 
-	_get_uint64_list(o: number, s: number): ListIn<number> {
+	_getUint64List(o: number, s: number): ListIn<number> {
 		return new Proxy<ListIn<number>>(
 		  new ListIn<number>(
 			s, o, (s: number, i: number) => { return this._readUint64(s + i * 8); }),
-		  listHandler);
+		  listInHandler);
 	}
 
-	_get_float32_list(o: number, s: number): ListIn<number> {
+	_getFloat32List(o: number, s: number): ListIn<number> {
 		return new Proxy<ListIn<number>>(
 		  new ListIn<number>(
 			s,
 			o,
 			(s: number, i: number) => { return this._data.getFloat32(s + i * 4, true); }),
-		  listHandler);
+		  listInHandler);
 	}
 
-	_get_float64_list(o: number, s: number): ListIn<number> {
+	_getFloat64List(o: number, s: number): ListIn<number> {
 		return new Proxy<ListIn<number>>(
 		  new ListIn<number>(
 			s,
 			o,
 			(s: number, i: number) => { return this._data.getFloat64(s + i * 8, true); }),
-		  listHandler);
+		  listInHandler);
 	}
 
-	_get_bool_list(o: number, s: number): ListIn<boolean> {
+	_getBoolList(o: number, s: number): ListIn<boolean> {
 		return new Proxy<ListIn<boolean>>(
 		  new ListIn<boolean>(s, o, (s: number, i: number) => {
 			  return ((this._data.getUint8(s + (i >> 3)) >> (i & 7)) & 1) != 0;
-		  }), listHandler);
+		  }), listInHandler);
 	}
 
-	_get_struct_list<S>(o: number,
-						s: number,
-						type: { _WIDTH: number, _read(reader: Reader, o: Number): S }):
+	_getStructList<S>(o: number,
+					  s: number,
+					  type: { _WIDTH: number, _read(reader: Reader, o: Number): S }):
 	  ListIn<S> {
 		return new Proxy<ListIn<S>>(new ListIn<S>(s, o, (s: number, i: number) => {
 										return type._read(this, s + i * type._WIDTH);
-									}), listHandler);
+									}), listInHandler);
 	}
 
-	_get_enum_list<E extends number>(o: number, s: number): ListIn<E|null> {
+	_getEnumList<E>(o: number, s: number): ListIn<E|null> {
 		return new Proxy<ListIn<E|null>>(
 		  new ListIn<E|null>(s, o, (s: number, i: number) => {
 			  const v = this._data.getUint8(s + i);
 			  if (v === 255) return null;
-			  return v as E;
-		  }), listHandler);
+			  return v as any as E;
+		  }), listInHandler);
 	}
 
-	_get_text_list(o: number, s: number): ListIn<string|null> {
+	_getTextList(o: number, s: number): ListIn<string|null> {
 		return new Proxy<ListIn<string|null>>(
 		  new ListIn<string|null>(s, o, (s: number, i: number) => {
 			  const off = this._readUint48(s + i * 6);
 			  if (off == 0) return null;
 			  const size = this._readSize(off, TEXT_MAGIC);
 			  return this._readText(off + 10, size);
-		  }), listHandler);
+		  }), listInHandler);
 	}
 
-	_get_bytes_list(o: number, s: number): ListIn<ArrayBuffer|null> {
+	_getBytesList(o: number, s: number): ListIn<ArrayBuffer|null> {
 		return new Proxy<ListIn<ArrayBuffer|null>>(
 		  new ListIn<ArrayBuffer|null>(s, o, (s: number, i: number) => {
 			  const off = this._readUint48(s + i * 6);
@@ -309,10 +309,10 @@ export class Reader {
 			  const size = this._readSize(off, BYTES_MAGIC);
 			  const oo = off + 10 + (this._data.byteOffset || 0);
 			  return this._data.buffer.slice(oo, oo + size);
-		  }), listHandler);
+		  }), listInHandler);
 	}
 
-	_get_table_list<T extends TableIn>(o: number, s: number, type: {
+	_getTableList<T extends TableIn>(o: number, s: number, type: {
 		new(r: Reader, o: number, s: number): T; _MAGIC : number
 	}): ListIn<T|null> {
 		return new Proxy<ListIn<T|null>>(
@@ -321,17 +321,17 @@ export class Reader {
 			  if (off == 0) return null;
 			  const size = this._readSize(off, type._MAGIC);
 			  return new type(this, off + 10, size);
-		  }), listHandler);
+		  }), listInHandler);
 	}
 
-	_get_union_list<T extends UnionIn>(o: number, s: number, type: {
+	_getUnionList<T extends UnionIn>(o: number, s: number, type: {
 		new(r: Reader, o: number, s: number): T;
 	}): ListIn<T> {
 		return new Proxy<ListIn<T>>(new ListIn<T>(s, o, (s: number, i: number) => {
 										const t = this._data.getUint16(s + i * 8);
 										const off = this._readUint48(s + i * 8 + 2);
 										return new type(this, t, off);
-									}), listHandler);
+									}), listInHandler);
 	}
 
 	/** Return root node of message, of type type */

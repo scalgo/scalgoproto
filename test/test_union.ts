@@ -2,7 +2,7 @@
 import * as scalgoproto from 'scalgoproto'
 import * as union from 'union'
 
-import {readIn, require1, require2} from './test_base'
+import {bc, readIn, require1, require2, validateOut} from './test_base'
 
 // def forCopy() -> union.Table3In:
 //     w = scalgoproto.Writer()
@@ -156,8 +156,6 @@ function test_in_union(path: string): boolean {
 	const r = new scalgoproto.Reader(o);
 	const i = r.root(union.Table3In);
 
-	// print(i)
-
 	if (require1(i.v1 !== null, true)) return false;
 	if (require1(i.v1 !== null, true)) return false;
 	const v1 = i.v1!;
@@ -170,16 +168,11 @@ function test_in_union(path: string): boolean {
 	if (require1(i.v2 !== null, true)) return false;
 	if (!i.v2) throw Error('Require v2');
 	const v2 = i.v2;
-	// if (require2(v2.a.isV2, v2.a.v2, b"bytes1"))
-	//     return false;
-	// if (require2(v2.b.isV2, v2.b.v2, b"bytes2"))
-	//     return false;
-	// if (require2(v2.c.isV2, v2.c.v2, b"bytes3"))
-	//     return false;
-	// if (require2(v2.d.isV2, v2.d.v2, b"cbytes1"))
-	//     return false;
-	// if (require2(v2.e.isV2, v2.e.v2, b"cbytes2"))
-	//     return false;
+	if (require2(v2.a.isV2, v2.a.v2, bc('bytes1'))) return false;
+	if (require2(v2.b.isV2, v2.b.v2, bc('bytes2'))) return false;
+	if (require2(v2.c.isV2, v2.c.v2, bc('bytes3'))) return false;
+	if (require2(v2.d.isV2, v2.d.v2, bc('cbytes1'))) return false;
+	if (require2(v2.e.isV2, v2.e.v2, bc('cbytes2'))) return false;
 
 	if (require1(i.v3 !== null, true)) return false;
 	const v3 = i.v3!;
@@ -207,16 +200,16 @@ function test_in_union(path: string): boolean {
 
 	if (require1(i.v6 !== null, true)) return false;
 	const v6 = i.v6!;
-	// if (require2(v6.a.isV6 && v6.a.v6!.length == 1, v6.a.v6![0], b"bytes4"))
-	//     return false;
-	// if (require2(v6.b.isV6 && v6.b.v6!.length == 1, v6.b.v6![0], b"bytes5"))
-	//     return false;
-	// if (require2(v6.c.isV6 && v6.c.v6!.length == 1, v6.c.v6![0], b"bytes6"))
-	//     return false;
-	// if (require2(v6.d.isV6 && v6.d.v6!.length == 1, v6.d.v6![0], b"cbytes3"))
-	//     return false;
-	// if (require2(v6.e.isV6 && v6.e.v6!.length == 1, v6.e.v6![0], b"cbytes4"))
-	//     return false;
+	if (require2(v6.a.isV6 && v6.a.v6!.length == 1, v6.a.v6![0], bc('bytes4')))
+		return false;
+	if (require2(v6.b.isV6 && v6.b.v6!.length == 1, v6.b.v6![0], bc('bytes5')))
+		return false;
+	if (require2(v6.c.isV6 && v6.c.v6!.length == 1, v6.c.v6![0], bc('bytes6')))
+		return false;
+	if (require2(v6.d.isV6 && v6.d.v6!.length == 1, v6.d.v6![0], bc('cbytes3')))
+		return false;
+	if (require2(v6.e.isV6 && v6.e.v6!.length == 1, v6.e.v6![0], bc('cbytes4')))
+		return false;
 
 	if (require1(i.v7 !== null, true)) return false;
 	const v7 = i.v7!;
