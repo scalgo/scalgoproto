@@ -4,151 +4,151 @@ import * as union from 'union'
 
 import {bc, readIn, require1, require2, validateOut} from './test_base'
 
-// def forCopy() -> union.Table3In:
-//     w = scalgoproto.Writer()
-//     root = w.construct_table(union.Table3Out)
+function forCopy(): union.Table3In {
+	const w = new scalgoproto.Writer();
+	const root = w.constructTable(union.Table3Out);
 
-//     v1 = root.addV1()
-//     v1.a.v1 = "ctext1"
-//     v1.b.v1 = "ctext2"
+	const v1 = root.addV1();
+	v1.a.v1 = 'ctext1';
+	v1.b.v1 = 'ctext2';
 
-//     v2 = root.addV2()
-//     v2.a.v2 = b"cbytes1"
-//     v2.b.v2 = b"cbytes2"
+	const v2 = root.addV2();
+	v2.a.v2 = bc('cbytes1');
+	v2.b.v2 = bc('cbytes2');
 
-//     v3 = root.addV3()
-//     v3.a.addV3().a = 101
-//     v3.b.addV3().a = 102
+	const v3 = root.addV3();
+	v3.a.addV3().a = 101;
+	v3.b.addV3().a = 102;
 
-//     v4 = root.addV4()
-//     v4.a.addV4().a = 103
-//     v4.b.addV4().a = 104
+	const v4 = root.addV4();
+	v4.a.addV4().a = 103;
+	v4.b.addV4().a = 104;
 
-//     v5 = root.addV5()
-//     v5.a.addV5(1)[0] = "ctext3"
-//     v5.b.addV5(1)[0] = "ctext4"
+	const v5 = root.addV5();
+	v5.a.addV5(1)[0] = 'ctext3';
+	v5.b.addV5(1)[0] = 'ctext4';
 
-//     v6 = root.addV6()
-//     v6.a.addV6(1)[0] = b"cbytes3"
-//     v6.b.addV6(1)[0] = b"cbytes4"
+	const v6 = root.addV6();
+	v6.a.addV6(1)[0] = bc('cbytes3');
+	v6.b.addV6(1)[0] = bc('cbytes4');
 
-//     v7 = root.addV7()
-//     v7.a.addV7(1).add(0).a = 105
-//     v7.b.addV7(1).add(0).a = 106
+	const v7 = root.addV7();
+	v7.a.addV7(1).add(0).a = 105;
+	v7.b.addV7(1).add(0).a = 106;
 
-//     v8 = root.addV8()
-//     v8.a.addV8(1).add(0).a = 107
-//     v8.b.addV8(1).add(0).a = 108
+	const v8 = root.addV8();
+	v8.a.addV8(1).add(0).a = 107;
+	v8.b.addV8(1).add(0).a = 108;
 
-//     v9 = root.addV9()
-//     v9.a.addV9(1)[0] = 109
-//     v9.b.addV9(1)[0] = 110
+	const v9 = root.addV9();
+	v9.a.addV9(1)[0] = 109;
+	v9.b.addV9(1)[0] = 110;
 
-//     v10 = root.addV10()
-//     v10.a.addV10(1)[0] = true
-//     v10.b.addV10(1)[0] = true
+	const v10 = root.addV10();
+	v10.a.addV10(1)[0] = true;
+	v10.b.addV10(1)[0] = true;
 
-//     d = w.finalize(root)
+	const d = w.finalize(root);
 
-//     r = scalgoproto.Reader(d)
-//     return r.root(union.Table3In)
+	const r = new scalgoproto.Reader(d);
+	return r.root(union.Table3In);
+}
 
 function test_out_union(path: string): boolean {
-	// i = forCopy()
+	const i = forCopy();
 
-	// w = scalgoproto.Writer()
-	// root = w.construct_table(union.Table3Out)
+	const w = new scalgoproto.Writer();
+	const root = w.constructTable(union.Table3Out);
 
-	// v1 = root.addV1()
-	// v1.a.v1 = "text1"
-	// v1.b.v1 = "text2"
-	// v1.c.v1 = w.construct_text("text3")
-	// v1.d.v1 = i.v1.a.v1
-	// v1.e.v1 = i.v1.b.v1
+	const v1 = root.addV1()
+	v1.a.v1 = 'text1';
+	v1.b.v1 = 'text2';
+	v1.c.v1 = w.constructText('text3');
+	v1.d.v1 = i.v1!.a.v1!;
+	v1.e.v1 = i.v1!.b.v1!;
 
-	// v2 = root.addV2()
-	// v2.a.v2 = b"bytes1"
-	// v2.b.v2 = b"bytes2"
-	// v2.c.v2 = w.constructBytes(b"bytes3")
-	// v2.d.v2 = i.v2.a.v2
-	// v2.e.v2 = i.v2.b.v2
+	const v2 = root.addV2();
+	v2.a.v2 = bc('bytes1');
+	v2.b.v2 = bc('bytes2');
+	v2.c.v2 = w.constructBytes(bc('bytes3'));
+	v2.d.v2 = i.v2!.a.v2!;
+	v2.e.v2 = i.v2!.b.v2!;
 
-	// v3 = root.addV3()
-	// v3.a.addV3().a = 1
-	// v3.b.addV3().a = 2
-	// t1 = w.construct_table(union.Table1Out)
-	// t1.a = 3
-	// v3.c.v3 = t1
-	// v3.d.v3 = i.v3.a.v3
-	// v3.e.v3 = i.v3.b.v3
+	const v3 = root.addV3();
+	v3.a.addV3().a = 1;
+	v3.b.addV3().a = 2;
+	const t1 = w.constructTable(union.Table1Out);
+	t1.a = 3;
+	v3.c.v3 = t1;
+	v3.d.v3 = i.v3!.a.v3!;
+	v3.e.v3 = i.v3!.b.v3!;
 
-	// v4 = root.addV4()
-	// v4.a.addV4().a = 4
-	// v4.b.addV4().a = 5
-	// t4 = w.construct_table(union.Union1V4Out)
-	// t4.a = 6
-	// v4.c.v4 = t4
-	// v4.d.v4 = i.v4.a.v4
-	// v4.e.v4 = i.v4.b.v4
+	const v4 = root.addV4();
+	v4.a.addV4().a = 4;
+	v4.b.addV4().a = 5;
+	const t4 = w.constructTable(union.Union1V4Out);
+	t4.a = 6;
+	v4.c.v4 = t4;
+	v4.d.v4 = i.v4!.a.v4!;
+	v4.e.v4 = i.v4!.b.v4!;
 
-	// v5 = root.addV5()
-	// v5.a.addV5(1)[0] = "text4"
-	// v5.b.addV5(1)[0] = "text5"
-	// t5 = w.construct_text_list(1)
-	// t5[0] = "text6"
-	// v5.c.v5 = t5
-	// v5.d.v5 = i.v5.a.v5
-	// v5.e.v5 = i.v5.b.v5
+	const v5 = root.addV5();
+	v5.a.addV5(1)[0] = 'text4';
+	v5.b.addV5(1)[0] = 'text5';
+	const t5 = w.constructTextList(1);
+	t5[0] = 'text6';
+	v5.c.v5 = t5;
+	v5.d.v5 = i.v5!.a.v5!;
+	v5.e.v5 = i.v5!.b.v5!;
 
-	// v6 = root.addV6()
-	// v6.a.addV6(1)[0] = b"bytes4"
-	// tt6 = v6.b.addV6(1)
-	// tt6[0] = w.constructBytes(b"bytes5")
-	// t6 = w.constructBytes_list(1)
-	// t6[0] = w.constructBytes(b"bytes6")
-	// v6.c.v6 = t6
-	// v6.d.v6 = i.v6.a.v6
-	// v6.e.v6 = i.v6.b.v6
+	const v6 = root.addV6();
+	v6.a.addV6(1)[0] = bc('bytes4');
+	const tt6 = v6.b.addV6(1);
+	tt6[0] = w.constructBytes(bc('bytes5'));
+	const t6 = w.constructBytesList(1);
+	t6[0] = w.constructBytes(bc('bytes6'));
+	v6.c.v6 = t6;
+	v6.d.v6 = i.v6!.a.v6!;
+	v6.e.v6 = i.v6!.b.v6!;
 
-	// v7 = root.addV7()
-	// v7.a.addV7(1).add(0).a = 7
-	// v7.b.addV7(1).add(0).a = 8
-	// t7 = w.construct_table_list(union.Table1Out, 1)
-	// t7.add(0).a = 9
-	// v7.c.v7 = t7
-	// v7.d.v7 = i.v7.a.v7
-	// v7.e.v7 = i.v7.b.v7
+	const v7 = root.addV7();
+	v7.a.addV7(1).add(0).a = 7;
+	v7.b.addV7(1).add(0).a = 8;
+	const t7 = w.constructTableList(union.Table1Out, 1);
+	t7.add(0).a = 9;
+	v7.c.v7 = t7;
+	v7.d.v7 = i.v7!.a.v7!;
+	v7.e.v7 = i.v7!.b.v7!;
 
-	// v8 = root.addV8()
-	// v8.a.addV8(1).add(0).a = 10
-	// v8.b.addV8(1).add(0).a = 11
-	// t8 = w.construct_table_list(union.Union1V8Out, 1)
-	// t8.add(0).a = 12
-	// v8.c.v8 = t8
-	// v8.d.v8 = i.v8.a.v8
-	// v8.e.v8 = i.v8.b.v8
+	const v8 = root.addV8();
+	v8.a.addV8(1).add(0).a = 10;
+	v8.b.addV8(1).add(0).a = 11;
+	const t8 = w.constructTableList(union.Union1V8Out, 1);
+	t8.add(0).a = 12;
+	v8.c.v8 = t8;
+	v8.d.v8 = i.v8!.a.v8!;
+	v8.e.v8 = i.v8!.b.v8!;
 
-	// v9 = root.addV9()
-	// v9.a.addV9(1)[0] = 13
-	// v9.b.addV9(1)[0] = 14
-	// t9 = w.construct_uint32_list(1)
-	// t9[0] = 15
-	// v9.c.v9 = t9
-	// v9.d.v9 = i.v9.a.v9
-	// v9.e.v9 = i.v9.b.v9
+	const v9 = root.addV9();
+	v9.a.addV9(1)[0] = 13;
+	v9.b.addV9(1)[0] = 14;
+	const t9 = w.constructUint32List(1);
+	t9[0] = 15;
+	v9.c.v9 = t9;
+	v9.d.v9 = i.v9!.a.v9!;
+	v9.e.v9 = i.v9!.b.v9!;
 
-	// v10 = root.addV10()
-	// v10.a.addV10(1)[0] = true
-	// v10.b.addV10(1)[0] = False
-	// t10 = w.constructBool_list(1)
-	// t10[0] = true
-	// v10.c.v10 = t10
-	// v10.d.v10 = i.v10.a.v10
-	// v10.e.v10 = i.v10.b.v10
+	const v10 = root.addV10();
+	v10.a.addV10(1)[0] = true;
+	v10.b.addV10(1)[0] = false;
+	const t10 = w.constructBoolList(1);
+	t10[0] = true;
+	v10.c.v10 = t10;
+	v10.d.v10 = i.v10!.a.v10!;
+	v10.e.v10 = i.v10!.b.v10!;
 
-	// data = w.finalize(root)
-	// return validate_out(data, path)
-	return false;
+	const data = w.finalize(root);
+	return validateOut(data, path);
 }
 
 function test_in_union(path: string): boolean {

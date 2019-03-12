@@ -289,32 +289,32 @@ def main():
         "ts setup",
         lambda: runTsSetup(["test/base.spr", "test/complex2.spr", "test/union.spr"]),
     ):
-        # runTest(
-        #     "ts out default simple",
-        #     lambda: runTs("out_default", "test/simple_default.bin"),
-        # )
+        runTest(
+            "ts out default simple",
+            lambda: runTs("out_default", "test/simple_default.bin"),
+        )
         runTest(
             "ts in default simple",
             lambda: runTs("in_default", "test/simple_default.bin"),
         )
-        # runTest("ts out simple", lambda: runTs("out", "test/simple.bin"))
+        runTest("ts out simple", lambda: runTs("out", "test/simple.bin"))
         runTest("ts in simple", lambda: runTs("in", "test/simple.bin"))
-        # runTest("ts out complex", lambda: runTs("out_complex", "test/complex.bin"))
+        runTest("ts out complex", lambda: runTs("out_complex", "test/complex.bin"))
         runTest("ts in complex", lambda: runTs("in_complex", "test/complex.bin"))
-        # runTest("ts out complex2", lambda: runTs("out_complex2", "test/complex2.bin"))
+        runTest("ts out complex2", lambda: runTs("out_complex2", "test/complex2.bin"))
         runTest("ts in complex2", lambda: runTs("in_complex2", "test/complex2.bin"))
-        # runTest("ts out inplace", lambda: runTs("out_inplace", "test/inplace.bin"))
+        runTest("ts out inplace", lambda: runTs("out_inplace", "test/inplace.bin"))
         runTest("ts in inplace", lambda: runTs("in_inplace", "test/inplace.bin"))
-        # runTest("ts out extend1", lambda: runTs("out_extend1", "test/extend1.bin"))
+        runTest("ts out extend1", lambda: runTs("out_extend1", "test/extend1.bin"))
         runTest("ts in extend1", lambda: runTs("in_extend1", "test/extend1.bin"))
-        # runTest("ts out extend2", lambda: runTs("out_extend2", "test/extend2.bin"))
-        runTest("py in extend2", lambda: runTs("in_extend2", "test/extend2.bin"))
+        runTest("ts out extend2", lambda: runTs("out_extend2", "test/extend2.bin"))
+        runTest("ts in extend2", lambda: runTs("in_extend2", "test/extend2.bin"))
 
     if runTest("ts setup union", lambda: runTsSetup(["test/union.spr"])):
-        # runTest(
-        #     "ts out union",
-        #     lambda: runTs("out_union", "test/union.bin", "test_union.ts"),
-        # )
+        runTest(
+            "ts out union",
+            lambda: runTs("out_union", "test/union.bin", "test_union.ts"),
+        )
         runTest(
             "ts in union", lambda: runTs("in_union", "test/union.bin", "test_union.ts")
         )

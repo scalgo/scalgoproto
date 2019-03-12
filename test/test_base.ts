@@ -5,75 +5,95 @@ import * as fs from 'fs';
 import * as process from 'process';
 import * as scalgoproto from 'scalgoproto'
 
-// import complex2
+export function bc(data: string): ArrayBuffer {
+	const b = new ArrayBuffer(data.length);
+	const b2 = new Uint8Array(b);
+	for (let i = 0; i < data.length; ++i) b2[i] = data.charCodeAt(i);
+	return b;
+}
 
-// def get_v(data: bytes, i: int) -> int:
-//     if i < len(data):
-//         return data[i]
-//     return -1
+export function cb(l: ArrayBuffer, r: ArrayBuffer): boolean {
+	const lb = new Uint8Array(l);
+	const rb = new Uint8Array(r);
+	if (lb.length != rb.length) return false;
+	for (let i = 0; i < lb.length; ++i)
+		if (lb[i] != rb[i]) return false;
+	return true;
+}
 
-// def validateOut(data: bytes, path: str) -> bool:
-//     exp = open(path, "rb").read()
-//     if data == exp:
-//         return true
-//     print("Wrong output")
-//     for i in range(0, max(len(data), len(exp)), 16):
-//         print("%08X | " % i, end="")
-//         for j in range(i, i + 16):
-//             if get_v(exp, j) == get_v(data, j):
-//                 print("\033[0m", end="")
-//             else:
-//                 print("\033[92m", end="")
-//             if j < len(exp):
-//                 print("%02X" % exp[j], end="")
-//             else:
-//                 print("  ", end="")
-//             if j % 4 == 3:
-//                 print(" ", end="")
-//         print("| ", end="")
-//         for j in range(i, i + 16):
-//             if get_v(exp, j) == get_v(data, j):
-//                 print("\033[0m", end="")
-//             else:
-//                 print("\033[91m", end="")
-//             if j < len(data):
-//                 print("%02X" % data[j], end="")
-//             else:
-//                 print("  ", end="")
-//             if j % 4 == 3:
-//                 print(" ", end="")
-//         print("\033[0m", end="")
-//         print("| ", end="")
-//         for j in range(i, i + 16):
-//             if get_v(exp, j) == get_v(data, j):
-//                 print("\033[0m", end="")
-//             else:
-//                 print("\033[92m", end="")
-//             if j < len(exp) and 32 <= exp[j] <= 126:
-//                 print(chr(exp[j]), end="")
-//             elif j < len(exp):
-//                 print(".", end="")
-//             else:
-//                 print(" ", end="")
-//             if j % 4 == 3:
-//                 print(" ", end="")
-//         print("| ", end="")
-//         for j in range(i, i + 16):
-//             if get_v(exp, j) == get_v(data, j):
-//                 print("\033[0m", end="")
-//             else:
-//                 print("\033[91m", end="")
-//             if j < len(data) and 32 <= data[j] <= 126:
-//                 print(chr(data[j]), end="")
-//             elif j < len(data):
-//                 print(".", end="")
-//             else:
-//                 print(" ", end="")
-//             if j % 4 == 3:
-//                 print(" ", end="")
-//             print("\033[0m", end="")
-//         print()
-//     return false;
+export function validateOut(data_: ArrayBuffer, path: string): boolean {
+	const exp = new Uint8Array(readIn(path));
+	const data = new Uint8Array(data_);
+
+	if (data.length == exp.length) {
+		let ok = true;
+		for (let i = 0; i < data.length; ++i) ok = ok && data[i] == exp[i];
+		if (ok) return true;
+	}
+
+	let hex = (num: number, length: number): string => {
+		if (num === null || num == undefined) return 'xx';
+		let v = num.toString(16);
+		while (v.length != length) v = '0' + v;
+		return v;
+	};
+
+	console.log('Wrong output')
+	for (let i = 0; i < Math.max(data.length, exp.length); i += 16) {
+		let line = hex(i, 8) + ' | ';
+		for (let j = i; j < i + 16; ++j) {
+			if (data[j] === exp[j])
+				line += '\x1b[0m';
+			else
+				line += '\x1b[92m';
+			if (j < exp.length)
+				line += hex(exp[j], 2);
+			else
+				line += '  ';
+			if (j % 4 == 3) line += ' ';
+		}
+		line += '| '
+		for (let j = i; j < i + 16; ++j) {
+			if (data[j] === exp[j])
+				line += '\x1b[0m';
+			else
+				line += '\x1b[91m';
+			if (j < data.length)
+				line += hex(data[j], 2);
+			else
+				line += '  ';
+			if (j % 4 == 3) line += ' ';
+		}
+		line += '\x1b[0m| ';
+		for (let j = i; j < i + 16; ++j) {
+			if (data[j] === exp[j])
+				line += '\x1b[0m';
+			else
+				line += '\x1b[92m';
+			if (j < exp.length && 32 <= exp[j] && exp[j] <= 126)
+				line += String.fromCharCode(exp[j]);
+			else if (j < exp.length)
+				line += '.'
+				else line += ' ';
+			if (j % 4 == 3) line += ' ';
+		}
+		line += '| ';
+		for (let j = i; j < i + 16; ++j) {
+			if (data[j] === exp[j])
+				line += '\x1b[0m';
+			else
+				line += '\x1b[91m';
+			if (j < data.length && 32 <= data[j] && data[j] <= 126)
+				line += String.fromCharCode(data[j]);
+			else if (j < data.length)
+				line += '.'
+				else line += ' ';
+			if (j % 4 == 3) line += ' ';
+		}
+		console.log(line);
+	}
+	return false;
+}
 
 export function readIn(path: string): ArrayBuffer {
 	const b = fs.readFileSync('../' + path);
@@ -106,59 +126,56 @@ export function require2<T>(b: boolean, v: T, e: T): boolean {
 }
 
 function testOutDefault(path: string): boolean {
-	// w = scalgoproto.Writer()
-	// s = w.constructTable(base.SimpleOut)
-	// data = w.finalize(s)
-	// return validateOut(data, path)
-	return false;
-	;
+	const w = new scalgoproto.Writer();
+	const s = w.constructTable(base.SimpleOut)
+	const data = w.finalize(s);
+	return validateOut(data, path)
 }
 
 function testOut(path: string): boolean {
-	// w = scalgoproto.Writer()
-	// s = w.constructTable(base.SimpleOut)
-	// s.e = base.MyEnum.c
-	// s.s = base.FullStruct(
-	//     base.MyEnum.d,
-	//     base.MyStruct(42, 27.0, true),
-	//     false,
-	//     8,
-	//     9,
-	//     10,
-	//     11,
-	//     -8,
-	//     -9,
-	//     -10,
-	//     -11,
-	//     27.0,
-	//     22.0,
-	// )
-	// s.b = true
-	// s.u8 = 242
-	// s.u16 = 4024
-	// s.u32 = 124474
-	// s.u64 = 5465778
-	// s.i8 = -40
-	// s.i16 = 4025
-	// s.i32 = 124475
-	// s.i64 = 5465779
-	// s.f = 2.0
-	// s.d = 3.0
-	// s.os = base.MyStruct(43, 28.0, false)
-	// s.ob = false
-	// s.ou8 = 252
-	// s.ou16 = 4034
-	// s.ou32 = 124464
-	// s.ou64 = 5465768
-	// s.oi8 = -60
-	// s.oi16 = 4055
-	// s.oi32 = 124465
-	// s.oi64 = 5465729
-	// s.of = 5.0
-	// s.od = 6.4
-	// data = w.finalize(s)
-	// return validateOut(data, path)
-	return false;
+	const w = new scalgoproto.Writer();
+	const s = w.constructTable(base.SimpleOut)
+	s.e = base.MyEnum.c
+	s.s = new base.FullStruct(
+	  base.MyEnum.d,
+	  new base.MyStruct(42, 27.0, true),
+	  false,
+	  8,
+	  9,
+	  10,
+	  11,
+	  -8,
+	  -9,
+	  -10,
+	  -11,
+	  27.0,
+	  22.0,
+	);
+	s.b = true;
+	s.u8 = 242;
+	s.u16 = 4024;
+	s.u32 = 124474;
+	s.u64 = 5465778;
+	s.i8 = -40;
+	s.i16 = 4025;
+	s.i32 = 124475;
+	s.i64 = 5465779;
+	s.f = 2.0;
+	s.d = 3.0;
+	s.os = new base.MyStruct(43, 28.0, false);
+	s.ob = false;
+	s.ou8 = 252;
+	s.ou16 = 4034;
+	s.ou32 = 124464;
+	s.ou64 = 5465768;
+	s.oi8 = -60;
+	s.oi16 = 4055;
+	s.oi32 = 124465;
+	s.oi64 = 5465729;
+	s.of = 5.0;
+	s.od = 6.4;
+	const data = w.finalize(s);
+	return validateOut(data, path);
 }
 
 function testIn(path: string): boolean {
@@ -292,65 +309,62 @@ function testInDefault(path: string): boolean {
 }
 
 function testOutComplex(path: string): boolean {
-	// w = scalgoproto.Writer()
+	const w = new scalgoproto.Writer();
 
-	// m = w.constructTable(base.MemberOut)
-	// m.id = 42
+	const m = w.constructTable(base.MemberOut);
+	m.id = 42;
 
-	// l = w.constructInt32List(31)
-	// for i in range(31):
-	//     l[i] = 100 - 2 * i
+	const l = w.constructInt32List(31);
+	for (let i = 0; i < 31; ++i) l[i] = 100 - 2 * i;
 
-	// l2 = w.constructEnumList(base.MyEnum, 2)
-	// l2[0] = base.MyEnum.a
+	const l2 = w.constructEnumList<base.MyEnum>(2);
+	l2[0] = base.MyEnum.a;
 
-	// l3 = w.construct_structList(base.MyStruct, 1)
+	const l3 = w.constructStructList(base.MyStruct, 1);
 
-	// b = w.constructBytes(b"bytes")
-	// t = w.constructText("text")
+	const b = w.constructBytes(bc('bytes'));
+	const t = w.constructText('text');
 
-	// l4 = w.constructTextList(2)
-	// l4[0] = t
-	// l5 = w.constructBytesList(1)
-	// l5[0] = b
+	const l4 = w.constructTextList(2);
+	l4[0] = t;
+	const l5 = w.constructBytesList(1);
+	l5[0] = b;
 
-	// l6 = w.constructTableList(base.MemberOut, 3)
-	// l6[0] = m
-	// l6[2] = m
+	const l6 = w.constructTableList(base.MemberOut, 3);
+	l6[0] = m;
+	l6[2] = m;
 
-	// l7 = w.constructFloat32List(2)
-	// l7[1] = 98.0
+	const l7 = w.constructFloat32List(2);
+	l7[1] = 98.0;
 
-	// l8 = w.constructFloat64List(3)
-	// l8[2] = 78.0
+	const l8 = w.constructFloat64List(3);
+	l8[2] = 78.0;
 
-	// l9 = w.constructUint8List(2)
-	// l9[0] = 4
+	const l9 = w.constructUint8List(2);
+	l9[0] = 4;
 
-	// l10 = w.constructBoolList(10)
-	// l10[0] = true
-	// l10[2] = true
-	// l10[8] = true
+	const l10 = w.constructBoolList(10);
+	l10[0] = true;
+	l10[2] = true;
+	l10[8] = true;
 
-	// s = w.constructTable(base.ComplexOut)
-	// s.member = m
-	// s.text = t
-	// s.myBytes = b
-	// s.intList = l
-	// s.structList = l3
-	// s.enumList = l2
-	// s.textList = l4
-	// s.bytesList = l5
-	// s.memberList = l6
-	// s.f32list = l7
-	// s.f64list = l8
-	// s.u8list = l9
-	// s.blist = l10
+	const s = w.constructTable(base.ComplexOut);
+	s.member = m;
+	s.text = t;
+	s.myBytes = b;
+	s.intList = l;
+	s.structList = l3;
+	s.enumList = l2;
+	s.textList = l4;
+	s.bytesList = l5;
+	s.memberList = l6;
+	s.f32list = l7;
+	s.f64list = l8;
+	s.u8list = l9;
+	s.blist = l10;
 
-	// data = w.finalize(s)
-	// return validateOut(data, path)
-	return false;
-	;
+	const data = w.finalize(s);
+	return validateOut(data, path);
 }
 
 function testInComplex(path: string): boolean {
@@ -445,42 +459,40 @@ function testInComplex(path: string): boolean {
 }
 
 function testOutComplex2(path: string): boolean {
-	// w = scalgoproto.Writer()
+	const w = new scalgoproto.Writer();
 
-	// m = w.constructTable(base.MemberOut)
-	// m.id = 42
+	const m = w.constructTable(base.MemberOut);
+	m.id = 42;
 
-	// b = w.constructBytes(b"bytes")
-	// t = w.constructText("text")
+	const b = w.constructBytes(bc('bytes'));
+	const t = w.constructText('text');
 
-	// l = w.constructEnumList(base.NamedUnionEnumList, 2)
-	// l[0] = base.NamedUnionEnumList.x
-	// l[1] = base.NamedUnionEnumList.z
+	const l = w.constructEnumList<base.NamedUnionEnumList>(2);
+	l[0] = base.NamedUnionEnumList.x;
+	l[1] = base.NamedUnionEnumList.z;
 
-	// l2 = w.construct_structList(complex2.Complex2L, 1)
-	// l2[0] = complex2.Complex2L(2, true)
+	const l2 = w.constructStructList(complex2.Complex2L, 1);
+	l2[0] = new complex2.Complex2L(2, true);
 
-	// l3 = w.constructUnionList(base.NamedUnionOut, 2)
-	// l3[0].text = t
-	// l3[1].myBytes = b
+	const l3 = w.constructUnionList(base.NamedUnionOut, 2);
+	l3[0].text = t;
+	l3[1].myBytes = b;
 
-	// r = w.constructTable(complex2.Complex2Out)
-	// r.u1.member = m
-	// r.u2.text = t
-	// r.u3.myBytes = b
-	// r.u4.enumList = l
-	// r.u5.add_a()
+	const r = w.constructTable(complex2.Complex2Out);
+	r.u1.member = m;
+	r.u2.text = t;
+	r.u3.myBytes = b;
+	r.u4.enumList = l;
+	r.u5.addA();
 
-	// m2 = r.add_hat()
-	// m2.id = 43
+	const m2 = r.addHat();
+	m2.id = 43;
 
-	// r.l = l2
-	// r.s = complex2.Complex2S(complex2.Complex2SX.p, complex2.Complex2SY(8))
-	// r.l2 = l3
-	// data = w.finalize(r)
-	// return validateOut(data, path)
-	return false;
-	;
+	r.l = l2;
+	r.s = new complex2.Complex2S(complex2.Complex2SX.p, new complex2.Complex2SY(8));
+	r.l2 = l3
+	const data = w.finalize(r);
+	return validateOut(data, path);
 }
 
 function testInComplex2(path: string): boolean {
@@ -511,37 +523,36 @@ function testInComplex2(path: string): boolean {
 }
 
 function testOutInplace(path: string): boolean {
-	// w = scalgoproto.Writer()
-	// name = w.constructText("nilson")
-	// u = w.constructTable(base.InplaceUnionOut)
-	// u.u.addMonkey().name = name
+	const w = new scalgoproto.Writer();
+	const name = w.constructText('nilson');
+	const u = w.constructTable(base.InplaceUnionOut);
+	u.u.addMonkey().name = name;
 
-	// u2 = w.constructTable(base.InplaceUnionOut)
-	// u2.u.addText().t = "foobar"
+	const u2 = w.constructTable(base.InplaceUnionOut);
+	u2.u.addText().t = 'foobar';
 
-	// t = w.constructTable(base.InplaceTextOut)
-	// t.id = 45
-	// t.t = "cake"
+	const t = w.constructTable(base.InplaceTextOut);
+	t.id = 45;
+	t.t = 'cake';
 
-	// b = w.constructTable(base.InplaceBytesOut)
-	// b.id = 46
-	// b.b = b"hi"
+	const b = w.constructTable(base.InplaceBytesOut);
+	b.id = 46;
+	b.b = bc('hi');
 
-	// l = w.constructTable(base.InplaceListOut)
-	// l.id = 47
-	// ll = l.addL(2)
-	// ll[0] = 24
-	// ll[1] = 99
+	const l = w.constructTable(base.InplaceListOut);
+	l.id = 47;
+	const ll = l.addL(2);
+	ll[0] = 24;
+	ll[1] = 99;
 
-	// root = w.constructTable(base.InplaceRootOut)
-	// root.u = u
-	// root.u2 = u2
-	// root.t = t
-	// root.b = b
-	// root.l = l
-	// data = w.finalize(root)
-	// return validateOut(data, path)
-	return true;
+	const root = w.constructTable(base.InplaceRootOut);
+	root.u = u;
+	root.u2 = u2;
+	root.t = t;
+	root.b = b;
+	root.l = l;
+	const data = w.finalize(root);
+	return validateOut(data, path);
 }
 
 function testInInplace(path: string): boolean {
@@ -581,13 +592,11 @@ function testInInplace(path: string): boolean {
 }
 
 function testOutExtend1(path: string): boolean {
-	// w = scalgoproto.Writer()
-	// root = w.constructTable(base.Gen1Out)
-	// root.aa = 77
-	// data = w.finalize(root)
-	// return validateOut(data, path)
-	return false;
-	;
+	const w = new scalgoproto.Writer();
+	const root = w.constructTable(base.Gen1Out)
+	root.aa = 77;
+	const data = w.finalize(root);
+	return validateOut(data, path);
 }
 
 function testInExtend1(path: string): boolean {
@@ -601,16 +610,14 @@ function testInExtend1(path: string): boolean {
 }
 
 function testOutExtend2(path: string): boolean {
-	// w = scalgoproto.Writer()
-	// root = w.constructTable(base.Gen2Out)
-	// root.aa = 80
-	// root.bb = 81
-	// cake = root.u.addCake()
-	// cake.v = 45
-	// data = w.finalize(root)
-	// return validateOut(data, path)
-	return false;
-	;
+	const w = new scalgoproto.Writer();
+	const root = w.constructTable(base.Gen2Out);
+	root.aa = 80;
+	root.bb = 81;
+	const cake = root.u.addCake();
+	cake.v = 45;
+	const data = w.finalize(root);
+	return validateOut(data, path);
 }
 
 function testInExtend2(path: string): boolean {

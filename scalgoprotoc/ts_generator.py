@@ -51,10 +51,66 @@ class Generator:
         self.import_prefix: str = import_prefix
 
     def out_list_type(self, node: Value) -> str:
-        raise ICE()
+        if node.type_.type == TokenType.BOOL:
+            return "scalgoproto.ListOut<boolean>"
+        elif node.type_.type in typeMap:
+            return "scalgoproto.ListOut<number>"
+        elif node.struct:
+            return "scalgoproto.ListOut<%s>" % (node.struct.name)
+        elif node.enum:
+            return "scalgoproto.ListOut<%s, %s | null>" % (
+                node.enum.name,
+                node.enum.name,
+            )
+        elif node.table:
+            return "scalgoproto.ListOut<%sOut, %sIn | null>" % (
+                node.table.name,
+                node.table.name,
+            )
+        elif node.union:
+            return "scalgoproto.ListOut<%sOut, %sIn>" % (
+                node.union.name,
+                node.union.name,
+            )
+        elif node.type_.type == TokenType.TEXT:
+            return "scalgoproto.ListOut<string | scalgoproto.TextOut, string | null>"
+        elif node.type_.type == TokenType.BYTES:
+            return "scalgoproto.ListOut<ArrayBuffer | scalgoproto.BytesOut, ArrayBuffer | null>"
+        else:
+            raise ICE()
 
-    def out_list_constructor(self, node: Value) -> str:
-        raise ICE()
+    def out_list_constructor(self, node: Value, inplace: bool = False) -> str:
+        x = ", true" if inplace else ""
+        if node.type_.type == TokenType.BOOL:
+            return "constructBoolList(size%s)" % x
+        elif node.type_.type in typeMap:
+            return "construct%sList(size%s)" % (typeMap[node.type_.type].n, x)
+        elif node.struct:
+            return "constructStructList<%s>(%s, size%s)" % (
+                node.struct.name,
+                node.struct.name,
+                x,
+            )
+        elif node.enum:
+            return "constructEnumList<%s>(size%s)" % (node.enum.name, x)
+        elif node.table:
+            return "constructTableList<%sOut>(%sOut, size%s)" % (
+                node.table.name,
+                node.table.name,
+                x,
+            )
+        elif node.union:
+            return "constructUnionList<%sOut>(%sOut, size%s)" % (
+                node.union.name,
+                node.union.name,
+                x,
+            )
+        elif node.type_.type == TokenType.TEXT:
+            return "constructTextList(size%s)" % (x)
+        elif node.type_.type == TokenType.BYTES:
+            return "constructBytesList(size%s)" % (x)
+        else:
+            raise ICE()
 
     def in_list_help(self, node: Value, os: str) -> Tuple[str, str]:
         if node.type_.type == TokenType.BOOL:
@@ -149,16 +205,99 @@ class Generator:
         self.o("\t}")
         self.o()
 
-    def generate_inplace_list_constructor(self, node: Value) -> None:
-        pass
+    def generate_list_out(self, node: Value, lname: str, size: int) -> None:
+        it = "scalgoproto.ListIn<%s>" % self.in_list_help(node, "")[0]
+        ot = self.out_list_type(node)
+        if not node.inplace:
+            self.output_doc(node, "\t")
+            self.o("\tset %s(value: %s | %s) {" % (lname, it, ot))
+            self.o("\t\tif (value instanceof scalgoproto.ListIn) {")
+            self.o("\t\t\tthis.add%s(value.length)._copy(value);" % (ucamel(lname)))
+            self.o("\t\t\treturn;")
+            self.o("\t\t}")
+            self.o("\t\tconsole.assert(value instanceof scalgoproto.ListOut);")
+            self.o("\t\tthis._setList(%d, value);" % (node.offset))
+            self.o("\t}")
+            self.o()
 
-    def generate_list_out(self, node: Value, uname: str) -> None:
-        pass
+            self.output_doc(node, "\t")
+            self.o(
+                "\tadd%s(size:number) : %s {"
+                % (ucamel(lname), self.out_list_type(node))
+            )
+            self.o("\t\tconst res = this._writer.%s;" % self.out_list_constructor(node))
+            self.o("\t\tthis._setList(%d, res);" % (node.offset))
+            self.o("\t\treturn res;")
+            self.o("\t}")
+            self.o()
+        else:
+            self.output_doc(node, "\t")
+            self.o("\tset %s(value: %s) {" % (lname, it))
+            self.o("\t\tconsole.assert(value instanceof scalgoproto.ListIn);")
+            self.o("\t\tthis.add%s(value.length)._copy(value);" % (ucamel(lname)))
+            self.o("\t}")
+
+            self.output_doc(node, "\t")
+            self.o(
+                "\tadd%s(size: number) : %s {"
+                % (ucamel(lname), self.out_list_type(node))
+            )
+            self.o(
+                "\t\tconsole.assert(this._writer._size == this._offset + %s);" % size
+            )
+            self.o(
+                "\t\tconst l = this._writer.%s;" % self.out_list_constructor(node, True)
+            )
+            self.o("\t\tthis._setInplaceList(%d, size);" % (node.offset))
+            self.o("\t\treturn l;")
+            self.o("\t}")
+            self.o()
 
     def generate_union_list_out(
         self, node: Value, lname: str, idx: int, inplace: bool
     ) -> None:
-        pass
+        it = "scalgoproto.ListIn<%s>" % self.in_list_help(node, "")[0]
+        ot = self.out_list_type(node)
+        if not inplace:
+            self.output_doc(node, "\t")
+            self.o("\tset %s(value: %s |%s ) {" % (lname, ot, it))
+            self.o("\t\tif (value instanceof scalgoproto.ListIn) {")
+            self.o("\t\t\tthis.add%s(value.length)._copy(value)" % (ucamel(lname)))
+            self.o("\t\t\treturn;")
+            self.o("\t\t}")
+            self.o("\t\tconsole.assert(value instanceof scalgoproto.ListOut);")
+            self.o("\t\tthis._set(%d, value._offset - 10);" % (idx,))
+            self.o("\t}")
+            self.o()
+
+            self.output_doc(node, "\t")
+            self.o(
+                "\tadd%s(size:number) : %s {"
+                % (ucamel(lname), self.out_list_type(node))
+            )
+            self.o("\t\tconst res = this._writer.%s;" % self.out_list_constructor(node))
+            self.o("\t\tthis._set(%d, res._offset - 10);" % (idx,))
+            self.o("\t\treturn res;")
+            self.o("\t}")
+            self.o()
+        else:
+            self.output_doc(node, "\t")
+            self.o("\tset %s(value: %s) {" % (lname, it))
+            self.o("\t\tconsole.assert(value instanceof scalgoproto.ListIn);")
+            self.o("\t\tthis.add%s(value.length)._copy(value);" % (ucamel(lname)))
+            self.o("\t}")
+            self.o()
+            self.output_doc(node, "\t")
+            self.o(
+                "\tadd%s(size: number) : %s {"
+                % (ucamel(lname), self.out_list_type(node))
+            )
+            self.o("\t\tthis._set(%d, size);" % (idx,))
+            self.o(
+                "\t\treturn this._writer.%s;" % self.out_list_constructor(node, True)
+            )
+            self.o("\t}")
+            self.o()
 
     def generate_bool_in(self, node: Value, lname: str) -> None:
         if node.inplace:
@@ -174,8 +313,15 @@ class Generator:
         self.o("\t}")
         self.o()
 
-    def generate_bool_out(self, node: Value, uname: str) -> None:
-        pass
+    def generate_bool_out(self, node: Value, lname: str) -> None:
+        self.output_doc(node, "\t")
+        self.o("\tset %s(value: boolean) {" % (lname,))
+        if node.optional:
+            self.o("\t\tthis._setBit(%d, %d);" % (node.has_offset, node.has_bit))
+        self.o("\t\tif (value) this._setBit(%d, %d);" % (node.offset, node.bit))
+        self.o("\t\telse this._unsetBit(%d, %d);" % (node.offset, node.bit))
+        self.o("\t}")
+        self.o()
 
     def generate_basic_in(self, node: Value, lname: str) -> None:
         if node.inplace:
@@ -205,8 +351,17 @@ class Generator:
         self.o("\t}")
         self.o()
 
-    def generate_basic_out(self, node: Value, uname: str) -> None:
-        pass
+    def generate_basic_out(self, node: Value, lname: str) -> None:
+        if node.inplace:
+            raise ICE()
+        ti = typeMap[node.type_.type]
+        self.output_doc(node, "\t")
+        self.o("\tset %s(value: %s) {" % (lname, ti.p))
+        if node.optional and node.type_.type not in (TokenType.F32, TokenType.F64):
+            self.o("\t\tthis._setBit(%d, %d);" % (node.has_offset, node.has_bit))
+        self.o("\t\tthis._set%s(%d, value);" % (ti.n, node.offset))
+        self.o("\t}")
+        self.o()
 
     def generate_enum_in(self, node: Value, lname: str) -> None:
         if node.inplace:
@@ -220,8 +375,14 @@ class Generator:
         self.o("\t}")
         self.o()
 
-    def generate_enum_out(self, node: Value, uname: str) -> None:
-        pass
+    def generate_enum_out(self, node: Value, lname: str) -> None:
+        if node.inplace:
+            raise ICE()
+        self.output_doc(node, "\t")
+        self.o("\tset %s(value: %s) {" % (lname, node.enum.name))
+        self.o("\t\tthis._setUint8(%d, value as number)" % (node.offset))
+        self.o("\t}")
+        self.o()
 
     def generate_struct_in(self, node: Value, lname: str) -> None:
         if node.inplace:
@@ -292,13 +453,105 @@ class Generator:
             self.o("\t}")
             self.o()
 
-    def generate_table_out(self, node: Value, uname: str) -> None:
-        pass
+    def generate_table_out(self, node: Value, lname: str, size: int) -> None:
+        if not node.inplace:
+            self.output_doc(node, "\t")
+            self.o(
+                "\tset %s(value: %sOut | %sIn) {"
+                % (lname, node.table.name, node.table.name)
+            )
+            self.o("\t\tif (value instanceof %sIn) {" % (node.table.name))
+            self.o("\t\t\tconst v = value;")
+            self.o(
+                "\t\t\tvalue = this._writer.constructTable(%sOut);" % node.table.name
+            )
+            self.o("\t\t\tvalue._copy(v);")
+            self.o("\t\t}")
+            self.o("\t\tconsole.assert(value instanceof %sOut);" % (node.table.name))
+            self.o("\t\tthis._setTable(%d, value);" % (node.offset))
+            self.o("\t}")
+            self.o()
+            self.output_doc(node, "\t")
+            self.o("\tadd%s() : %sOut {" % (ucamel(lname), node.table.name))
+            self.o(
+                "\t\tconst res = this._writer.constructTable(%sOut);" % node.table.name
+            )
+            self.o("\t\tthis._setTable(%d, res);" % (node.offset,))
+            self.o("\t\treturn res;")
+            self.o("\t}")
+            self.o()
+        elif not node.table.empty:
+            self.output_doc(node, "\t")
+            self.o("\tset %s(value: %sIn) {" % (lname, node.table.name))
+            self.o("\t\tconsole.assert(value instanceof %sIn);" % (node.table.name))
+            self.o("\t\tthis.add%s()._copy(value);" % (ucamel(lname),))
+            self.o("\t}")
+            self.o()
+            self.output_doc(node, "\t")
+            self.o("\tadd%s() : %sOut {" % (ucamel(lname), node.table.name))
+            self.o(
+                "\t\tconsole.assert(this._writer._size == this._offset + %s);" % size
+            )
+            self.o(
+                "\t\tthis._setUint48(%d, %d);" % (node.offset, len(node.table.default))
+            )
+            self.o("\t\treturn new %sOut(this._writer, false);" % node.table.name)
+            self.o("\t}")
+            self.o()
+        else:
+            self.output_doc(node, "\t")
+            self.o("\tadd%s(self) {" % (ucamel(lname)))
+            self.o("\t\tthis._setUint48(%d, %d);" % (node.offset, 0))
+            self.o("\t}")
+            self.o()
 
     def generate_union_table_out(
         self, node: Value, lname: str, idx: int, inplace: bool
     ) -> None:
-        pass
+        table = node.table
+        if table.empty:
+            self.output_doc(node, "\t")
+            self.o("\tadd%s() {" % (ucamel(lname)))
+            self.o("\t\tthis._set(%d, 0);" % (idx))
+            self.o("\t}")
+            self.o()
+        elif not inplace:
+            self.output_doc(node, "\t")
+            self.o("\tset %s(value: %sOut | %sIn) {" % (lname, table.name, table.name))
+            self.o("\t\tif (value instanceof %sIn) {" % (node.table.name))
+            self.o("\t\t\tconst v = value;")
+            self.o(
+                "\t\t\tvalue = this._writer.constructTable(%sOut);" % node.table.name
+            )
+            self.o("\t\t\tvalue._copy(v);")
+            self.o("\t\t}")
+            self.o("\t\tconsole.assert(value instanceof %sOut);" % (node.table.name))
+            self.o("\t\tthis._set(%d, value._offset - 10);" % (idx))
+            self.o("\t}")
+            self.o()
+            self.output_doc(node, "\t")
+            self.o("\tadd%s() : %sOut {" % (ucamel(lname), table.name))
+            self.o(
+                "\t\tconst res = this._writer.constructTable(%sOut);" % node.table.name
+            )
+            self.o("\t\tthis._set(%d, res._offset - 10);" % (idx,))
+            self.o("\t\treturn res;")
+            self.o("\t}")
+            self.o()
+        else:
+            self.output_doc(node, "\t")
+            self.o("\tset %s(value: %sIn) {" % (lname, node.table.name))
+            self.o("\t\tconsole.assert(value instanceof %sIn);" % (node.table.name))
+            self.o("\t\tthis.add%s()._copy(value);" % (ucamel(lname),))
+            self.o("\t}")
+            self.o()
+            self.output_doc(node, "\t")
+            self.o("\tadd%s() : %sOut {" % (ucamel(lname), table.name))
+            self.o("\t\tconsole.assert(this._end == this._writer._size);")
+            self.o("\t\tthis._set(%d, %d);" % (idx, table.bytes))
+            self.o("\t\treturn new %sOut(this._writer, false)" % table.name)
+            self.o("\t}")
+            self.o()
 
     def generate_text_in(self, node: Value, lname: str) -> None:
         self.output_doc(node, "\t")
@@ -377,13 +630,36 @@ class Generator:
         self.o("\t}")
         self.o()
 
-    def generate_bytes_out(self, node: Value, uname: str) -> None:
-        pass
+    def generate_bytes_out(self, node: Value, lname: str, size: int) -> None:
+        self.output_doc(node, "\t")
+        if node.inplace:
+            self.o("\tset %s(value: ArrayBuffer) {" % (lname))
+        else:
+            self.o("\tset %s(value: scalgoproto.BytesOut | ArrayBuffer) {" % (lname))
+        if node.inplace:
+            self.o(
+                "\t\tconsole.assert(this._writer._size == this._offset + %s);" % (size)
+            )
+            self.o("\t\tthis._addInplaceBytes(%d, value);" % (node.offset))
+        else:
+            self.o("\t\tthis._setBytes(%d, value);" % (node.offset))
+        self.o("\t}")
+        self.o()
 
     def generate_union_bytes_out(
-        self, node: Value, uname: str, idx: int, inplace: bool
+        self, node: Value, lname: str, idx: int, inplace: bool
     ) -> None:
-        pass
+        self.output_doc(node, "        ")
+        if inplace:
+            self.o("\tset %s(value: ArrayBuffer) {" % (lname))
+        else:
+            self.o("\tset %s(value: scalgoproto.BytesOut | ArrayBuffer) {" % (lname))
+        if inplace:
+            self.o("\t\tthis._addInplaceBytes(%d, value);" % (idx))
+        else:
+            self.o("\t\tthis._setBytes(%d, value);" % (idx))
+        self.o("\t}")
+        self.o()
 
     def generate_union_in(self, node: Value, lname: str, table: Table) -> None:
         self.output_doc(node, "\t")
@@ -401,8 +677,22 @@ class Generator:
         self.o("\t}")
         self.o()
 
-    def generate_union_out(self, node: Value, uname: str, table: Table) -> None:
-        pass
+    def generate_union_out(self, node: Value, lname: str, table: Table) -> None:
+        self.o(
+            "\tget %s() : %s%sOut {"
+            % (lname, node.union.name, "Inplace" if node.inplace else "")
+        )
+        self.o(
+            "        return new %s%sOut(this._writer, this._offset + %d, this._offset + %d);"
+            % (
+                node.union.name,
+                "Inplace" if node.inplace else "",
+                node.offset,
+                table.bytes,
+            )
+        )
+        self.o("\t}")
+        self.o()
 
     def generate_value_in(self, table: Table, node: Value) -> None:
         lname = lcamel(self.value(node.identifier))
@@ -428,10 +718,42 @@ class Generator:
             raise ICE()
 
     def generate_value_out(self, table: Table, node: Value) -> None:
-        pass
+        lname = lcamel(self.value(node.identifier))
+        if node.list_:
+            self.generate_list_out(node, lname, len(table.default))
+        elif node.type_.type == TokenType.BOOL:
+            self.generate_bool_out(node, lname)
+        elif node.type_.type in typeMap:
+            self.generate_basic_out(node, lname)
+        elif node.enum:
+            self.generate_enum_out(node, lname)
+        elif node.struct:
+            self.generate_struct_out(node, lname)
+        elif node.table:
+            self.generate_table_out(node, lname, len(table.default))
+        elif node.union:
+            self.generate_union_out(node, lname, table)
+        elif node.type_.type == TokenType.TEXT:
+            self.generate_text_out(node, lname, len(table.default))
+        elif node.type_.type == TokenType.BYTES:
+            self.generate_bytes_out(node, lname, len(table.default))
+        else:
+            raise ICE()
 
     def generate_union_copy(self, union: Union) -> None:
-        pass
+        self.o("\t_copy(i:%sIn) {" % union.name)
+        self.o("\t\tswitch(i.type) {")
+        for node in union.members:
+            lname = self.value(node.identifier)
+            self.o("\t\tcase %sType.%s:" % (union.name, lname.upper()))
+            if node.table and node.table.empty:
+                self.o("\t\t\tthis.add%s();" % (ucamel(lname)))
+            else:
+                self.o("\t\t\tthis.%s = i.%s!;" % (lname, lname))
+            self.o("\t\t\tbreak;")
+        self.o("\t\t}")
+        self.o("\t}")
+        self.o()
 
     def generate_union(self, union: Union) -> None:
         # Recursively generate direct contained members
@@ -492,8 +814,107 @@ class Generator:
         self.o("}")
         self.o()
 
+        self.o("export class %sOut extends scalgoproto.UnionOut {" % union.name)
+        self.o("\tstatic readonly _IN = %sIn;" % (union.name))
+        self.o(
+            "\t/***Private constructor. Call factory methods on scalgoproto.Writer to construct instances*/"
+        )
+        self.o(
+            "\tconstructor(writer: scalgoproto.Writer, offset: number, end: number = 0) {"
+        )
+        self.o("\t\tsuper(writer, offset, end);")
+        self.o("\t}")
+        self.o()
+        idx = 1
+        for member in union.members:
+            llname = lcamel(self.value(member.identifier))
+            if member.list_:
+                self.generate_union_list_out(member, llname, idx, False)
+            elif member.table:
+                self.generate_union_table_out(member, llname, idx, False)
+            elif member.type_.type == TokenType.BYTES:
+                self.generate_union_bytes_out(member, llname, idx, False)
+            elif member.type_.type == TokenType.TEXT:
+                self.generate_union_text_out(member, llname, idx, False)
+            else:
+                raise ICE()
+            idx += 1
+        self.generate_union_copy(union)
+        self.o("}")
+        self.o()
+
+        self.o("export class %sInplaceOut extends scalgoproto.UnionOut {" % union.name)
+        self.o(
+            "\t/** Private constructor. Call factory methods on scalgoproto.Writer to construct instances */"
+        )
+        self.o(
+            "\tconstructor(writer: scalgoproto.Writer, offset: number, end: number = 0) {"
+        )
+
+        self.o("\t\tsuper(writer, offset, end);")
+        self.o("\t}")
+        self.o()
+        idx = 1
+        for member in union.members:
+            llname = lcamel(self.value(member.identifier))
+            if member.list_:
+                self.generate_union_list_out(member, llname, idx, True)
+            elif member.table:
+                self.generate_union_table_out(member, llname, idx, True)
+            elif member.type_.type == TokenType.BYTES:
+                self.generate_union_bytes_out(member, llname, idx, True)
+            elif member.type_.type == TokenType.TEXT:
+                self.generate_union_text_out(member, llname, idx, True)
+            else:
+                raise ICE()
+            idx += 1
+        self.generate_union_copy(union)
+        self.o("}")
+        self.o()
+
     def generate_table_copy(self, table: Table) -> None:
-        pass
+        self.o("\t_copy(i:%sIn) {" % table.name)
+        for ip in (True, False):
+            for node in table.members:
+                lname = lcamel(self.value(node.identifier))
+                uname = ucamel(lname)
+                if bool(node.inplace) != ip:
+                    continue
+                if node.list_:
+                    self.o(
+                        "\t\tif (i.%s !== null) this.add%s(i.%s.length)._copy(i.%s);"
+                        % (lname, uname, lname, lname)
+                    )
+                elif (
+                    node.optional
+                    or node.enum
+                    or node.type_.type == TokenType.TEXT
+                    or node.type_.type == TokenType.BYTES
+                ):
+                    self.o(
+                        "\t\tif (i.%s !== null) this.%s = i.%s;" % (lname, lname, lname)
+                    )
+                elif (
+                    node.type_.type in typeMap
+                    or node.type_.type == TokenType.BOOL
+                    or node.enum
+                    or node.struct
+                ):
+                    self.o("\t\tthis.%s = i.%s;" % (lname, lname))
+                elif node.table:
+                    if node.table.empty:
+                        self.o("\t\t if (i.%s !== null) this.add%s();" % (lname, uname))
+                    else:
+                        self.o(
+                            "\t\t if (i.%s !== null) this.add%s()._copy(i.%s);"
+                            % (lname, uname, lname)
+                        )
+                elif node.union:
+                    self.o("\t\tthis.%s._copy(i.%s);" % (lname, lname))
+                else:
+                    raise ICE()
+        self.o("\t}")
+        self.o()
 
     def generate_table(self, table: Table) -> None:
         # Recursively generate direct contained members
@@ -545,9 +966,9 @@ class Generator:
         )
         self.o("\t}")
         self.o()
-        # for node in table.members:
-        #     self.generate_value_out(table, node)
-        # self.generate_table_copy(table)
+        for node in table.members:
+            self.generate_value_out(table, node)
+        self.generate_table_copy(table)
         self.o("}")
         self.o()
 
@@ -716,10 +1137,10 @@ class Generator:
                     i.add(u.name)
                 elif isinstance(u, Table):
                     i.add("%sIn" % u.name)
-                    # i.add("%sOut" % u.name)
+                    i.add("%sOut" % u.name)
                 elif isinstance(u, Union):
                     i.add("%sIn" % u.name)
-                    # i.add("%sOut" % u.name)
+                    i.add("%sOut" % u.name)
                 else:
                     raise ICE()
 
