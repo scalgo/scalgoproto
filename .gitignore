@@ -104,3 +104,6 @@ venv.bak/
 
 .vscode/
 tmp/
+
+/test/node_modules
+/test/package-lock.json
