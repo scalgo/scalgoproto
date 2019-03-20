@@ -7,6 +7,7 @@
 #include <vector>
 #include <cstring>
 
+// Change to true to generate new ground truths for committing.
 constexpr bool writeMode = false;
 
 inline bool validateOut(const char * data, size_t size, const char * file) {

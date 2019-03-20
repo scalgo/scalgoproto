@@ -340,13 +340,10 @@ struct ListAccessHelp<TextTag, T> : public In {
 		friend class ListOut;
 		Setter(Writer & writer, std::uint64_t offset, std::uint64_t index);
 		Writer & writer;
-		char * const location;
+		std::uint64_t offset;
 
 	public:
-		T operator=(const T & value) noexcept {
-			write48_(location, value.offset_);
-			return value;
-		}
+		T operator=(const T & value) noexcept;
 		TextOut operator=(std::string_view t);
 	};
 
@@ -738,6 +735,10 @@ protected:
 public:
 	using value_type = T;
 
+	/**
+	 * Note: The result of this operator must be assigned to immediately,
+	 * as it is invalidated when other objects are created in the Writer.
+	 */
 	typename A::Setter operator[](size_t index) noexcept {
 		assert(index < size_);
 		return typename A::Setter(writer_, offset_, index);
@@ -1083,12 +1084,19 @@ template <typename T>
 ListAccessHelp<TextTag, T>::Setter::Setter(Writer & writer, std::uint64_t offset,
 										   std::uint64_t index)
 	: writer(writer)
-	, location(writer.data + offset + index * 6) {}
+	, offset(offset + index * 6) {}
+
+template <typename T>
+T ListAccessHelp<TextTag, T>::Setter::operator=(const T & value) noexcept {
+	write48_(writer.data + offset, value.offset_);
+	return value;
+}
 
 template <typename T>
 TextOut ListAccessHelp<TextTag, T>::Setter::operator=(std::string_view t) {
+	// Note, constructText might reallocate writer.data
 	auto value = writer.constructText(t);
-	write48_(location, value.offset_);
+	write48_(writer.data + offset, value.offset_);
 	return value;
 }
 

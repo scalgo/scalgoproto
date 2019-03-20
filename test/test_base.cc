@@ -169,8 +169,10 @@ int main(int, char ** argv) {
 		auto b = w.constructBytes("bytes", 5);
 		auto t = w.constructText("text");
 
-		auto l4 = w.constructTextList(2);
-		l4[0] = t;
+		auto l4 = w.constructTextList(200);
+		for (size_t i = 1; i < l4.size(); i += 2) {
+			l4[i] = "HI THERE";
+		}
 		auto l5 = w.constructBytesList(1);
 		l5[0] = b;
 
@@ -249,10 +251,15 @@ int main(int, char ** argv) {
 		
 		REQUIRE(s.hasTextList(), true);
 		auto l4 = s.textList();
-		REQUIRE(l4.size(), 2);
-		REQUIRE(l4.has(0), true);
-		REQUIRE(l4.has(1), false);
-		REQUIRE(l4[0], "text");
+		REQUIRE(l4.size(), 200);
+		for (size_t i = 0; i < l4.size(); ++i) {
+			if (i % 2 == 0) {
+				REQUIRE(l4.has(i), false);
+			} else {
+				REQUIRE(l4.has(i), true);
+				REQUIRE(l4[i], "HI THERE");
+			}
+		}
 
 		REQUIRE(s.hasBytesList(), true);
 		auto l5 = s.bytesList();

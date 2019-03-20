@@ -113,7 +113,7 @@ def runNeg(name: str, base: str, bad: str, good: str) -> None:
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as f:
         f.write(base % bad)
         f.flush()
-        code = subprocess.call(["python3", "-m", "scalgoprotoc", "validate", f.name])
+        code = subprocess.call(["python3", "-m", "scalgoprotoc", "validate", f.name], stderr=subprocess.DEVNULL)
         if code == 0:
             print("FAILURE1")
             failures.append(name)

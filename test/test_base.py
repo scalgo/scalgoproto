@@ -418,8 +418,9 @@ def test_out_complex(path: str) -> bool:
     b = w.construct_bytes(b"bytes")
     t = w.construct_text("text")
 
-    l4 = w.construct_text_list(2)
-    l4[0] = t
+    l4 = w.construct_text_list(200)
+    for i in range(1, len(l4), 2):
+        l4[i] = "HI THERE"
     l5 = w.construct_bytes_list(1)
     l5[0] = b
 
@@ -518,14 +519,17 @@ def test_in_complex(path: str) -> bool:
     if require(s.has_text_list, True):
         return False
     l4 = s.text_list
-    if require(len(l4), 2):
+    if require(len(l4), 200):
         return False
-    if require(l4.has(0), True):
-        return False
-    if require(l4.has(1), False):
-        return False
-    if require(l4[0], "text"):
-        return False
+    for i in range(len(l4)):
+        if i % 2 == 0:
+            if require(l4.has(i), False):
+                return False
+        else:
+            if require(l4.has(i), True):
+                return False
+            if require(l4[i], "HI THERE"):
+                return False
 
     if require(s.has_bytes_list, True):
         return False

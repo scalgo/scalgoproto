@@ -325,8 +325,8 @@ function testOutComplex(path: string): boolean {
 	const b = w.constructBytes(bc('bytes'));
 	const t = w.constructText('text');
 
-	const l4 = w.constructTextList(2);
-	l4[0] = t;
+	const l4 = w.constructTextList(200);
+	for (let i = 1; i < l4.length; i += 2) l4[i] = 'HI THERE';
 	const l5 = w.constructBytesList(1);
 	l5[0] = b;
 
@@ -383,10 +383,9 @@ function testInComplex(path: string): boolean {
 
 	if (require1(s.intList !== null, true)) return false;
 	if (require1(s.nintList, null)) return false;
-	const l = s.intList!
+	const l = s.intList!;
 
-			  if (require1(l.length, 31))
-	return false;
+	if (require1(l.length, 31)) return false;
 
 	for (let i = 0; i < 31; ++i)
 		if (require1(l[i], 100 - 2 * i)) return false;
@@ -404,10 +403,15 @@ function testInComplex(path: string): boolean {
 
 	if (require1(s.textList !== null, true)) return false;
 	const l4 = s.textList!;
-	if (require1(l4.length, 2)) return false;
-	if (require1(l4[0] !== null, true)) return false;
-	if (require1(l4[1] !== null, false)) return false;
-	if (require1(l4[0], 'text')) return false;
+	if (require1(l4.length, 200)) return false;
+	for (let i = 0; i < l4.length; ++i) {
+		if (i % 2 == 0) {
+			if (require1(l4[i] !== null, false)) return false;
+		} else {
+			if (require1(l4[i] !== null, true)) return false;
+			if (require1(l4[i], 'HI THERE')) return false;
+		}
+	}
 
 	if (require1(s.bytesList !== null, true)) return false;
 	const l5 = s.bytesList!;
