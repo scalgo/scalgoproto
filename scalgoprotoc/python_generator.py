@@ -957,7 +957,7 @@ class Generator:
                     or node.type_.type == TokenType.TEXT
                     or node.type_.type == TokenType.BYTES
                 ):
-                    if node.optional:
+                    if node.optional or node.enum or node.type_.type == TokenType.TEXT or node.type_.type == TokenType.BYTES:
                         self.o("        if i.has_%s:" % uname)
                         self.o("            self.%s = i.%s" % (uname, uname))
                     else:
