@@ -541,7 +541,7 @@ public:
 		return *this;
 	}
 
-	difference_type operator-(ListInIterator & o) const noexcept {
+	difference_type operator-(const ListInIterator & o) const noexcept {
 		return difference_type(index) - difference_type(o.index);
 	}
 };
