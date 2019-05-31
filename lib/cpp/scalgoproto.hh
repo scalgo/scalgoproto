@@ -866,6 +866,15 @@ public:
 		return o;
 	}
 
+	std::pair<BytesOut, char *> constructBytes(size_t size) {
+		BytesOut o;
+		o.offset_ = this->size;
+		expand(size + 10);
+		write((std::uint32_t)BYTESMAGIC, o.offset_);
+		write48_(size, o.offset_ + 4);
+		return std::pair(o, this->data + o.offset_ + 1);
+	}
+	
 	BytesOut constructBytes(Bytes b) { return constructBytes(b.first, b.second); }
 
 	template <typename T>
