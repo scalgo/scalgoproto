@@ -872,7 +872,7 @@ public:
 		expand(size + 10);
 		write((std::uint32_t)BYTESMAGIC, o.offset_);
 		write48_(size, o.offset_ + 4);
-		return std::pair(o, this->data + o.offset_ + 1);
+		return std::pair(o, this->data + o.offset_ + 10);
 	}
 	
 	BytesOut constructBytes(Bytes b) { return constructBytes(b.first, b.second); }
