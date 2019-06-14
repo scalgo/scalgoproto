@@ -251,7 +251,7 @@ class Reader(object):
     def _read_size(self, offset: int, magic: int):
         m, sizelow, sizehigh = struct.unpack("<IIH", self._data[offset : offset + 10])
         if m != magic:
-            raise Exception("Bad magic")
+            raise Exception("Expected magic %08X but got %08X" % (magic, m))
         return join48_(sizelow, sizehigh)
 
     def _get_table_list(self, t: Type[TI], off: int, size: int) -> ListIn[TI]:
@@ -352,7 +352,15 @@ class Reader(object):
         magic, offsetlow, offsethigh = struct.unpack("<IIH", self._data[0:10])
         offset = join48_(offsetlow, offsethigh)
         if magic != MESSAGE_MAGIC:
-            raise Exception("Bad magic")
+            if magic == 0xFD2FB528:
+                raise Exception(
+                    "Expected scalgoproto magic %08X " % MESSAGE_MAGIC
+                    + "but got the zstd magic instead (%08X). " % magic
+                    + "Decompress the data with zstd.decompress() first."
+                )
+            raise Exception(
+                "Expected scalgoproto magic %08X but got %08X" % (MESSAGE_MAGIC, magic)
+            )
         size = self._read_size(offset, type._MAGIC)
         return type(self, offset + 10, size)
 
