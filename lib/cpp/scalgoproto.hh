@@ -121,7 +121,7 @@ struct MetaMagic<double> {
 };
 
 template <typename Tag, typename T>
-struct ListAccessHelp {};
+class ListAccessHelp {};
 
 template <std::uint64_t mult>
 std::uint64_t computeSize(std::uint64_t v) {
