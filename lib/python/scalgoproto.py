@@ -21,6 +21,21 @@ class StructType(Generic[B]):
     def _write(writer: "Writer", offset: int, value: B) -> B:
         ...
 
+    def __str__(self):
+        o = []
+        for m in self.__slots__:
+            o.append("%s: %s" % (m, getattr(self, m)))
+        return "{%s}" % ", ".join(o)
+
+    def _to_dict(self):
+        o = {}
+        for m in self.__slots__:
+            v = getattr(self, m)
+            if hasattr(v, "_to_dict"):
+                v = v._to_dict()
+            o[m] = v
+        return o
+
 
 TI = TypeVar("TI", bound="TableIn")
 TO = TypeVar("TO", bound="TableOut")
@@ -95,6 +110,14 @@ class ListIn(Sequence[B]):
     def __str__(self) -> str:
         return "[%s]" % (", ".join(map(str, self)))
 
+    def _to_dict(self):
+        o = []
+        for v in self:
+            if hasattr(v, "_to_dict"):
+                v = v._to_dict()
+            o.append(v)
+        return o
+
 
 class UnionIn(object):
     __slots__ = ["_reader", "_type", "_offset", "_size"]
@@ -105,6 +128,25 @@ class UnionIn(object):
         self._type = type
         self._offset = offset
         self._size = size
+
+    def __str__(self):
+        if self.type == 0:
+            return "{}"
+        m = self._MEMBERS[self.type - 1]
+        if hasattr(self, m):
+            return "{%s: %s}" % (m, getattr(self, m))
+        return "{%s}" % m
+
+    def _to_dict(self):
+        if self.type == 0:
+            return {}
+        m = self._MEMBERS[self.type - 1]
+        if not hasattr(self, m):
+            return {m: None}
+        v = getattr(self, m)
+        if hasattr(v, "_to_dict"):
+            v = v._to_dict()
+        return {m: v}
 
     def _get_ptr(self, magic: int) -> Tuple[int, int]:
         if self._size:
@@ -117,12 +159,30 @@ class TableIn(object):
 
     __slots__ = ["_reader", "_offset", "_size"]
     _MAGIC: int = 0
+    _MEMBERS: Sequence[str] = None
 
     def __init__(self, reader: "Reader", offset: int, size: int) -> None:
         """Private constructor. Use the accessor methods on tables or the root method on Reader to get an instance"""
         self._reader = reader
         self._offset = offset
         self._size = size
+
+    def __str__(self):
+        o = []
+        for m in self._MEMBERS:
+            if getattr(self, "has_" + m, True):
+                o.append("%s: %s" % (m, getattr(self, m)))
+        return "{%s}" % ", ".join(o)
+
+    def _to_dict(self):
+        o = {}
+        for m in self._MEMBERS:
+            if getattr(self, "has_" + m, True):
+                v = getattr(self, m)
+                if hasattr(v, "_to_dict"):
+                    v = v._to_dict()
+                o[m] = v
+        return o
 
     def _get_uint48_f(self, o: int) -> int:
         return unpack48_(self._reader._data[self._offset + o : self._offset + o + 6])

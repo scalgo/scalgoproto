@@ -809,19 +809,6 @@ class Generator:
                 raise ICE()
         self.o()
 
-    def generate_union_str(self, union: Union) -> None:
-        self.o("    def __str__(self) ->  str:")
-        self.o("        o = []")
-        for node in union.members:
-            uname = snake(self.value(node.identifier))
-            self.o("        if self.is_%s:" % uname)
-            if node.table and node.table.empty:
-                self.o("            o.append('%s')" % (uname))
-            else:
-                self.o("            o.append('%s: '+str(self.%s))" % (uname, uname))
-        self.o("        return '{%s}'%(', '.join(o))")
-        self.o()
-
     def generate_union(self, union: Union) -> None:
         # Recursively generate direct contained members
         for value in union.members:
@@ -837,6 +824,10 @@ class Generator:
         self.o("class %sIn(scalgoproto.UnionIn):" % union.name)
         self.output_doc(union, "    ")
         self.o("    __slots__ = []")
+        self.o("    _MEMBERS = [")
+        for node in union.members:
+            self.o("        \"%s\"," % snake(self.value(node.identifier)))
+        self.o("    ]")
         self.o()
         self.o(
             "    def __init__(self, reader: scalgoproto.Reader, type: int, offset: int, size: int = None) -> None:"
@@ -877,7 +868,6 @@ class Generator:
                 self.generate_union_text_in(member, uuname)
             else:
                 raise ICE()
-        self.generate_union_str(union)
         self.o()
 
         self.o("class %sOut(scalgoproto.UnionOut):" % union.name)
@@ -975,19 +965,6 @@ class Generator:
                     raise ICE()
         self.o()
 
-    def generate_table_str(self, table: Table) -> None:
-        self.o("    def __str__(self) ->  str:")
-        self.o("        o = []")
-        for node in table.members:
-            uname = snake(self.value(node.identifier))
-            if node.optional or node.table or node.union:
-                self.o("        if self.has_%s:" % uname)
-                self.o("            o.append('%s: '+str(self.%s))" % (uname, uname))
-            else:
-                self.o("        o.append('%s: '+str(self.%s))" % (uname, uname))
-        self.o("        return '{%s}'%(', '.join(o))")
-        self.o()
-
     def generate_table(self, table: Table) -> None:
         # Recursively generate direct contained members
         for value in table.members:
@@ -1008,6 +985,10 @@ class Generator:
         self.output_doc(table, "    ")
         self.o("    __slots__ = []")
         self.o("    _MAGIC: typing_.ClassVar[int] = 0x%08X" % table.magic)
+        self.o("    _MEMBERS = [")
+        for node in table.members:
+            self.o("        \"%s\"," % snake(self.value(node.identifier)))
+        self.o("    ]")
         self.o()
         self.o(
             "    def __init__(self, reader: scalgoproto.Reader, offset: int, size: int) -> None:"
@@ -1019,7 +1000,6 @@ class Generator:
         self.o()
         for node in table.members:
             self.generate_value_in(table, node)
-        self.generate_table_str(table)
         self.o()
 
         # Generate Table writer
