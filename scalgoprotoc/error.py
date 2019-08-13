@@ -20,8 +20,8 @@ def error(
             t += 1
         idx += 1
     print(
-        "%s: Error in %s on line %d: %s"
-        % (documents.by_id[token.document].path, context, cnt, message),
+        "%s:%s: Error in %s: %s"
+        % (documents.by_id[token.document].path, cnt, context, message),
         file=sys.stderr,
     )
     end = start
