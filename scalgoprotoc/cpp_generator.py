@@ -135,9 +135,9 @@ class Generator:
         self.o("\t")
         self.output_doc(node, "\t")
         self.o("\tscalgoproto::ListIn<%s> %s() const {" % (typeName, lname))
-        self.o("\tif (!has%s()) {" % uname)
-        self.o("\t\treturn scalgoproto::ListIn<%s>(reader_);" % typeName)
-        self.o("\t}")
+        self.o("\t\tif (!has%s()) {" % uname)
+        self.o("\t\t\treturn scalgoproto::ListIn<%s>(reader_);" % typeName)
+        self.o("\t\t}")
         self.o(
             "\t\treturn getObject_<scalgoproto::ListIn<%s> >(reader_, getPtr_<%s, scalgoproto::LISTMAGIC, %d, scalgoproto::ListAccess<%s>::mult>());"
             % (typeName, bs(node.inplace), node.offset, typeName)
