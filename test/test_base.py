@@ -489,6 +489,8 @@ def test_in_complex(path: str) -> bool:
         return False
     if require(s.has_nint_list, False):
         return False
+    if require(len(s.nint_list), 0):
+        return False
     l = s.int_list
 
     if require(len(l), 31):

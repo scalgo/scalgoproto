@@ -227,6 +227,7 @@ int main(int, char ** argv) {
 
 		REQUIRE(s.hasIntList(), true);
 		REQUIRE(s.hasNintList(), false);
+		REQUIRE(s.nintList().size(), 0);
 		auto l = s.intList();
 		auto rl = s.intListRaw();
 

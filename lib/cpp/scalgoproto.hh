@@ -569,6 +569,8 @@ public:
 	using size_type = std::size_t;
 	using iterator = ListInIterator<T>;
 
+	ListIn(const Reader & reader) noexcept : reader_(reader), start_(nullptr), size_(0) {}
+
 	bool hasFront() const noexcept { return !empty() && has(0); }
 	value_type front() const noexcept(noexceptGet) {
 		assert(hasFront());

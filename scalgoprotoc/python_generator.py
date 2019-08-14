@@ -180,7 +180,8 @@ class Generator:
         self.o("    @property")
         self.o("    def %s(self) -> scalgoproto.ListIn[%s]:" % (uname, tn))
         self.output_doc(node, "        ")
-        self.o("        assert self.has_%s" % uname)
+        self.o("        if not self.has_%s:" % uname)
+        self.o("            return []")
         self.o(acc)
         self.o()
 
