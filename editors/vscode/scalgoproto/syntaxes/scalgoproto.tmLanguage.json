@@ -100,7 +100,7 @@
 					"begin": "{",
 					"end": "}",
 					"patterns": [
-						{"include": "#comments"},
+						{"include": "#comment"},
 						{"include": "#lname"}
 					]
 		 	 }]
@@ -121,7 +121,7 @@
 					"begin": "{",
 					"end": "}",
 					"patterns": [
-						{"include": "#comments"},
+						{"include": "#comment"},
 						{"include": "#lname"}
 					]
 		 	 }]
@@ -130,7 +130,7 @@
 			"begin": ":",
 			"end": "(;|,)",
 			"patterns": [
-				{"include": "#comments"},
+				{"include": "#comment"},
 				{"include": "#brief-struct-decl"},
 				{"include": "#brief-enum-decl"},
 				{"include": "#basic-type"},
@@ -139,7 +139,7 @@
 		},
 		"struct-members": {
 			"patterns": [
-				{"include": "#comments"},
+				{"include": "#comment"},
 				{"include": "#lname"},
 				{"include": "#struct-field-end"},
 				{"include": "#brief-struct-decl"}
@@ -199,14 +199,14 @@
 				{"include": "#brief-union-decl"},
 				{"include": "#brief-enum-decl"},
 				{"include": "#ultra-brief-table-decl"},
-				{"include": "#comments"},
+				{"include": "#comment"},
 				{"include": "#uname"},
 				{"include": "#basic-type"}
 			]
 		},
 		"union-tabel-members": {
 			"patterns": [
-				{"include": "#comments"},
+				{"include": "#comment"},
 				{"include": "#lname"},
 				{"include": "#union-table-field-end"},
 				{"include": "#ultra-brief-table-decl"}
