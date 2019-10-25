@@ -3,8 +3,7 @@
 Validate a schema
 """
 import math, io, os
-from types import SimpleNamespace
-from typing import Dict, List, Set, Tuple
+from typing import List, Tuple, Optional
 import typing
 from .annotate import annotate
 from .parser import (
@@ -42,13 +41,12 @@ def bs(v: Token):
 
 
 class Generator:
-    out: io.StringIO = None
+    out: Optional[io.StringIO] = None
 
     def __init__(self, documents: Documents) -> None:
         self.documents = documents
-        self.out: io.StringIO = None
-        self.current_namespace: str = None
-        self.current_file: str = None
+        self.current_namespace: Optional[str] = None
+        self.current_file: Optional[str] = None
 
     def in_list_types(self, node: Value) -> Tuple[str, str]:
         typeName: str = None
@@ -1085,7 +1083,7 @@ class Generator:
         )
         self.o()
 
-    def switch_namespace(self, namespace: str) -> None:
+    def switch_namespace(self, namespace: Optional[str]) -> None:
         if namespace == self.current_namespace:
             return
         if self.current_namespace:
