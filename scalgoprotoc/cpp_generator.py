@@ -1136,6 +1136,14 @@ class Generator:
             for i in sorted(list(imports)):
                 self.o('#include "%s.hh"' % i)
 
+        def node_path(node: AstNode) -> str:
+            name = node.name
+            if dir_strip is None:
+                return name
+            ns = node.namespace.split("::")[dir_strip:]
+            assert ".." not in ns
+            return "/".join(ns + [name])
+
         for node in ast:
             if node.document != 0:
                 continue
@@ -1147,14 +1155,14 @@ class Generator:
                     or isinstance(node, Table)
                     or isinstance(node, Union)
                 ):
-                    name = node.name
-                    if dir_strip is not None:
-                        ns = node.namespace.split("::")[dir_strip:]
-                        assert ".." not in ns
-                        name = "/".join(ns + [name])
+                    name = node_path(node)
                     self.switch_file(name, output)
-                    for name in sorted(u.name for u in node.uses):
-                        self.o('#include "%s.hh"' % name)
+                    for use in sorted(node.uses, key=lambda u: u.name):
+                        n = node_path(use)
+                        lcp = os.path.commonprefix([name, os.path.dirname(n) + "/"])
+                        dirs = name[len(lcp):].count("/")
+                        relpath = "../" * dirs + n[len(lcp):]
+                        self.o('#include "%s.hh"' % relpath)
 
             if isinstance(node, Struct):
                 self.generate_struct(node)
