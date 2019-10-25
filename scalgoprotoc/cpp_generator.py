@@ -1108,15 +1108,20 @@ class Generator:
             if not os.path.exists(po) or open(po, "r").read() != self.out.getvalue():
                 open(po, "w").write(self.out.getvalue())
         if name:
+            guard_name = name.replace("/", "_")
             self.out = io.StringIO()
             self.o("//THIS FILE IS GENERATED DO NOT EDIT")
-            self.o("#ifndef __SCALGOPROTO_%s__" % name)
-            self.o("#define __SCALGOPROTO_%s__" % name)
+            self.o("#ifndef __SCALGOPROTO_%s__" % guard_name)
+            self.o("#define __SCALGOPROTO_%s__" % guard_name)
             self.o("#include <scalgoproto.hh>")
             self.current_file = name
 
-    def generate(self, ast: List[AstNode], output: str, single: bool) -> None:
+    def generate(
+        self, ast: List[AstNode], output: str, single: bool, *, dir_strip: int = None
+    ) -> None:
         if single:
+            if dir_strip is not None:
+                raise Exception("--single and --dir-strip cannot be specified together")
             self.switch_file(self.documents.root.name, output)
 
             imports = set()
@@ -1142,9 +1147,14 @@ class Generator:
                     or isinstance(node, Table)
                     or isinstance(node, Union)
                 ):
-                    self.switch_file(node.name, output)
-                    for u in sorted(list(map(lambda u: u.name, node.uses))):
-                        self.o('#include "%s.hh"' % u)
+                    name = node.name
+                    if dir_strip is not None:
+                        ns = node.namespace.split("::")[dir_strip:]
+                        assert ".." not in ns
+                        name = "/".join(ns + [name])
+                    self.switch_file(name, output)
+                    for name in sorted(u.name for u in node.uses):
+                        self.o('#include "%s.hh"' % name)
 
             if isinstance(node, Struct):
                 self.generate_struct(node)
@@ -1171,7 +1181,7 @@ def run(args) -> int:
             print("Invalid schema is valid")
             return 1
         g = Generator(documents)
-        g.generate(ast, args.output, args.single)
+        g.generate(ast, args.output, args.single, dir_strip=args.dir_strip)
         return 0
     except ParseError as err:
         err.describe(documents)
@@ -1183,4 +1193,5 @@ def setup(subparsers) -> None:
     cmd.add_argument("schema", help="schema to generate things from")
     cmd.add_argument("output", help="where do we store the output")
     cmd.add_argument("--single", action="store_true")
+    cmd.add_argument("--dir-strip", type=int, metavar="N", help="output in subdir formed by removing first N components of namespace")
     cmd.set_defaults(func=run)
