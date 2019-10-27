@@ -3,8 +3,7 @@
 Validate a schema
 """
 import math, io, os
-from types import SimpleNamespace
-from typing import Dict, List, Set, Tuple
+from typing import List, Tuple, Optional
 import typing
 from .annotate import annotate
 from .parser import (
@@ -42,13 +41,12 @@ def bs(v: Token):
 
 
 class Generator:
-    out: io.StringIO = None
+    out: Optional[io.StringIO] = None
 
     def __init__(self, documents: Documents) -> None:
         self.documents = documents
-        self.out: io.StringIO = None
-        self.current_namespace: str = None
-        self.current_file: str = None
+        self.current_namespace: Optional[str] = None
+        self.current_file: Optional[str] = None
 
     def in_list_types(self, node: Value) -> Tuple[str, str]:
         typeName: str = None
@@ -1085,7 +1083,7 @@ class Generator:
         )
         self.o()
 
-    def switch_namespace(self, namespace: str) -> None:
+    def switch_namespace(self, namespace: Optional[str]) -> None:
         if namespace == self.current_namespace:
             return
         if self.current_namespace:
@@ -1110,15 +1108,20 @@ class Generator:
             if not os.path.exists(po) or open(po, "r").read() != self.out.getvalue():
                 open(po, "w").write(self.out.getvalue())
         if name:
+            guard_name = name.replace("/", "_")
             self.out = io.StringIO()
             self.o("//THIS FILE IS GENERATED DO NOT EDIT")
-            self.o("#ifndef __SCALGOPROTO_%s__" % name)
-            self.o("#define __SCALGOPROTO_%s__" % name)
+            self.o("#ifndef __SCALGOPROTO_%s__" % guard_name)
+            self.o("#define __SCALGOPROTO_%s__" % guard_name)
             self.o("#include <scalgoproto.hh>")
             self.current_file = name
 
-    def generate(self, ast: List[AstNode], output: str, single: bool) -> None:
+    def generate(
+        self, ast: List[AstNode], output: str, single: bool, *, dir_strip: int = None
+    ) -> None:
         if single:
+            if dir_strip is not None:
+                raise Exception("--single and --dir-strip cannot be specified together")
             self.switch_file(self.documents.root.name, output)
 
             imports = set()
@@ -1133,6 +1136,14 @@ class Generator:
             for i in sorted(list(imports)):
                 self.o('#include "%s.hh"' % i)
 
+        def node_path(node: AstNode) -> str:
+            name = node.name
+            if dir_strip is None:
+                return name
+            ns = node.namespace.split("::")[dir_strip:]
+            assert ".." not in ns
+            return "/".join(ns + [name])
+
         for node in ast:
             if node.document != 0:
                 continue
@@ -1144,9 +1155,14 @@ class Generator:
                     or isinstance(node, Table)
                     or isinstance(node, Union)
                 ):
-                    self.switch_file(node.name, output)
-                    for u in sorted(list(map(lambda u: u.name, node.uses))):
-                        self.o('#include "%s.hh"' % u)
+                    name = node_path(node)
+                    self.switch_file(name, output)
+                    for use in sorted(node.uses, key=lambda u: u.name):
+                        n = node_path(use)
+                        lcp = os.path.commonprefix([name, os.path.dirname(n) + "/"])
+                        dirs = name[len(lcp):].count("/")
+                        relpath = "../" * dirs + n[len(lcp):]
+                        self.o('#include "%s.hh"' % relpath)
 
             if isinstance(node, Struct):
                 self.generate_struct(node)
@@ -1173,7 +1189,7 @@ def run(args) -> int:
             print("Invalid schema is valid")
             return 1
         g = Generator(documents)
-        g.generate(ast, args.output, args.single)
+        g.generate(ast, args.output, args.single, dir_strip=args.dir_strip)
         return 0
     except ParseError as err:
         err.describe(documents)
@@ -1185,4 +1201,5 @@ def setup(subparsers) -> None:
     cmd.add_argument("schema", help="schema to generate things from")
     cmd.add_argument("output", help="where do we store the output")
     cmd.add_argument("--single", action="store_true")
+    cmd.add_argument("--dir-strip", type=int, metavar="N", help="output in subdir formed by removing first N components of namespace")
     cmd.set_defaults(func=run)
