@@ -47,6 +47,23 @@ def runCpp(name: str, bin: str) -> bool:
     return True
 
 
+def runRustSetup(schemas: List[str], main_file: str) -> bool:
+    for schema in schemas:
+        subprocess.check_call(
+            ["python3", "-m", "scalgoprotoc", "rust", schema, "tmp/", "--single"]
+        )
+    schema_paths = [
+        "tmp/%s.rs" % os.path.splitext(os.path.basename(s))[0] for s in schemas
+    ]
+    subprocess.check_call(["rustc", "-o", "tmp/rs", main_file] + schema_paths)
+    return True
+
+
+def runRust(name: str, bin: str) -> bool:
+    subprocess.check_call(["tmp/rs", name, bin])
+    return True
+
+
 def runPySetup(schemas: List[str]) -> bool:
     for schema in schemas:
         subprocess.check_call(["python3", "-m", "scalgoprotoc", "py", schema, "tmp"])
@@ -116,7 +133,10 @@ def runNeg(name: str, base: str, bad: str, good: str) -> None:
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as f:
         f.write(base % bad)
         f.flush()
-        code = subprocess.call(["python3", "-m", "scalgoprotoc", "validate", f.name], stderr=subprocess.DEVNULL)
+        code = subprocess.call(
+            ["python3", "-m", "scalgoprotoc", "validate", f.name],
+            stderr=subprocess.DEVNULL,
+        )
         if code == 0:
             print("FAILURE1")
             failures.append(name)
@@ -321,6 +341,33 @@ def main():
         runTest(
             "ts in union", lambda: runTs("in_union", "test/union.bin", "test_union.ts")
         )
+
+    if runTest(
+        "rs setup",
+        lambda: runRustSetup(
+            ["test/base.spr", "test/complex2.spr"], "test/test_base.rs"
+        ),
+    ):
+        runTest(
+            "rs out default simple",
+            lambda: runRust("out_default", "test/simple_default.bin"),
+        )
+        runTest(
+            "rs in default simple",
+            lambda: runRust("in_default", "test/simple_default.bin"),
+        )
+        runTest("rs out simple", lambda: runRust("out", "test/simple.bin"))
+        runTest("rs in simple", lambda: runRust("in", "test/simple.bin"))
+        runTest("rs out complex", lambda: runRust("out_complex", "test/complex.bin"))
+        runTest("rs in complex", lambda: runRust("in_complex", "test/complex.bin"))
+        runTest("rs out complex2", lambda: runRust("out_complex2", "test/complex2.bin"))
+        runTest("rs in complex2", lambda: runRust("in_complex2", "test/complex2.bin"))
+        runTest("rs out inplace", lambda: runRust("out_inplace", "test/inplace.bin"))
+        runTest("rs in inplace", lambda: runRust("in_inplace", "test/inplace.bin"))
+        runTest("rs out extend1", lambda: runRust("out_extend1", "test/extend1.bin"))
+        runTest("rs in extend1", lambda: runRust("in_extend1", "test/extend1.bin"))
+        runTest("rs out extend2", lambda: runRust("out_extend2", "test/extend2.bin"))
+        runTest("rs in extend2", lambda: runRust("in_extend2", "test/extend2.bin"))
 
     print("=" * 80)
     if not failures:
