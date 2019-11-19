@@ -62,6 +62,9 @@ def runPy(name: str, bin: str, mod="test_base.py") -> bool:
 
 
 def runTsSetup(schemas: List[str]) -> bool:
+    if not os.path.exists("./node_modules/.bin/ts-node"):
+        print("Run npm i to install ts-node")
+        return False
     for schema in schemas:
         subprocess.check_call(["python3", "-m", "scalgoprotoc", "ts", schema, "tmp"])
     return True
