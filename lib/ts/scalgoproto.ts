@@ -1,3 +1,5 @@
+import { setFlagsFromString } from "v8";
+
 export const MESSAGE_MAGIC = 0xB5C0C4B3
 export const TEXT_MAGIC = 0xD812C8F5
 export const BYTES_MAGIC = 0xDCDBBE10
