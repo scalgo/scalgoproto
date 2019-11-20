@@ -1,14 +1,14 @@
-#![allow(non_camel_case_types)]
-
 #[repr(u8)]
+#[derive(Copy, Clone, Debug)]
 pub enum MyEnum {
-    a = 0,
-    b = 1,
-    c = 2,
-    d = 3,
+    A = 0,
+    B = 1,
+    C = 2,
+    D = 3,
 }
 
 #[repr(C, packed(1))]
+#[derive(Copy, Clone, Debug)]
 pub struct MyStruct {
     pub x: u32,
     pub y: f32,
@@ -16,6 +16,7 @@ pub struct MyStruct {
 }
 
 #[repr(C, packed(1))]
+#[derive(Copy, Clone, Debug)]
 pub struct FullStruct {
     pub e: MyEnum,
     pub s: MyStruct,
@@ -32,29 +33,36 @@ pub struct FullStruct {
     pub d: f64,
 }
 
-pub type Result<T> = std::Result<T, ()>;
+pub type Result<T> = std::result::Result<T, ()>;
 
-pub trait ScalgoprotoReader {
+pub trait ScalgoprotoReader:Sized {
     fn slice(&self, offset: usize, size: usize) -> Result<&[u8]>;
-    fn ptr(&self, offset: usize, target_size: usize) -> Result<ScalgoprotoReader>;
-}
+    fn ptr(&self, offset: usize, target_size: usize) -> Result<Self>;
 
-impl<R: ScalgoprotoReader> R {
     fn get_u8(&self, offset: usize) -> Result<u8> {
-        self.slice(offset, 1)?[0]
+        Ok(self.slice(offset, 1)?[0])
     }
 
     fn get_bit(&self, offset: usize, bit: usize) -> bool {
         (self.get_u8(offset).unwrap_or(0) >> bit) & 1 == 1
     }
 
-    fn get_48(&self, offset: usize) -> Result<usize> {
-        let data = self.slice(offset, 6)?;
-        let target = &mut [0u64];
+    fn get_48(&self, offset: usize) -> Result<u64> {
+        let s = self.slice(offset, 6)?;
+        let mut target: u64 = 0;
         unsafe {
-            std::mem::transmute(target)[..6].clone_from_slice(data);
+            std::ptr::copy_nonoverlapping(s.as_ptr(), &mut target as *mut u64 as *mut u8, 6);
         }
-        Ok(target[0] as usize)
+        Ok(target)
+    }
+
+    fn get_pod<T: Copy>(&self, offset: usize) -> Result<T> {
+        let s = self.slice(offset, std::mem::size_of::<T>())?;
+        unsafe {
+            let mut target: T = std::mem::MaybeUninit::uninit().assume_init();
+            std::ptr::copy_nonoverlapping(s.as_ptr(), &mut target as *mut T as *mut u8, std::mem::size_of::<T>());
+            Ok(target)
+        }
     }
 }
 
@@ -63,38 +71,26 @@ pub trait ScalgoprotoTableIn {
 }
 
 pub struct SimpleIn<R: ScalgoprotoReader> {
-    reader: ScalgoprotoReader<'a>,
-    start: usize,
+    reader: R,
 }
 
-impl ScalgoprotoTableIn for SimpleIn {
+impl<R: ScalgoprotoReader> ScalgoprotoTableIn for SimpleIn<R> {
     fn magic() -> u32 {
         0xF0606B0B
     }
 }
 
-macro_rules! get_inner {
-    ( $table:expr, $type:ty, $offset:expr ) => {
-        $table.reader.slice($offset, std::mem::size_of::<$type>()).map(
-            raw => {
-                let typed: &[$type] = unsafe { std::mem::transmute(raw) };
-                typed[0]
-            }
-        )
-    }
-}
-
-impl SimpleIn {
+impl<R: ScalgoprotoReader>  SimpleIn<R> {
     fn has_e(&self) -> bool {
         self.reader.get_u8(0).unwrap_or(255) != 255
     }
 
     fn e(&self) -> Result<MyEnum> {
-        get_inner!(self, MyEnum, 0)
+        self.reader.get_pod::<MyEnum>(0)
     }
 
     fn s(&self) -> Result<FullStruct> {
-        get_inner!(self, FullStruct, 1)
+        self.reader.get_pod::<FullStruct>(1)
     }
 
     fn b(&self) -> bool {
@@ -102,43 +98,43 @@ impl SimpleIn {
     }
 
     fn u8_(&self) -> u8 {
-        get_inner!(self, u8, 55).unwrap_or(2)
+        self.reader.get_pod::<u8>(55).unwrap_or(2)
     }
 
     fn u16_(&self) -> u16 {
-        get_inner!(self, u16, 56).unwrap_or(3)
+        self.reader.get_pod::<u16>(56).unwrap_or(3)
     }
 
     fn u32_(&self) -> u32 {
-        get_inner!(self, u32, 58).unwrap_or(4)
+        self.reader.get_pod::<u32>(58).unwrap_or(4)
     }
 
     fn u64_(&self) -> u64 {
-        get_inner!(self, u64, 62).unwrap_or(5)
+        self.reader.get_pod::<u64>(62).unwrap_or(5)
     }
 
     fn i8_(&self) -> i8 {
-        get_inner!(self, i8, 70).unwrap_or(6)
+        self.reader.get_pod::<i8>(70).unwrap_or(6)
     }
 
     fn i16_(&self) -> i16 {
-        get_inner!(self, i16, 71).unwrap_or(7)
+        self.reader.get_pod::<i16>(71).unwrap_or(7)
     }
 
     fn i32_(&self) -> i32 {
-        get_inner!(self, i32, 73).unwrap_or(8)
+        self.reader.get_pod::<i32>(73).unwrap_or(8)
     }
 
     fn i64_(&self) -> i64 {
-        get_inner!(self, i64, 77).unwrap_or(9)
+        self.reader.get_pod::<i64>(77).unwrap_or(9)
     }
 
-    fn f(&self) -> f32 {
-        get_inner!(self, f32, 85).unwrap_or(10.0f32)
+    fn f32_(&self) -> f32 {
+        self.reader.get_pod::<f32>(85).unwrap_or(10.0f32)
     }
 
-    fn f(&self) -> f64 {
-        get_inner!(self, f64, 89).unwrap_or(11.0f64)
+    fn f64_(&self) -> f64 {
+        self.reader.get_pod::<f64>(89).unwrap_or(11.0f64)
     }
 
     fn has_os(&self) -> bool {
@@ -146,7 +142,7 @@ impl SimpleIn {
     }
 
     fn os(&self) -> Result<MyStruct> {
-        get_inner!(self, MyStruct, 97)
+        self.reader.get_pod::<MyStruct>(97)
     }
 
     fn has_ob(&self) -> bool {
@@ -162,7 +158,7 @@ impl SimpleIn {
     }
 
     fn ou8(&self) -> Result<u8> {
-        get_inner!(self, u8, 106)
+        self.reader.get_pod::<u8>(106)
     }
 
     fn has_ou16(&self) -> bool {
@@ -170,7 +166,7 @@ impl SimpleIn {
     }
 
     fn ou16(&self) -> Result<u16> {
-        get_inner!(self, u16, 107)
+        self.reader.get_pod::<u16>(107)
     }
 
     fn has_ou32(&self) -> bool {
@@ -178,6 +174,39 @@ impl SimpleIn {
     }
 
     fn ou32(&self) -> Result<u32> {
-        get_inner!(self, u32, 109)
+        self.reader.get_pod::<u32>(109)
     }
+}
+
+struct LinearReader {
+    full: &'static [u8],
+    part: &'static [u8],
+}
+
+impl ScalgoprotoReader for LinearReader {
+    fn slice(&self, offset: usize, size: usize) -> Result<&'static [u8]> { //TODO lifetime
+        if offset + size > self.part.len() {
+            Err(())
+        } else {
+            Ok(&self.part[offset..offset+size])
+        }
+    }
+
+    fn ptr(&self, offset: usize, target_size: usize) -> Result<Self> {
+        Err(())
+    }
+}
+
+static bytes : [u8; 1000] = [0; 1000];
+
+fn main() {
+
+    
+    let reader = LinearReader {full: &bytes, part: &bytes};
+
+    let si = SimpleIn { reader: reader };
+
+    println!("HI  {:?} {:?}", si.e().unwrap(), si.s().unwrap());
+
+    println!("Hello, world!");
 }
