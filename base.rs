@@ -61,6 +61,8 @@ pub trait ScalgoprotoReader:Sized {
         unsafe {
             let mut target: T = std::mem::MaybeUninit::uninit().assume_init();
             std::ptr::copy_nonoverlapping(s.as_ptr(), &mut target as *mut T as *mut u8, std::mem::size_of::<T>());
+            //TODO make validator that checks that enums are within range and that structs are valid
+            //That is contained bools are 0 or 1, and contained enums are within range
             Ok(target)
         }
     }
@@ -178,13 +180,13 @@ impl<R: ScalgoprotoReader>  SimpleIn<R> {
     }
 }
 
-struct LinearReader {
-    full: &'static [u8],
-    part: &'static [u8],
+struct LinearReader<'a> {
+    full: &'a [u8],
+    part: &'a [u8],
 }
 
-impl ScalgoprotoReader for LinearReader {
-    fn slice(&self, offset: usize, size: usize) -> Result<&'static [u8]> { //TODO lifetime
+impl<'a> ScalgoprotoReader for LinearReader<'a> {
+    fn slice(&self, offset: usize, size: usize) -> Result<&[u8]> {
         if offset + size > self.part.len() {
             Err(())
         } else {
@@ -197,11 +199,12 @@ impl ScalgoprotoReader for LinearReader {
     }
 }
 
-static bytes : [u8; 1000] = [0; 1000];
+
 
 fn main() {
 
-    
+    let bytes : [u8; 1000] = [1; 1000];
+
     let reader = LinearReader {full: &bytes, part: &bytes};
 
     let si = SimpleIn { reader: reader };
