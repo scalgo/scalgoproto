@@ -304,22 +304,24 @@ class Generator:
             raise ICE()
         self.output_doc(node, "    ")
         if node.optional:
-            self.o("    fn %s(&self) -> Option<bool> {if self.reader.get_bit(%d, %d) {Some(self.reader.get_bit(%d, %d))} else {None}}"%(
+            self.o("    pub fn %s(&self) -> Option<bool> {if self.reader.get_bit(%d, %d) {Some(self.reader.get_bit(%d, %d))} else {None}}"%(
                 lname, node.has_offset, node.has_bit, node.offset, node.bit
             ))
         else:
-            self.o("    fn %s(&self) -> bool {self.reader.get_bit(%d, %d)}"%(
+            self.o("    pub fn %s(&self) -> bool {self.reader.get_bit(%d, %d)}"%(
                 lname, node.offset, node.bit
             ))
     def generate_bool_out(self, node: Value, lname: str) -> None:
         self.output_doc(node, "    ")
-        self.o("    set %s(value: boolean) {" % (lname,))
         if node.optional:
-            self.o("        this._setBit(%d, %d);" % (node.has_offset, node.has_bit))
-        self.o("        if (value) this._setBit(%d, %d);" % (node.offset, node.bit))
-        self.o("        else this._unsetBit(%d, %d);" % (node.offset, node.bit))
-        self.o("    }")
-        self.o()
+            self.o("    pub fn %s(&self, v : Option<bool>) {match v {None => unsafe{self.arena.set_bit(self.offset + %d, %d, false), Some(b) => unsafe{self.arena.set_bit(self.offset + %d, %d, true), self.arena.set_bit(self.offset + %d, %d, v)}}"% (
+                lname, node.has_offset, node.has_bit, node.has_offset, node.has_bit, node.offset, node.bit
+            ))
+        else:
+            self.o("    pub fn %s(&self, v : bool) {unsafe{self.arena.set_bit(self.offset + %d, %d, v)}}"% (
+                lname, node.offset, node.bit
+            ))
+
 
     def generate_basic_in(self, node: Value, lname: str) -> None:
         if node.inplace:
@@ -329,17 +331,17 @@ class Generator:
         if node.optional:
             if node.type_.type in (TokenType.F32, TokenType.F64):
                 self.o(
-                    "    fn %s(&self) -> Option<%s> {match self.reader.get_pod(%d) {None => None, Some(v) if v.is_nan() => None, Some(v) => Some(v)}}"% (
+                    "    pub fn %s(&self) -> Option<%s> {match self.reader.get_pod(%d) {None => None, Some(v) if v.is_nan() => None, Some(v) => Some(v)}}"% (
                         lname, ti.p, node.offset
                     ))
             else:
                 self.o(
-                    "    fn %s(&self) -> Option<%s> {if self.reader.get_bit(%d, %d) {Some(self.reader.get_pod(%d))} else {None}}"% (
+                    "    pub fn %s(&self) -> Option<%s> {if self.reader.get_bit(%d, %d) {Some(self.reader.get_pod(%d))} else {None}}"% (
                         lname, ti.p, node.has_offset, node.has_bit, node.offset
                     ))
         else:
             self.o(
-                "    fn %s(&self) -> %s {self.reader.get_pod(%d).unwrap_or(%s)}"% (
+                "    pub fn %s(&self) -> %s {self.reader.get_pod(%d).unwrap_or(%s)}"% (
                     lname, ti.p, node.offset, node.parsed_value if not math.isnan(node.parsed_value) else "std::%s::NAN"%ti.p
                 ))
 
@@ -349,28 +351,29 @@ class Generator:
             raise ICE()
         ti = typeMap[node.type_.type]
         self.output_doc(node, "    ")
-        self.o("    set %s(value: %s) {" % (lname, ti.p))
-        if node.optional and node.type_.type not in (TokenType.F32, TokenType.F64):
-            self.o("        this._setBit(%d, %d);" % (node.has_offset, node.has_bit))
-        self.o("        this._set%s(%d, value);" % (ti.n, node.offset))
-        self.o("    }")
-        self.o()
+        if  node.optional:
+            self.o("    pub fn %s(&self, v : Option<%s>) {match v {None => unsafe{self.arena.set_bit(self.offset + %d, %d, false), Some(b) => unsafe{self.arena.set_bit(self.offset + %d, %d, true), self.arena.set_podh(self.offset + %d, %d, &v)}}"% (
+                lname, ti.p, node.has_offset, node.has_bit, node.has_offset, node.has_bit, node.offset, node.bit
+            ))
+        else:
+            self.o(
+                "    pub fn %s(&self, v : %s) {unsafe{self.arena.set_pod(self.offset + %d, &v)}}"% (
+                    lname, ti.p, node.offset
+                ))
 
     def generate_enum_in(self, node: Value, lname: str) -> None:
         if node.inplace:
             raise ICE()
         self.output_doc(node, "    ")
-        self.o("    fn %s(&self) -> Optional<%s> {self.reader.get_enum(%d, %d)}" % (lname, node.enum.name, node.offset, len(node.enum.members)))
+        self.o("    pub fn %s(&self) -> Optional<%s> {self.reader.get_enum(%d, %d)}" % (lname, node.enum.name, node.offset, len(node.enum.members)))
 
 
     def generate_enum_out(self, node: Value, lname: str) -> None:
         if node.inplace:
             raise ICE()
         self.output_doc(node, "    ")
-        self.o("    set %s(value: %s) {" % (lname, node.enum.name))
-        self.o("        this._setUint8(%d, value as number)" % (node.offset))
-        self.o("    }")
-        self.o()
+        self.o("    pub fn %s(&mut self, v: Option<%s>) {self.arena.set_enum(self.offset + %d, v);}" % (lname, node.enum.name, node.offset))
+
 
     def generate_struct_in(self, node: Value, lname: str) -> None:
         if node.inplace:
@@ -386,15 +389,12 @@ class Generator:
         if node.inplace:
             raise ICE()
         self.output_doc(node, "    ")
-        self.o("    set %s(value: %s) {" % (lname, node.struct.name))
         if node.optional:
-            self.o("        this._setBit(%d, %d)" % (node.has_offset, node.has_bit))
-        self.o(
-            "        %s._write(this._writer, this._offset + %d, value)"
-            % (node.struct.name, node.offset)
-        )
-        self.o("    }")
-        self.o()
+             self.o("    pub fn %s(&self) -> %sOut<'a> {self.arena.set_bit(self.offset + %d, %d, true);<%s as scalgo_proto::StructOutFactory<'a>>::new(&self.arena, self.offset + %d)}" % (
+                 lname, node.struct.name, node.has_offset, node.has_bit, node.struct.name, node.offset))
+        else:
+            self.o("    pub fn %s(&self) -> %sOut<'a> {<%s as scalgo_proto::StructOutFactory<'a>>::new(&self.arena, self.offset + %d)}" % (
+                lname, node.struct.name, node.struct.name, node.offset))
 
     def generate_table_in(self, node: Value, lname: str) -> None:
         if not node.table.empty:
