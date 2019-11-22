@@ -1,7 +1,29 @@
+#[derive(Debug)]
+pub enum Error {
+    Utf8(std::str::Utf8Error),
+    InvalidPointer(),
+    Overflow(),
+    BadMagic(),
+}
+
+impl From<std::str::Utf8Error> for Error {
+    fn from(err: std::str::Utf8Error) -> Self {
+        Self::Utf8(err)
+    }
+}
+
+
+pub type Result<T> = std::result::Result<T, Error>;
+
 pub trait StructInFactory<'a> {
     type T;
     type B;
     fn new(bytes: &'a Self::B) -> Self::T;
+}
+
+pub trait StructOutFactory<'a> {
+    type T;
+    fn new(arena: &'a Arena, offset: usize) -> Self::T;
 }
 
 static ZERO: [u8; 1024 * 16] = [0; 1024 * 16];
@@ -47,19 +69,17 @@ pub fn to_bool(v: u8) -> bool {
     }
 }
 
-// This method is safe as long as v has length at leats 6
+// This method is safe as long as v has length at least 6
 pub unsafe fn to_u48(v: &[u8]) -> u64 {
     let mut out: u64 = 0;
-    unsafe {
-        std::ptr::copy_nonoverlapping(v.as_ptr(), &mut out as *mut u64 as *mut u8, 6);
-    };
+    std::ptr::copy_nonoverlapping(v.as_ptr(), &mut out as *mut u64 as *mut u8, 6);
     out
 }
 
-pub unsafe fn to_u48_usize(v: &[u8]) -> Result<usize, ()> {
-    match std::convert::TryFrom::try_from(unsafe { to_u48(v) }) {
+pub unsafe fn to_u48_usize(v: &[u8]) -> Result<usize> {
+    match std::convert::TryFrom::try_from(to_u48(v)) {
         Ok(v) => Ok(v),
-        Err(_) => Err(()),
+        Err(_) => Err(Error::Overflow()),
     }
 }
 
@@ -96,6 +116,17 @@ impl<'a> Reader<'a> {
         Some(unsafe { to_u48(s) })
     }
 
+    pub fn get_48_usize(&self, offset: usize) -> Result<Option<usize>> {
+        let v = match self.get_48(offset) {
+            Some(v) => v,
+            None => return Ok(None),
+        };
+        match std::convert::TryFrom::try_from(v) {
+            Ok(v) => Ok(Some(v)),
+            Err(_) => Err(Error::Overflow()),
+        }
+    }
+
     pub fn get_struct<F: StructInFactory<'a> + 'a>(&self, offset: usize) -> F::T {
         match self.slice(offset, std::mem::size_of::<F::B>()) {
             Some(s) => unsafe { to_struct::<F>(s) },
@@ -117,6 +148,54 @@ impl<'a> Reader<'a> {
             None => None,
         }
     }
+
+    pub fn get_ptr(&self, offset: usize, expected_magic: u32) -> Result<Option<(usize, usize)>> {
+        let offset = match self.get_48_usize(offset)? {
+            Some(v) => v,
+            None => return Ok(None),
+        };
+        if self.full.len() < offset + 10 {
+            return Err(Error::InvalidPointer());
+        }
+        let magic: u32 = unsafe { to_pod(&self.full[offset..offset + 4]) };
+        if magic != expected_magic {
+            return Err(Error::BadMagic());
+        }
+        let size = unsafe { to_u48_usize(&self.full[offset + 4..offset + 10]) }?;
+        if offset + 10 + size > self.full.len() {
+            return Err(Error::InvalidPointer());
+        }
+        return Ok(Some( (offset+10, size) ));
+    }
+
+
+
+    pub fn get_table<F: TableInFactory<'a> + 'a>(&self, offset: usize) -> Result<Option<F::T>> {
+        match self.get_ptr(offset, F::magic()) {
+            Err(e) => Err(e),
+            Ok(None) => Ok(None),
+            Ok(Some((o,s))) => Ok(Some(F::new(Reader {
+                full: self.full,
+                part: &self.full[o..o+s],
+            })))
+        }
+    }
+
+    pub fn get_text(&self, offset:usize) -> Result<Option<&'a str>> {
+        match self.get_ptr(offset, TEXTMAGIC) {
+            Err(e) => Err(e),
+            Ok(None) => Ok(None),
+            Ok(Some((o,s))) => Ok(Some(std::str::from_utf8(&self.full[o..o+s])?))
+        }
+    }
+
+    pub fn get_bytes(&self, offset:usize) -> Result<Option<&'a [u8]>> {
+        match self.get_ptr(offset, BYTESMAGIC) {
+            Err(e) => Err(e),
+            Ok(None) => Ok(None),
+            Ok(Some((o,s))) => Ok(Some(&self.full[o..o+s]))
+        }
+    }
 }
 
 pub trait TableOut {
@@ -133,35 +212,24 @@ pub trait TableOutFactory<'a> {
     type T;
     fn magic() -> u32;
     fn size() -> usize;
-    fn new(Arena: &'a Arena, offset: usize) -> Self::T;
+    fn new(arena: &'a Arena, offset: usize) -> Self::T;
 }
 
 pub fn read_message<'a, F: TableInFactory<'a> + 'a>(
     data: &'a [u8],
-) -> std::result::Result<F::T, ()> {
-    if data.len() < 20 {
-        return Err(());
+) -> Result<F::T> {
+    if data.len() < 10 {
+        return Err(Error::InvalidPointer());
     }
-    let magic: u32 = unsafe { to_pod(&data[0..4]) };
-    if magic != ROOTMAGIC {
-        return Err(());
-    }
-    let offset = unsafe { to_u48_usize(&data[4..10]) }?;
-    if data.len() < offset + 10 {
-        return Err(());
-    }
-    let table_magic: u32 = unsafe { to_pod(&data[offset..offset + 4]) };
-    if table_magic != F::magic() {
-        return Err(());
-    }
-    let table_size = unsafe { to_u48_usize(&data[offset + 4..offset + 10]) }?;
-    if offset + 10 + table_size > data.len() {
-        return Err(());
-    }
-    Ok(F::new(Reader {
+    let r = Reader{
         full: data,
-        part: &data[offset + 10..offset + 10 + table_size],
-    }))
+        part: &data[0..10]
+    };
+    match r.get_table::<F>(4) {
+    Err(e) => Err(e),
+    Ok(Some(v)) => Ok(v),
+    Ok(None) => Err(Error::InvalidPointer())
+    }
 }
 
 pub struct Arena {
@@ -169,67 +237,57 @@ pub struct Arena {
 }
 
 impl Arena {
-    pub fn set_pod<T: Copy>(&self, offset: usize, v: T) {
-        unsafe {
-            let size = std::mem::size_of::<T>();
-            let data = &mut *self.data.get();
-            assert!(offset + size <= data.len());
-            std::ptr::copy_nonoverlapping(
-                &v as *const T as *const u8,
+    pub unsafe fn set_pod<T: Copy>(&self, offset: usize, v: T) {
+        let size = std::mem::size_of::<T>();
+        let data = &mut *self.data.get();
+        assert!(offset + size <= data.len());
+        std::ptr::copy_nonoverlapping(
+            &v as *const T as *const u8,
+            data.as_mut_ptr().add(offset),
+            size,
+        );
+    }
+
+    pub unsafe fn set_bit(&self, offset: usize, bit: usize, value: bool) {
+        let data = &mut *self.data.get();
+        assert!(bit < 8);
+        assert!(offset < data.len());
+        if value {
+            data[offset] = data[offset] | (1 << bit);
+        } else {
+            data[offset] = data[offset] & !(1 << bit);
+        }
+    }
+
+    pub unsafe fn set_bool(&self, offset: usize, value: bool) {
+        let data = &mut *self.data.get();
+        assert!(offset < data.len());
+        data[offset] = if value { 0 } else { 1 }
+    }
+
+    pub unsafe fn set_u48(&self, offset: usize, value: u64) {
+        let size = 6;
+        let data = &mut *self.data.get();
+        assert!(offset + size <= data.len());
+        assert!(value < 1 << 42);
+        std::ptr::copy_nonoverlapping(
+            &value as *const u64 as *const u8,
+            data.as_mut_ptr().add(offset),
+            size,
+        );
+    }
+
+    pub unsafe fn set_enum<T: Copy>(&self, offset: usize, v: Option<T>) {
+        let data = &mut *self.data.get();
+        assert!(offset < data.len());
+        //TODO check size
+        match v {
+            Some(vv) => std::ptr::copy_nonoverlapping(
+                &vv as *const T as *const u8,
                 data.as_mut_ptr().add(offset),
-                size,
-            );
-        }
-    }
-
-    pub fn set_bit(&self, offset: usize, bit: usize, value: bool) {
-        unsafe {
-            let data = &mut *self.data.get();
-            assert!(bit < 8);
-            assert!(offset < data.len());
-            if value {
-                data[offset] = data[offset] | (1 << bit);
-            } else {
-                data[offset] = data[offset] & !(1 << bit);
-            }
-        }
-    }
-
-    pub fn set_bool(&self, offset: usize, value: bool) {
-        unsafe {
-            let data = &mut *self.data.get();
-            assert!(offset < data.len());
-            data[offset] = if value { 0 } else { 1 }
-        }
-    }
-
-    pub fn set_u48(&self, offset: usize, value: u64) {
-        unsafe {
-            let size = 6;
-            let data = &mut *self.data.get();
-            assert!(offset + size <= data.len());
-            assert!(value < 1 << 42);
-            std::ptr::copy_nonoverlapping(
-                &value as *const u64 as *const u8,
-                data.as_mut_ptr().add(offset),
-                size,
-            );
-        }
-    }
-
-    pub fn set_enum<T: Copy>(&self, offset: usize, v: Option<T>) {
-        unsafe {
-            let data = &mut *self.data.get();
-            assert!(offset < data.len());
-            //TODO check size
-            match v {
-                Some(vv) => std::ptr::copy_nonoverlapping(
-                    &vv as *const T as *const u8,
-                    data.as_mut_ptr().add(offset),
-                    1,
-                ),
-                None => data[offset] = 255,
-            }
+                1,
+            ),
+            None => data[offset] = 255,
         }
     }
 
@@ -260,15 +318,19 @@ impl Writer {
 
     pub fn add_table<'a, F: TableOutFactory<'a> + 'a>(&'a self) -> F::T {
         let offset = self.arena.allocate(10 + F::size());
-        self.arena.set_pod(offset, F::magic());
-        self.arena.set_u48(offset + 4, F::size() as u64);
+        unsafe {
+            self.arena.set_pod(offset, F::magic());
+            self.arena.set_u48(offset + 4, F::size() as u64);
+        }
         F::new(&self.arena, offset + 10)
     }
 
     pub fn finalize<T: TableOut>(&self, root: T) -> &[u8] {
-        self.arena.set_pod(0, ROOTMAGIC);
-        self.arena.set_u48(4, (root.offset() - 10) as u64);
-        unsafe { (&*self.arena.data.get()).as_slice() }
+        unsafe {
+            self.arena.set_pod(0, ROOTMAGIC);
+            self.arena.set_u48(4, (root.offset() - 10) as u64);
+            (&*self.arena.data.get()).as_slice()
+        }
     }
 
     pub fn clear(&mut self) {

@@ -304,21 +304,21 @@ class Generator:
             raise ICE()
         self.output_doc(node, "    ")
         if node.optional:
-            self.o("    pub fn %s(&self) -> Option<bool> {if self.reader.get_bit(%d, %d) {Some(self.reader.get_bit(%d, %d))} else {None}}"%(
+            self.o("    pub fn %s(&self) -> Option<bool> {if self._reader.get_bit(%d, %d) {Some(self._reader.get_bit(%d, %d))} else {None}}"%(
                 lname, node.has_offset, node.has_bit, node.offset, node.bit
             ))
         else:
-            self.o("    pub fn %s(&self) -> bool {self.reader.get_bit(%d, %d)}"%(
+            self.o("    pub fn %s(&self) -> bool {self._reader.get_bit(%d, %d)}"%(
                 lname, node.offset, node.bit
             ))
     def generate_bool_out(self, node: Value, lname: str) -> None:
         self.output_doc(node, "    ")
         if node.optional:
-            self.o("    pub fn %s(&self, v : Option<bool>) {match v {None => unsafe{self.arena.set_bit(self.offset + %d, %d, false), Some(b) => unsafe{self.arena.set_bit(self.offset + %d, %d, true), self.arena.set_bit(self.offset + %d, %d, v)}}"% (
+            self.o("    pub fn %s(&self, v : Option<bool>) {match v {None => unsafe{self._arena.set_bit(self._offset + %d, %d, false)}, Some(b) => unsafe{self._arena.set_bit(self._offset + %d, %d, true); self._arena.set_bit(self._offset + %d, %d, b)}}}"% (
                 lname, node.has_offset, node.has_bit, node.has_offset, node.has_bit, node.offset, node.bit
             ))
         else:
-            self.o("    pub fn %s(&self, v : bool) {unsafe{self.arena.set_bit(self.offset + %d, %d, v)}}"% (
+            self.o("    pub fn %s(&self, v : bool) {unsafe{self._arena.set_bit(self._offset + %d, %d, v)}}"% (
                 lname, node.offset, node.bit
             ))
 
@@ -331,17 +331,17 @@ class Generator:
         if node.optional:
             if node.type_.type in (TokenType.F32, TokenType.F64):
                 self.o(
-                    "    pub fn %s(&self) -> Option<%s> {match self.reader.get_pod(%d) {None => None, Some(v) if v.is_nan() => None, Some(v) => Some(v)}}"% (
-                        lname, ti.p, node.offset
+                    "    pub fn %s(&self) -> Option<%s> {match self._reader.get_pod::<%s>(%d) {None => None, Some(v) if v.is_nan() => None, Some(v) => Some(v)}}"% (
+                        lname, ti.p, ti.p, node.offset
                     ))
             else:
                 self.o(
-                    "    pub fn %s(&self) -> Option<%s> {if self.reader.get_bit(%d, %d) {Some(self.reader.get_pod(%d))} else {None}}"% (
+                    "    pub fn %s(&self) -> Option<%s> {if self._reader.get_bit(%d, %d) {self._reader.get_pod(%d)} else {None}}"% (
                         lname, ti.p, node.has_offset, node.has_bit, node.offset
                     ))
         else:
             self.o(
-                "    pub fn %s(&self) -> %s {self.reader.get_pod(%d).unwrap_or(%s)}"% (
+                "    pub fn %s(&self) -> %s {self._reader.get_pod(%d).unwrap_or(%s)}"% (
                     lname, ti.p, node.offset, node.parsed_value if not math.isnan(node.parsed_value) else "std::%s::NAN"%ti.p
                 ))
 
@@ -352,12 +352,12 @@ class Generator:
         ti = typeMap[node.type_.type]
         self.output_doc(node, "    ")
         if  node.optional:
-            self.o("    pub fn %s(&self, v : Option<%s>) {match v {None => unsafe{self.arena.set_bit(self.offset + %d, %d, false), Some(b) => unsafe{self.arena.set_bit(self.offset + %d, %d, true), self.arena.set_podh(self.offset + %d, %d, &v)}}"% (
-                lname, ti.p, node.has_offset, node.has_bit, node.has_offset, node.has_bit, node.offset, node.bit
+            self.o("    pub fn %s(&self, v : Option<%s>) {match v {None => unsafe{self._arena.set_bit(self._offset + %d, %d, false)}, Some(b) => unsafe{self._arena.set_bit(self._offset + %d, %d, true); self._arena.set_pod(self._offset + %d, &b)}}}"% (
+                lname, ti.p, node.has_offset, node.has_bit, node.has_offset, node.has_bit, node.offset
             ))
         else:
             self.o(
-                "    pub fn %s(&self, v : %s) {unsafe{self.arena.set_pod(self.offset + %d, &v)}}"% (
+                "    pub fn %s(&self, v : %s) {unsafe{self._arena.set_pod(self._offset + %d, &v)}}"% (
                     lname, ti.p, node.offset
                 ))
 
@@ -365,14 +365,14 @@ class Generator:
         if node.inplace:
             raise ICE()
         self.output_doc(node, "    ")
-        self.o("    pub fn %s(&self) -> Optional<%s> {self.reader.get_enum(%d, %d)}" % (lname, node.enum.name, node.offset, len(node.enum.members)))
+        self.o("    pub fn %s(&self) -> Option<%s> {self._reader.get_enum(%d, %d)}" % (lname, node.enum.name, node.offset, len(node.enum.members)))
 
 
     def generate_enum_out(self, node: Value, lname: str) -> None:
         if node.inplace:
             raise ICE()
         self.output_doc(node, "    ")
-        self.o("    pub fn %s(&mut self, v: Option<%s>) {self.arena.set_enum(self.offset + %d, v);}" % (lname, node.enum.name, node.offset))
+        self.o("    pub fn %s(&mut self, v: Option<%s>) {unsafe{self._arena.set_enum(self._offset + %d, v)}}" % (lname, node.enum.name, node.offset))
 
 
     def generate_struct_in(self, node: Value, lname: str) -> None:
@@ -380,36 +380,27 @@ class Generator:
             raise ICE()
         self.output_doc(node, "    ")
         if node.optional:
-            self.o("    fn %s(&self) -> Option<%sOut> {if self.reader.get_bit(%d, %d) {Some(self.reader.get_struct(%d))} else {None}}"%(
-                lname, node.struct.name, node.has_offset, node.has_bit, node.offset))
+            self.o("    pub fn %s(&self) -> Option<%sIn> {if self._reader.get_bit(%d, %d) {Some(self._reader.get_struct::<%s>(%d))} else {None}}"%(
+                lname, node.struct.name, node.has_offset, node.has_bit, node.struct.name, node.offset))
         else:
-            self.o("    fn %s(&self) -> %sOut {self.reader.get_struct(%d)}"%(lname, node.struct.name, node.offset))
+            self.o("    pub fn %s(&self) -> %sIn {self._reader.get_struct::<%s>(%d)}"%(lname, node.struct.name, node.struct.name, node.offset))
 
     def generate_struct_out(self, node: Value, lname: str) -> None:
         if node.inplace:
             raise ICE()
         self.output_doc(node, "    ")
+       
         if node.optional:
-             self.o("    pub fn %s(&self) -> %sOut<'a> {self.arena.set_bit(self.offset + %d, %d, true);<%s as scalgo_proto::StructOutFactory<'a>>::new(&self.arena, self.offset + %d)}" % (
+             self.o("    pub fn %s(&self) -> %sOut<'a> {unsafe{self._arena.set_bit(self._offset + %d, %d, true)};<%s as scalgo_proto::StructOutFactory<'a>>::new(&self._arena, self._offset + %d)}" % (
                  lname, node.struct.name, node.has_offset, node.has_bit, node.struct.name, node.offset))
         else:
-            self.o("    pub fn %s(&self) -> %sOut<'a> {<%s as scalgo_proto::StructOutFactory<'a>>::new(&self.arena, self.offset + %d)}" % (
+            self.o("    pub fn %s(&self) -> %sOut<'a> {<%s as scalgo_proto::StructOutFactory<'a>>::new(&self._arena, self._offset + %d)}" % (
                 lname, node.struct.name, node.struct.name, node.offset))
 
     def generate_table_in(self, node: Value, lname: str) -> None:
         if not node.table.empty:
             self.output_doc(node, "    ")
-            self.o("    get %s() : %sIn | null {" % (lname, node.table.name))
-            self.o(
-                "        const [offset, size] = this._getPtr%s(%d, %sIn._MAGIC);"
-                % ("Inplace" if node.inplace else "", node.offset, node.table.name)
-            )
-            self.o("        if (offset === 0) return null;")
-            self.o(
-                "        return new %sIn(this._reader, offset, size);" % (node.table.name,)
-            )
-            self.o("    }")
-            self.o()
+            self.o("    pub fn %s(&self) -> scalgo_proto::Result<Option<%sIn>> {self._reader.get_table::<%s>(%d)}" % (lname, node.table.name, node.table.name, node.offset))
 
     def generate_union_table_in(self, node: Value, lname: str) -> None:
         if not node.table.empty:
@@ -431,29 +422,14 @@ class Generator:
         if not node.inplace:
             self.output_doc(node, "    ")
             self.o(
-                "    set %s(value: %sOut | %sIn) {"
-                % (lname, node.table.name, node.table.name)
+                "    pub fn set_%s(&self, v: Option<%sOut>) {unsafe{self._arena.set_table(%d, v)}}"%(
+                lname, node.table.name, node.offset)
             )
-            self.o("        if (value instanceof %sIn) {" % (node.table.name))
-            self.o("            const v = value;")
-            self.o(
-                "            value = this._writer.constructTable(%sOut);" % node.table.name
-            )
-            self.o("            value._copy(v);")
-            self.o("        }")
-            self.o("        console.assert(value instanceof %sOut);" % (node.table.name))
-            self.o("        this._setTable(%d, value);" % (node.offset))
-            self.o("    }")
-            self.o()
+            #TODO (jakob) add table copy
+
             self.output_doc(node, "    ")
-            self.o("    add%s() : %sOut {" % (ucamel(lname), node.table.name))
-            self.o(
-                "        const res = this._writer.constructTable(%sOut);" % node.table.name
-            )
-            self.o("        this._setTable(%d, res);" % (node.offset,))
-            self.o("        return res;")
-            self.o("    }")
-            self.o()
+            self.o("    pub fn add_%s(&self) -> %sOut {unsafe{self._arena.add_table::<%s>(%d)}}" % (
+                lname, node.table.name, node.table.name, node.offset))
         elif not node.table.empty:
             self.output_doc(node, "    ")
             self.o("    set %s(value: %sIn) {" % (lname, node.table.name))
@@ -529,15 +505,8 @@ class Generator:
 
     def generate_text_in(self, node: Value, lname: str) -> None:
         self.output_doc(node, "    ")
-        self.o("    get %s() : string | null {" % (lname))
-        self.o(
-            "        const [o, s] = this._getPtr%s(%d, scalgoproto.TEXT_MAGIC)"
-            % ("Inplace" if node.inplace else "", node.offset)
-        )
-        self.o("        if (o === 0) return null;")
-        self.o("        return this._reader._readText(o, s);")
-        self.o("    }")
-        self.o()
+        self.o("    pub fn %s(&self) -> scalgo_proto::Result<Option<&str>> {self._reader.get_text%s(%d)}" % (
+            lname, "_inplace" if node.inplace else "", node.offset))
 
     def generate_union_text_in(self, node: Value, lname: str) -> None:
         self.output_doc(node, "    ")
@@ -582,16 +551,8 @@ class Generator:
 
     def generate_bytes_in(self, node: Value, lname: str) -> None:
         self.output_doc(node, "    ")
-        self.o("    get %s() : ArrayBuffer | null {" % (lname))
-        self.o(
-            "        const [o, s] = this._getPtr%s(%d, scalgoproto.BYTES_MAGIC)"
-            % ("Inplace" if node.inplace else "", node.offset)
-        )
-        self.o("        if (o === 0) return null;")
-        self.o("        const oo = (this._reader._data.byteOffset || 0) + o")
-        self.o("        return this._reader._data.buffer.slice(oo, oo+s);")
-        self.o("    }")
-        self.o()
+        self.o("    pub fn %s(&self) -> scalgo_proto::Result<Option<&[u8]>> {self._reader.get_bytes%s(%d)}" % (
+            lname, "_inplace" if node.inplace else "", node.offset))
 
     def generate_union_bytes_in(self, node: Value, lname: str) -> None:
         self.output_doc(node, "    ")
@@ -606,19 +567,14 @@ class Generator:
 
     def generate_bytes_out(self, node: Value, lname: str, size: int) -> None:
         self.output_doc(node, "    ")
-        if node.inplace:
-            self.o("    set %s(value: ArrayBuffer) {" % (lname))
+        if not node.inplace:
+            self.o("    pub fn create_%s(bytes: &[u8]) -> scalgoproto.BytesOut<'a> {self._area.create_bytes(self._offset + %d, bytes)}" % (
+                lname, node.offset))
+            self.o("    pub fn add_%s(bytes: &scalgoproto.BytesOut) {} {self._arena.set_bytes(self._offset + %d, bytes)}" % (
+                lname, node.offset))
         else:
-            self.o("    set %s(value: scalgoproto.BytesOut | ArrayBuffer) {" % (lname))
-        if node.inplace:
-            self.o(
-                "        console.assert(this._writer._size == this._offset + %s);" % (size)
-            )
-            self.o("        this._addInplaceBytes(%d, value);" % (node.offset))
-        else:
-            self.o("        this._setBytes(%d, value);" % (node.offset))
-        self.o("    }")
-        self.o()
+            self.o("    pub fn create_%s(bytes: &[u8]) {self._area.create_bytes_inplace(self._offset + %d, bytes)}" % (
+                lname, node.offset))
 
     def generate_union_bytes_out(
         self, node: Value, lname: str, idx: int, inplace: bool
@@ -671,7 +627,8 @@ class Generator:
     def generate_value_in(self, table: Table, node: Value) -> None:
         lname = snake(self.value(node.identifier))
         if node.list_:
-            self.generate_list_in(node, lname)
+            #self.generate_list_in(node, lname)
+            pass
         elif node.type_.type == TokenType.BOOL:
             self.generate_bool_in(node, lname)
         elif node.type_.type in typeMap:
@@ -683,7 +640,8 @@ class Generator:
         elif node.table:
             self.generate_table_in(node, lname)
         elif node.union:
-            self.generate_union_in(node, lname, table)
+            #self.generate_union_in(node, lname, table)
+            pass
         elif node.type_.type == TokenType.TEXT:
             self.generate_text_in(node, lname)
         elif node.type_.type == TokenType.BYTES:
@@ -694,7 +652,8 @@ class Generator:
     def generate_value_out(self, table: Table, node: Value) -> None:
         lname = lcamel(self.value(node.identifier))
         if node.list_:
-            self.generate_list_out(node, lname, len(table.default))
+            #self.generate_list_out(node, lname, len(table.default))
+            pass
         elif node.type_.type == TokenType.BOOL:
             self.generate_bool_out(node, lname)
         elif node.type_.type in typeMap:
@@ -706,11 +665,14 @@ class Generator:
         elif node.table:
             self.generate_table_out(node, lname, len(table.default))
         elif node.union:
-            self.generate_union_out(node, lname, table)
+            #self.generate_union_out(node, lname, table)
+            pass
         elif node.type_.type == TokenType.TEXT:
-            self.generate_text_out(node, lname, len(table.default))
+            #self.generate_text_out(node, lname, len(table.default))
+            pass
         elif node.type_.type == TokenType.BYTES:
-            self.generate_bytes_out(node, lname, len(table.default))
+            #self.generate_bytes_out(node, lname, len(table.default))
+            pass
         else:
             raise ICE()
 
@@ -906,10 +868,10 @@ class Generator:
             return
 
         self.output_doc(table, "")
-        self.o("struct %s<'a> {}" % table.name)
+        self.o("pub struct %s {}" % table.name)
         self.output_doc(table, "")
-        self.o("struct %sIn<'a> {" % table.name)
-        self.o("    reader: scalgo_proto::Reader<'a>,")
+        self.o("pub struct %sIn<'a> {" % table.name)
+        self.o("    _reader: scalgo_proto::Reader<'a>,")
         self.o("}")
         self.o("impl<'a> %sIn<'a> {" % table.name)
         for node in table.members:
@@ -919,8 +881,8 @@ class Generator:
         self.o("impl<'a> fmt::Debug for %sIn<'a> {"%table.name)
         self.o("    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {")
         self.o("        write!(")
-        self.o("            f, \"%s {{ %s }}\","%(table.name, ", ".join(["%s: {:?}"%self.value(v.identifier) for v in table.members])))
-        self.o("            %s"%", ".join(["self.%s()"%self.value(v.identifier) for v in table.members]))
+        self.o("            f, \"%s {{ %s }}\","%(table.name, ", ".join(["%s: {:?}"%snake(self.value(v.identifier)) for v in table.members])))
+        self.o("            %s"%", ".join(["self.%s()"%snake(self.value(v.identifier)) for v in table.members]))
         self.o("        )")
         self.o("    }")
         self.o("}") 
@@ -928,29 +890,29 @@ class Generator:
         self.o("impl<'a> scalgo_proto::TableInFactory<'a> for %s {"%table.name)
         self.o("    type T = %sIn<'a>;"%table.name)
         self.o("    fn magic() -> u32 {0x%08X}" % table.magic)
-        self.o("    fn new(reader: scalgo_proto::Reader<'a>) -> Self::T {Self::T { reader }}")
+        self.o("    fn new(reader: scalgo_proto::Reader<'a>) -> Self::T {Self::T { _reader: reader }}")
         self.o("}")
 
 
         # Generate Table writer
         self.output_doc(table, "")
-        self.o("struct %sOut<'a> {" % table.name)
-        self.o("    arena: &'a scalgo_proto::Arena,")
-        self.o("    offset: usize,")
+        self.o("pub struct %sOut<'a> {" % table.name)
+        self.o("    _arena: &'a scalgo_proto::Arena,")
+        self.o("    _offset: usize,")
         self.o("}")
         self.o("impl<'a> %sOut<'a> {" % table.name)
         for node in table.members:
             self.generate_value_out(table, node)
         #self.generate_table_copy(table)
         self.o("}")
-        self.o("impl<'a> scalgo_proto::TableOut for %sOut<'a> {")
-        self.o("    fn offset(&self) -> usize {self.offset}")
+        self.o("impl<'a> scalgo_proto::TableOut for %sOut<'a> {"% table.name)
+        self.o("    fn offset(&self) -> usize {self._offset}")
         self.o("}")
         self.o("impl<'a> scalgo_proto::TableOutFactory<'a> for %s {"%table.name)
-        self.o("    type T = %sIn<'a>;"%table.name)
+        self.o("    type T = %sOut<'a>;"%table.name)
         self.o("    fn magic() -> u32 {0x%08X}" % table.magic)
         self.o("    fn size() -> usize {%d}" % table.bytes)
-        self.o("    fn new(arena: &'a scalgo_proto::Arena, offset: usize) -> Self::T {Self::T { arena, offset }}")
+        self.o("    fn new(arena: &'a scalgo_proto::Arena, offset: usize) -> Self::T {Self::T { _arena: arena, _offset: offset }}")
         self.o("}")
         self.o()
 
@@ -966,24 +928,24 @@ class Generator:
         self.o("pub struct %s {}" % node.name)
         self.output_doc(node, "")
         self.o("pub struct %sIn<'a> {"%node.name)
-        self.o("    bytes: &'a [u8; %s],"%node.bytes)
+        self.o("    _bytes: &'a [u8; %s],"%node.bytes)
         self.o("}")
         self.o("impl <'a> %sIn<'a> {"%node.name)
         for v in node.members:
             if not isinstance(v, Value):
                 raise ICE()
             if v.type_.type == TokenType.BOOL:
-                self.o("    pub fn %s(&self) -> bool {scalgo_proto::to_bool(self.bytes[%d])}"%(self.value(v.identifier), v.offset))
+                self.o("    pub fn %s(&self) -> bool {scalgo_proto::to_bool(self._bytes[%d])}"%(self.value(v.identifier), v.offset))
             elif v.type_.type in typeMap:
-                self.o("    pub fn %s(&self) -> %s {unsafe{scalgo_proto::to_pod(&self.bytes[%d..%d])}}"%(
+                self.o("    pub fn %s(&self) -> %s {unsafe{scalgo_proto::to_pod(&self._bytes[%d..%d])}}"%(
                     self.value(v.identifier), typeMap[v.type_.type][1], v.offset, v.offset+v.bytes
                 ))
             elif v.struct:
-                self.o("    pub fn %s(&self) -> %sIn<'a> {unsafe{scalgo_proto::to_struct::<%s>(&self.bytes[%d..%d])}}"%(
+                self.o("    pub fn %s(&self) -> %sIn<'a> {unsafe{scalgo_proto::to_struct::<%s>(&self._bytes[%d..%d])}}"%(
                     self.value(v.identifier), v.struct.name, v.struct.name, v.offset, v.offset + v.bytes
                 ))
             elif v.enum:
-                self.o("    pub fn %s(&self) -> Option<%s> {unsafe{scalgo_proto::to_enum(self.bytes[%d], %d)}}"%(
+                self.o("    pub fn %s(&self) -> Option<%s> {unsafe{scalgo_proto::to_enum(self._bytes[%d], %d)}}"%(
                     self.value(v.identifier), v.enum.name, v.enum.offset, len(v.enum.members)
                 ))
             else:
@@ -1000,38 +962,38 @@ class Generator:
         self.o("impl<'a> scalgo_proto::StructInFactory<'a> for %s {"%node.name)
         self.o("    type T = %sIn<'a>;"%node.name)
         self.o("    type B = [u8; %s];"%node.bytes)
-        self.o("    fn new(bytes: &'a Self::B) -> Self::T {Self::T{bytes}}")
+        self.o("    fn new(bytes: &'a Self::B) -> Self::T {Self::T{_bytes: bytes}}")
         self.o("}")
         self.o("pub struct %sOut<'a> {"%node.name)
-        self.o("    arena: &'a scalgo_proto::Arena,")
-        self.o("    offset: usize,")
+        self.o("    _arena: &'a scalgo_proto::Arena,")
+        self.o("    _offset: usize,")
         self.o("}")
         self.o("impl <'a> %sOut<'a> {"%node.name)
         for v in node.members:
             if not isinstance(v, Value):
                 raise ICE()
             if v.type_.type == TokenType.BOOL:
-                self.o("    pub fn %s(&mut self, v: bool) {unsafe{self.arena.set_bool(self.offset + %d, v)}}"%(
+                self.o("    pub fn %s(&mut self, v: bool) {unsafe{self._arena.set_bool(self._offset + %d, v)}}"%(
                     self.value(v.identifier), v.offset
                 ))
             elif v.type_.type in typeMap:
-                self.o("    pub fn %s(&mut self, v: %s) {unsafe{self.arena.set_pod(self.offset + %d, &v)}}"%(
+                self.o("    pub fn %s(&mut self, v: %s) {unsafe{self._arena.set_pod(self._offset + %d, &v)}}"%(
                     self.value(v.identifier), typeMap[v.type_.type][1], v.offset
                 ))
             elif v.struct:
-                 self.o("    pub fn %s(&mut self) -> %sOut<'a> {<%s as scalgo_proto::StructOutFactory<'a>>::new(&self.arena, self.offset + %d}}"%(
+                 self.o("    pub fn %s(&mut self) -> %sOut<'a> {<%s as scalgo_proto::StructOutFactory<'a>>::new(&self._arena, self._offset + %d)}"%(
                     self.value(v.identifier), v.struct.name, v.struct.name, v.offset
                 ))
             elif v.enum:
-                self.o("    pub fn %s(&mut self, v: Option<%s>) {unsafe{self.arena.set_enum(self.offset + %d, v)}}"%(
+                self.o("    pub fn %s(&mut self, v: Option<%s>) {unsafe{self._arena.set_enum(self._offset + %d, v)}}"%(
                     self.value(v.identifier), v.enum.name, v.offset
                 ))
             else:
                 raise ICE()
         self.o("}")
         self.o("impl<'a> scalgo_proto::StructOutFactory<'a> for %s {"%node.name)
-        self.o("    type T = %sIn<'a>;"%node.name)
-        self.o("    fn new(arena: &'a Arena, offset: usize) -> Self::T {Self::T{arena, offset}}")
+        self.o("    type T = %sOut<'a>;"%node.name)
+        self.o("    fn new(arena: &'a scalgo_proto::Arena, offset: usize) -> Self::T {Self::T{_arena: arena, _offset: offset}}")
         self.o("}")
         self.o()
 
@@ -1101,6 +1063,9 @@ def run(args) -> int:
             return 1
         g = Generator(documents, out)
         print("//! This file was generated by scalgoprotoc", file=out)
+        print("#![allow(dead_code)]", file=out)
+        print("use crate::scalgo_proto;", file=out)
+        print("use std::fmt;", file=out)
         print("", file=out)
 
         g.generate(ast)
