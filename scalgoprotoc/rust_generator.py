@@ -150,6 +150,26 @@ class Generator:
             )
         else:
             raise ICE()
+        
+    def list_access_type(self, node: Value) -> Tuple[str]:
+        if node.type_.type == TokenType.BOOL:
+            return "scalgo_proto::BoolListAccess"
+        elif node.type_.type in typeMap:
+            return "scalgo_proto::PodListAccess<%s>"%(typeMap[node.type_.type].p)
+        elif node.struct:
+            return "scalgo_proto::StructListAccess<%s>"%(node.struct.name)
+        elif node.enum:
+            return "scalgo_proto::EnumListAccess<%s>"%(node.enum.name)
+        elif node.table:
+            return "scalgo_proto::TableListAccess<%s>"%(node.table.name)
+        elif node.union:
+            return "scalgo_proto::UnionListAccess<%s>"%(node.union.name)
+        elif node.type_.type == TokenType.TEXT:
+            return "scalgo_proto::TextListAccess"
+        elif node.type_.type == TokenType.BYTES:
+            return "scalgo_proto::BytesListAccess"
+        else:
+            raise ICE()
 
     def o(self, text="") -> None:
         print(text, file=self.out)
@@ -181,18 +201,11 @@ class Generator:
         self.o("%s */" % indent)
 
     def generate_list_in(self, node: Value, lname: str) -> None:
-        (tn, acc) = self.in_list_help(node, "o, s")
-
+        tn = self.list_access_type(node)
         self.output_doc(node, "    ")
-        self.o("    get %s() : scalgoproto.ListIn<%s> | null {" % (lname, tn))
-        self.o(
-            "        const [o, s] = this._getPtr%s(%d, scalgoproto.LIST_MAGIC)"
-            % ("Inplace" if node.inplace else "", node.offset)
-        )
-        self.o("        if (o === 0) return null;")
-        self.o(acc)
+        self.o("    fn %s(&self) -> scalgo_proto::Result<Option<scalgo_proto::ListIn<%s>>> {" % (lname, tn))
+        self.o("        self._reader.get_list%s::<%s>(%d)"%("_inplace" if node.inplace else "", tn, node.offset))
         self.o("    }")
-        self.o()
 
     def generate_union_list_in(self, node: Value, lname: str) -> None:
         (tn, acc) = self.in_list_help(node, "o, s")
@@ -365,7 +378,7 @@ class Generator:
         if node.inplace:
             raise ICE()
         self.output_doc(node, "    ")
-        self.o("    pub fn %s(&self) -> Option<%s> {self._reader.get_enum(%d, %d)}" % (lname, node.enum.name, node.offset, len(node.enum.members)))
+        self.o("    pub fn %s(&self) -> Option<%s> {self._reader.get_enum(%d)}" % (lname, node.enum.name, node.offset))
 
 
     def generate_enum_out(self, node: Value, lname: str) -> None:
@@ -391,10 +404,10 @@ class Generator:
         self.output_doc(node, "    ")
        
         if node.optional:
-             self.o("    pub fn %s(&self) -> %sOut<'a> {unsafe{self._arena.set_bit(self._offset + %d, %d, true)};<%s as scalgo_proto::StructOutFactory<'a>>::new(&self._arena, self._offset + %d)}" % (
+             self.o("    pub fn %s(&self) -> %sOut<'a> {unsafe{self._arena.set_bit(self._offset + %d, %d, true)};<%s as scalgo_proto::StructFactory<'a>>::new_out(&self._arena, self._offset + %d)}" % (
                  lname, node.struct.name, node.has_offset, node.has_bit, node.struct.name, node.offset))
         else:
-            self.o("    pub fn %s(&self) -> %sOut<'a> {<%s as scalgo_proto::StructOutFactory<'a>>::new(&self._arena, self._offset + %d)}" % (
+            self.o("    pub fn %s(&self) -> %sOut<'a> {<%s as scalgo_proto::StructFactory<'a>>::new_out(&self._arena, self._offset + %d)}" % (
                 lname, node.struct.name, node.struct.name, node.offset))
 
     def generate_table_in(self, node: Value, lname: str) -> None:
@@ -627,8 +640,7 @@ class Generator:
     def generate_value_in(self, table: Table, node: Value) -> None:
         lname = snake(self.value(node.identifier))
         if node.list_:
-            #self.generate_list_in(node, lname)
-            pass
+            self.generate_list_in(node, lname)
         elif node.type_.type == TokenType.BOOL:
             self.generate_bool_in(node, lname)
         elif node.type_.type in typeMap:
@@ -866,9 +878,6 @@ class Generator:
 
         if table.empty:
             return
-
-        self.output_doc(table, "")
-        self.o("pub struct %s {}" % table.name)
         self.output_doc(table, "")
         self.o("pub struct %sIn<'a> {" % table.name)
         self.o("    _reader: scalgo_proto::Reader<'a>,")
@@ -887,13 +896,6 @@ class Generator:
         self.o("    }")
         self.o("}") 
 
-        self.o("impl<'a> scalgo_proto::TableInFactory<'a> for %s {"%table.name)
-        self.o("    type T = %sIn<'a>;"%table.name)
-        self.o("    fn magic() -> u32 {0x%08X}" % table.magic)
-        self.o("    fn new(reader: scalgo_proto::Reader<'a>) -> Self::T {Self::T { _reader: reader }}")
-        self.o("}")
-
-
         # Generate Table writer
         self.output_doc(table, "")
         self.o("pub struct %sOut<'a> {" % table.name)
@@ -908,11 +910,15 @@ class Generator:
         self.o("impl<'a> scalgo_proto::TableOut for %sOut<'a> {"% table.name)
         self.o("    fn offset(&self) -> usize {self._offset}")
         self.o("}")
-        self.o("impl<'a> scalgo_proto::TableOutFactory<'a> for %s {"%table.name)
-        self.o("    type T = %sOut<'a>;"%table.name)
+        self.output_doc(table, "")
+        self.o("pub struct %s {}" % table.name)
+        self.o("impl<'a> scalgo_proto::TableFactory<'a> for %s {"%table.name)
+        self.o("    type In = %sIn<'a>;"%table.name)
+        self.o("    type Out = %sOut<'a>;"%table.name)
         self.o("    fn magic() -> u32 {0x%08X}" % table.magic)
         self.o("    fn size() -> usize {%d}" % table.bytes)
-        self.o("    fn new(arena: &'a scalgo_proto::Arena, offset: usize) -> Self::T {Self::T { _arena: arena, _offset: offset }}")
+        self.o("    fn new_in(reader: scalgo_proto::Reader<'a>) -> Self::In {Self::In { _reader: reader }}")
+        self.o("    fn new_out(arena: &'a scalgo_proto::Arena, offset: usize) -> Self::Out {Self::Out { _arena: arena, _offset: offset }}")
         self.o("}")
         self.o()
 
@@ -945,8 +951,8 @@ class Generator:
                     self.value(v.identifier), v.struct.name, v.struct.name, v.offset, v.offset + v.bytes
                 ))
             elif v.enum:
-                self.o("    pub fn %s(&self) -> Option<%s> {unsafe{scalgo_proto::to_enum(self._bytes[%d], %d)}}"%(
-                    self.value(v.identifier), v.enum.name, v.enum.offset, len(v.enum.members)
+                self.o("    pub fn %s(&self) -> Option<%s> {unsafe{scalgo_proto::to_enum(self._bytes[%d])}}"%(
+                    self.value(v.identifier), v.enum.name, v.enum.offset
                 ))
             else:
                 raise ICE()
@@ -959,11 +965,6 @@ class Generator:
         self.o("        )")
         self.o("    }")
         self.o("}") 
-        self.o("impl<'a> scalgo_proto::StructInFactory<'a> for %s {"%node.name)
-        self.o("    type T = %sIn<'a>;"%node.name)
-        self.o("    type B = [u8; %s];"%node.bytes)
-        self.o("    fn new(bytes: &'a Self::B) -> Self::T {Self::T{_bytes: bytes}}")
-        self.o("}")
         self.o("pub struct %sOut<'a> {"%node.name)
         self.o("    _arena: &'a scalgo_proto::Arena,")
         self.o("    _offset: usize,")
@@ -981,7 +982,7 @@ class Generator:
                     self.value(v.identifier), typeMap[v.type_.type][1], v.offset
                 ))
             elif v.struct:
-                 self.o("    pub fn %s(&mut self) -> %sOut<'a> {<%s as scalgo_proto::StructOutFactory<'a>>::new(&self._arena, self._offset + %d)}"%(
+                 self.o("    pub fn %s(&mut self) -> %sOut<'a> {<%s as scalgo_proto::StructFactory<'a>>::new_out(&self._arena, self._offset + %d)}"%(
                     self.value(v.identifier), v.struct.name, v.struct.name, v.offset
                 ))
             elif v.enum:
@@ -991,9 +992,13 @@ class Generator:
             else:
                 raise ICE()
         self.o("}")
-        self.o("impl<'a> scalgo_proto::StructOutFactory<'a> for %s {"%node.name)
-        self.o("    type T = %sOut<'a>;"%node.name)
-        self.o("    fn new(arena: &'a scalgo_proto::Arena, offset: usize) -> Self::T {Self::T{_arena: arena, _offset: offset}}")
+        self.o("impl<'a> scalgo_proto::StructFactory<'a> for %s {"%node.name)
+        self.o("    type In = %sIn<'a>;"%node.name)
+        self.o("    type Out = %sOut<'a>;"%node.name)
+        self.o("    type B = [u8; %s];"%node.bytes)
+        self.o("    fn size() -> usize {%d}"%node.bytes)
+        self.o("    fn new_in(bytes: &'a Self::B) -> Self::In {Self::In{_bytes: bytes}}")
+        self.o("    fn new_out(arena: &'a scalgo_proto::Arena, offset: usize) -> Self::Out {Self::Out{_arena: arena, _offset: offset}}")
         self.o("}")
         self.o()
 
@@ -1006,6 +1011,7 @@ class Generator:
         for ev in node.members:
             self.o("    %s," % (usnake(self.value(ev.identifier))))
         self.o("}")
+        self.o("impl scalgo_proto::Enum for %s {fn max_value() -> u8 {%d}}"%(node.name, len(node.members)))
         self.o()
 
     def generate(self, ast: List[AstNode]) -> None:

@@ -12,20 +12,22 @@ impl From<std::str::Utf8Error> for Error {
     }
 }
 
+pub trait Enum {
+    fn max_value() -> u8;
+}
+
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub trait StructInFactory<'a> {
-    type T;
+pub trait StructFactory<'a> {
+    type In: std::fmt::Debug;
+    type Out;
     type B;
-    fn new(bytes: &'a Self::B) -> Self::T;
-}
+    fn size() -> usize;
+    fn new_in(bytes: &'a Self::B) -> Self::In;
+    fn new_out(arena: &'a Arena, offset: usize) -> Self::Out;
 
-pub trait StructOutFactory<'a> {
-    type T;
-    fn new(arena: &'a Arena, offset: usize) -> Self::T;
 }
-
 static ZERO: [u8; 1024 * 16] = [0; 1024 * 16];
 const ROOTMAGIC: u32 = 0xB5C0C4B3;
 const LISTMAGIC: u32 = 0x3400BB46;
@@ -34,8 +36,8 @@ const BYTESMAGIC: u32 = 0xDCDBBE10;
 
 //This is safe to call if T is an enum with u8 storage specifier and every integer i
 //such that 0 <= i < range, is a valid enum value
-pub unsafe fn to_enum<T: Copy>(v: u8, range: u8) -> Option<T> {
-    if v >= range {
+pub unsafe fn to_enum<T: Enum + Copy>(v: u8) -> Option<T> {
+    if v >= T::max_value() {
         None
     } else {
         let mut target: T = std::mem::MaybeUninit::uninit().assume_init();
@@ -57,8 +59,8 @@ pub unsafe fn to_pod<T: Copy>(v: &[u8]) -> T {
 }
 
 // This method is safe to call if s has the right length for the struct
-pub unsafe fn to_struct<'a, F: StructInFactory<'a> + 'a>(s: &[u8]) -> F::T {
-    F::new(&*(s as *const [u8] as *const F::B))
+pub unsafe fn to_struct<'a, F: StructFactory<'a> + 'a>(s: &[u8]) -> F::In {
+    F::new_in(&*(s as *const [u8] as *const F::B))
 }
 
 pub fn to_bool(v: u8) -> bool {
@@ -127,8 +129,8 @@ impl<'a> Reader<'a> {
         }
     }
 
-    pub fn get_struct<F: StructInFactory<'a> + 'a>(&self, offset: usize) -> F::T {
-        match self.slice(offset, std::mem::size_of::<F::B>()) {
+    pub fn get_struct<F: StructFactory<'a> + 'a>(&self, offset: usize) -> F::In {
+        match self.slice(offset, F::size()) {
             Some(s) => unsafe { to_struct::<F>(s) },
             None => unsafe { to_struct::<F>(&ZERO) },
         }
@@ -142,9 +144,9 @@ impl<'a> Reader<'a> {
         unsafe { Some(to_pod(s)) }
     }
 
-    pub fn get_enum<T: Copy>(&self, offset: usize, max_val: u8) -> Option<T> {
+    pub fn get_enum<T: Enum + Copy>(&self, offset: usize) -> Option<T> {
         match self.get_u8(offset) {
-            Some(v) => unsafe { to_enum(v, max_val) },
+            Some(v) => unsafe { to_enum(v) },
             None => None,
         }
     }
@@ -168,13 +170,11 @@ impl<'a> Reader<'a> {
         return Ok(Some( (offset+10, size) ));
     }
 
-
-
-    pub fn get_table<F: TableInFactory<'a> + 'a>(&self, offset: usize) -> Result<Option<F::T>> {
+    pub fn get_table<F: TableFactory<'a> + 'a>(&self, offset: usize) -> Result<Option<F::In>> {
         match self.get_ptr(offset, F::magic()) {
             Err(e) => Err(e),
             Ok(None) => Ok(None),
-            Ok(Some((o,s))) => Ok(Some(F::new(Reader {
+            Ok(Some((o,s))) => Ok(Some(F::new_in(Reader {
                 full: self.full,
                 part: &self.full[o..o+s],
             })))
@@ -196,28 +196,189 @@ impl<'a> Reader<'a> {
             Ok(Some((o,s))) => Ok(Some(&self.full[o..o+s]))
         }
     }
+
+    pub fn get_list<A: ListAccess<'a> + 'a>(&self, offset:usize) -> Result<Option<ListIn<'a, A>>> {
+        match self.get_ptr(offset, LISTMAGIC) {
+            Err(e) => Err(e),
+            Ok(None) => Ok(None),
+            Ok(Some((o,s))) => Ok(Some(
+                ListIn {
+                    reader: Reader {
+                        full: self.full,
+                        part: &self.full[o..o+s],
+                    },
+                    phantom: std::marker::PhantomData{}
+                }))
+        }
+    }
 }
+
+pub trait ListAccess<'a> {
+    type Output : std::fmt::Debug;
+    fn item_size() -> usize;
+    fn get(reader: & Reader<'a>, idx: usize) -> Self::Output;
+}
+
+pub struct ListIn<'a, A: ListAccess<'a> > {
+    reader: Reader<'a>,
+    phantom: std::marker::PhantomData<A>,
+}
+
+
+
+impl <'a, A: ListAccess<'a> > ListIn<'a, A> {
+    pub fn len(&self) -> usize {
+        self.reader.part.len() / A::item_size()
+    }
+    pub fn get(&self, idx: usize) -> A::Output {
+        // TODO(jakob) check range
+        A::get(&self.reader, idx)
+    }
+}
+
+pub struct ListIter<'a, A: ListAccess<'a> > {
+    reader: Reader<'a>,
+    idx: usize,
+    phantom: std::marker::PhantomData<A>,
+}
+
+impl <'a, A: ListAccess<'a> + 'a> std::iter::Iterator for ListIter<'a, A> {
+    type Item = A::Output;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx * A::item_size() >= self.reader.part.len() {
+            return None
+        }
+        let ans = A::get(&self.reader, self.idx);
+        self.idx += 1;
+        Some(ans)
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let s = self.reader.part.len() / A::item_size() - self.idx;
+        (s, Some(s))
+    }
+}
+
+impl <'a, A: ListAccess<'a> + 'a> std::iter::IntoIterator for ListIn<'a, A> {
+    type Item = A::Output;
+    type IntoIter = ListIter<'a, A>;
+    fn into_iter(self) -> Self::IntoIter {
+        Self::IntoIter{reader: self.reader, idx: 0, phantom: std::marker::PhantomData{}}
+    }
+}
+
+impl<'a, A:ListAccess<'a> > std::fmt::Debug for ListIn<'a, A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("[")?;
+        // TODO(jakob)
+        // let mut first = true;
+        // for i in self {
+        //     if first {
+        //         first = false;
+        //     } else {
+        //         f.write_str(", ")?;
+        //     }
+        //     write!(f, "{:?}", i)?;
+        // }
+        f.write_str("]")?;
+        Ok(())
+    }
+}
+
+pub struct PodListAccess<'a, T:Copy + std::fmt::Debug> {
+    p: std::marker::PhantomData<&'a T>,
+}
+impl <'a, T: Copy + std::fmt::Debug> ListAccess<'a> for PodListAccess<'a, T> {
+    type Output = T;
+    fn item_size() -> usize {std::mem::size_of::<T>()}
+    fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
+        reader.get_pod::<T>(idx * std::mem::size_of::<T>()).expect("Index error")
+    }
+}
+
+pub struct EnumListAccess<'a, T:Enum + Copy + std::fmt::Debug> {
+    p: std::marker::PhantomData<&'a T>,
+}
+impl <'a, T: Enum + Copy + std::fmt::Debug> ListAccess<'a> for EnumListAccess<'a, T> {
+    type Output = Option<T>;
+    fn item_size() -> usize {1}
+    fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
+        reader.get_enum::<T>(idx)
+    }
+}
+
+pub struct StructListAccess<'a, F:StructFactory<'a> + 'a> {
+    p: std::marker::PhantomData<&'a F>
+}
+impl<'a, F: StructFactory<'a> + 'a> ListAccess<'a> for StructListAccess<'a, F> {
+    type Output = F::In;
+    fn item_size() -> usize {F::size()}
+    fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
+        reader.get_struct::<F>(idx * F::size())
+    }
+}
+
+pub struct TextListAccess<'a> {
+    p: std::marker::PhantomData<&'a u8>
+}
+impl<'a> ListAccess<'a> for TextListAccess<'a> {
+    type Output = Result<Option<&'a str>>;
+    fn item_size() -> usize {6}
+    fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
+        reader.get_text(idx * 6)
+    }
+}
+
+pub struct BytesListAccess<'a> {
+    p: std::marker::PhantomData<&'a u8>
+}
+impl<'a> ListAccess<'a> for BytesListAccess<'a> {
+    type Output = Result<Option<&'a [u8]>>;
+    fn item_size() -> usize {6}
+    fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
+        reader.get_bytes(idx * 6)
+    }
+}
+
+pub struct TableListAccess<'a, F:TableFactory<'a> + 'a> {
+    p: std::marker::PhantomData<&'a F>
+}
+impl<'a, F:TableFactory<'a> + 'a> ListAccess<'a> for TableListAccess<'a, F> {
+    type Output = Result<Option<F::In>>;
+    fn item_size() -> usize {6}
+    fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
+        reader.get_table::<F>(idx * 6)
+    }
+}
+
+pub struct BoolListAccess<'a> {
+    p: std::marker::PhantomData<&'a bool>
+}
+impl <'a> ListAccess<'a> for BoolListAccess<'a> {
+    type Output = bool;
+    fn item_size() -> usize { 1} //TODO(jakob) THIS IS WRONG
+    fn get(reader: &Reader<'a>, idx: usize) -> bool {
+        true
+    }
+}
+
 
 pub trait TableOut {
     fn offset(&self) -> usize;
 }
 
-pub trait TableInFactory<'a> {
-    type T;
-    fn magic() -> u32;
-    fn new(reader: Reader<'a>) -> Self::T;
-}
-
-pub trait TableOutFactory<'a> {
-    type T;
+pub trait TableFactory<'a> {
+    type In: std::fmt::Debug;
+    type Out;
     fn magic() -> u32;
     fn size() -> usize;
-    fn new(arena: &'a Arena, offset: usize) -> Self::T;
+    fn new_in(reader: Reader<'a>) -> Self::In;
+    fn new_out(arena: &'a Arena, offset: usize) -> Self::Out;
 }
 
-pub fn read_message<'a, F: TableInFactory<'a> + 'a>(
+
+pub fn read_message<'a, F: TableFactory<'a> + 'a>(
     data: &'a [u8],
-) -> Result<F::T> {
+) -> Result<F::In> {
     if data.len() < 10 {
         return Err(Error::InvalidPointer());
     }
@@ -291,6 +452,21 @@ impl Arena {
         }
     }
 
+    pub unsafe fn set_table<T: TableOut>(&self, offset: usize, v: Option<T>) {
+        let o = match v { Some(t) => t.offset(), None => 0};
+        self.set_u48(offset, o as u64);
+    }
+
+    pub unsafe fn add_table<'a, F: TableFactory<'a>>(&'a self, offset: usize) -> F::Out {
+        let o = self.allocate(10 + F::size());
+        unsafe {
+            self.set_u48(offset, o as u64);
+            self.set_pod(o, F::magic());
+            self.set_u48(o + 4, F::size() as u64);
+        }
+        F::new_out(&self, o + 10)
+    }
+
     pub fn allocate(&self, size: usize) -> usize {
         unsafe {
             let d = &mut *self.data.get();
@@ -316,13 +492,13 @@ impl Writer {
         writer
     }
 
-    pub fn add_table<'a, F: TableOutFactory<'a> + 'a>(&'a self) -> F::T {
+    pub fn add_table<'a, F: TableFactory<'a> + 'a>(&'a self) -> F::Out {
         let offset = self.arena.allocate(10 + F::size());
         unsafe {
             self.arena.set_pod(offset, F::magic());
             self.arena.set_u48(offset + 4, F::size() as u64);
         }
-        F::new(&self.arena, offset + 10)
+        F::new_out(&self.arena, offset + 10)
     }
 
     pub fn finalize<T: TableOut>(&self, root: T) -> &[u8] {
@@ -337,3 +513,5 @@ impl Writer {
         unsafe { (&mut *self.arena.data.get()).resize(10, 0) }
     }
 }
+
+
