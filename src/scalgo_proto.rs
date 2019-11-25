@@ -152,26 +152,50 @@ impl<'a> Reader<'a> {
     }
 
     pub fn get_ptr(&self, offset: usize, expected_magic: u32) -> Result<Option<(usize, usize)>> {
-        let offset = match self.get_48_usize(offset)? {
+        let o = match self.get_48_usize(offset)? {
             Some(v) => v,
             None => return Ok(None),
         };
-        if self.full.len() < offset + 10 {
+        if self.full.len() < o + 10 {
             return Err(Error::InvalidPointer());
         }
-        let magic: u32 = unsafe { to_pod(&self.full[offset..offset + 4]) };
+        let magic: u32 = unsafe { to_pod(&self.full[o..o + 4]) };
         if magic != expected_magic {
             return Err(Error::BadMagic());
         }
-        let size = unsafe { to_u48_usize(&self.full[offset + 4..offset + 10]) }?;
-        if offset + 10 + size > self.full.len() {
+        let size = unsafe { to_u48_usize(&self.full[o + 4..o + 10]) }?;
+        if o + 10 + size > self.full.len() {
             return Err(Error::InvalidPointer());
         }
-        return Ok(Some( (offset+10, size) ));
+        return Ok(Some( (o+10, size) ));
     }
+
+    pub fn get_ptr_inplace(&self, offset: usize) -> Result<Option<(usize, usize)>> {
+        let size = match self.get_48_usize(offset)? {
+            Some(v) => v,
+            None => return Ok(None),
+        };
+        let o = self.part.as_ptr() as usize - self.full.as_ptr() as usize + self.part.len();
+        if o + size > self.full.len() {
+            return Err(Error::InvalidPointer());
+        }
+        return Ok(Some( (o, size) ));
+    }
+
 
     pub fn get_table<F: TableFactory<'a> + 'a>(&self, offset: usize) -> Result<Option<F::In>> {
         match self.get_ptr(offset, F::magic()) {
+            Err(e) => Err(e),
+            Ok(None) => Ok(None),
+            Ok(Some((o,s))) => Ok(Some(F::new_in(Reader {
+                full: self.full,
+                part: &self.full[o..o+s],
+            })))
+        }
+    }
+
+    pub fn get_table_inplace<F: TableFactory<'a> + 'a>(&self, offset: usize) -> Result<Option<F::In>> {
+        match self.get_ptr_inplace(offset) {
             Err(e) => Err(e),
             Ok(None) => Ok(None),
             Ok(Some((o,s))) => Ok(Some(F::new_in(Reader {
@@ -189,6 +213,14 @@ impl<'a> Reader<'a> {
         }
     }
 
+    pub fn get_text_inplace(&self, offset:usize) -> Result<Option<&'a str>> {
+        match self.get_ptr_inplace(offset) {
+            Err(e) => Err(e),
+            Ok(None) => Ok(None),
+            Ok(Some((o,s))) => Ok(Some(std::str::from_utf8(&self.full[o..o+s])?))
+        }
+    }
+
     pub fn get_bytes(&self, offset:usize) -> Result<Option<&'a [u8]>> {
         match self.get_ptr(offset, BYTESMAGIC) {
             Err(e) => Err(e),
@@ -197,8 +229,31 @@ impl<'a> Reader<'a> {
         }
     }
 
+    pub fn get_bytes_inplace(&self, offset:usize) -> Result<Option<&'a [u8]>> {
+        match self.get_ptr_inplace(offset) {
+            Err(e) => Err(e),
+            Ok(None) => Ok(None),
+            Ok(Some((o,s))) => Ok(Some(&self.full[o..o+s]))
+        }
+    }
+
     pub fn get_list<A: ListAccess<'a> + 'a>(&self, offset:usize) -> Result<Option<ListIn<'a, A>>> {
         match self.get_ptr(offset, LISTMAGIC) {
+            Err(e) => Err(e),
+            Ok(None) => Ok(None),
+            Ok(Some((o,s))) => Ok(Some(
+                ListIn {
+                    reader: Reader {
+                        full: self.full,
+                        part: &self.full[o..o+s],
+                    },
+                    phantom: std::marker::PhantomData{}
+                }))
+        }
+    }
+
+    pub fn get_list_inplace<A: ListAccess<'a> + 'a>(&self, offset:usize) -> Result<Option<ListIn<'a, A>>> {
+        match self.get_ptr_inplace(offset) {
             Err(e) => Err(e),
             Ok(None) => Ok(None),
             Ok(Some((o,s))) => Ok(Some(
@@ -223,7 +278,6 @@ pub struct ListIn<'a, A: ListAccess<'a> > {
     reader: Reader<'a>,
     phantom: std::marker::PhantomData<A>,
 }
-
 
 
 impl <'a, A: ListAccess<'a> > ListIn<'a, A> {
@@ -359,6 +413,11 @@ impl <'a> ListAccess<'a> for BoolListAccess<'a> {
     fn get(reader: &Reader<'a>, idx: usize) -> bool {
         true
     }
+}
+
+pub trait UnionFactory<'a> {
+    type In: std::fmt::Debug;
+    fn get(t: u8, reader: &Reader<'a>) -> Result<Self::In>;
 }
 
 

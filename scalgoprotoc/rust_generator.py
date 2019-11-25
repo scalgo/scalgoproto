@@ -715,109 +715,112 @@ class Generator:
             if value.direct_struct:
                 self.generate_struct(value.direct_struct)
 
-        self.o("export enum %sType {" % (union.name))
+        self.output_doc(union, "    ")
+        self.o("pub enum %sIn<'a> {" % (union.name))
         self.o("    NONE,")
         for member in union.members:
             if not isinstance(member, (Table, Value)):
                 raise ICE()
-            self.o("    %s," % (self.value(member.identifier).upper()))
-        self.o("}")
-        self.o()
-
-        self.output_doc(union, "    ")
-        self.o("export class %sIn extends scalgoproto.UnionIn {" % union.name)
-        self.o(
-            "    /** Private constructor. Call factory methods on scalgoproto.Reader to construct instances */"
-        )
-        self.o(
-            "    constructor(reader: scalgoproto.Reader, type: number, offset: number, size: number|null = null) {"
-        )
-
-        self.o("        super(reader, type, offset, size);")
-        self.o("    }")
-        self.o()
-
-        self.o("    get type() : %sType {" % (union.name))
-        self.output_doc(union, "    ")
-        self.o("        return this._type as %sType;" % (union.name))
-        self.o("    }")
-        self.o()
-        for member in union.members:
-            n = self.value(member.identifier)
-            lname = lcamel(n)
-            self.o("    get is%s() : boolean {" % (ucamel(lname)))
-            self.o("        return this.type == %sType.%s;" % (union.name, n.upper()))
-            self.o("    }")
-            self.o()
+            uname = self.value(member.identifier).upper()
             if member.list_:
-                self.generate_union_list_in(member, lname)
+                self.o("    %s(scalgo_proto::ListIn<'a, %s>),"%(uname, self.list_access_type(member)))
             elif member.table:
-                self.generate_union_table_in(member, lname)
+                self.o("    %s(%sIn<'a>),"%(uname, member.table.name))
             elif member.type_.type == TokenType.BYTES:
-                self.generate_union_bytes_in(member, lname)
+                self.o("    %s(&'a [u8]),"%(uname))
             elif member.type_.type == TokenType.TEXT:
-                self.generate_union_text_in(member, lname)
+                self.o("    %s(&'a str),"%(uname))
             else:
                 raise ICE()
         self.o("}")
         self.o()
 
-        self.o("export class %sOut extends scalgoproto.UnionOut {" % union.name)
-        self.o("    static readonly _IN = %sIn;" % (union.name))
-        self.o(
-            "    /***Private constructor. Call factory methods on scalgoproto.Writer to construct instances*/"
-        )
-        self.o(
-            "    constructor(writer: scalgoproto.Writer, offset: number, end: number = 0) {"
-        )
-        self.o("        super(writer, offset, end);")
+        
+        self.o("pub struct %s {}" % union.name)
+        self.o("impl<'a> scalgo_proto::UnionFactory<'a> for %s<'a> {"%union.name)
+        self.o("    type In = %sIn<'a>;"%union.name)
+        self.o("    fn get(t: u8, reader: &scalgo_proto::Reader<'a>) -> scalgo_proto::Result<Self::In> {")
+        self.o("        Ok(NONE)")
         self.o("    }")
-        self.o()
-        idx = 1
-        for member in union.members:
-            llname = lcamel(self.value(member.identifier))
-            if member.list_:
-                self.generate_union_list_out(member, llname, idx, False)
-            elif member.table:
-                self.generate_union_table_out(member, llname, idx, False)
-            elif member.type_.type == TokenType.BYTES:
-                self.generate_union_bytes_out(member, llname, idx, False)
-            elif member.type_.type == TokenType.TEXT:
-                self.generate_union_text_out(member, llname, idx, False)
-            else:
-                raise ICE()
-            idx += 1
-        self.generate_union_copy(union)
         self.o("}")
+
+
+        # for member in union.members:
+        #     n = self.value(member.identifier)
+        #     lname = lcamel(n)
+        #     self.o("    get is%s() : boolean {" % (ucamel(lname)))
+        #     self.o("        return this.type == %sType.%s;" % (union.name, n.upper()))
+        #     self.o("    }")
+        #     self.o()
+        #     if member.list_:
+        #         self.generate_union_list_in(member, lname)
+        #     elif member.table:
+        #         self.generate_union_table_in(member, lname)
+        #     elif member.type_.type == TokenType.BYTES:
+        #         self.generate_union_bytes_in(member, lname)
+        #     elif member.type_.type == TokenType.TEXT:
+        #         self.generate_union_text_in(member, lname)
+        #     else:
+        #         raise ICE()
+
         self.o()
 
-        self.o("export class %sInplaceOut extends scalgoproto.UnionOut {" % union.name)
-        self.o(
-            "    /** Private constructor. Call factory methods on scalgoproto.Writer to construct instances */"
-        )
-        self.o(
-            "    constructor(writer: scalgoproto.Writer, offset: number, end: number = 0) {"
-        )
+        # self.o("export class %sOut extends scalgoproto.UnionOut {" % union.name)
+        # self.o("    static readonly _IN = %sIn;" % (union.name))
+        # self.o(
+        #     "    /***Private constructor. Call factory methods on scalgoproto.Writer to construct instances*/"
+        # )
+        # self.o(
+        #     "    constructor(writer: scalgoproto.Writer, offset: number, end: number = 0) {"
+        # )
+        # self.o("        super(writer, offset, end);")
+        # self.o("    }")
+        # self.o()
+        # idx = 1
+        # for member in union.members:
+        #     llname = lcamel(self.value(member.identifier))
+        #     if member.list_:
+        #         self.generate_union_list_out(member, llname, idx, False)
+        #     elif member.table:
+        #         self.generate_union_table_out(member, llname, idx, False)
+        #     elif member.type_.type == TokenType.BYTES:
+        #         self.generate_union_bytes_out(member, llname, idx, False)
+        #     elif member.type_.type == TokenType.TEXT:
+        #         self.generate_union_text_out(member, llname, idx, False)
+        #     else:
+        #         raise ICE()
+        #     idx += 1
+        # self.generate_union_copy(union)
+        # self.o("}")
+        # self.o()
 
-        self.o("        super(writer, offset, end);")
-        self.o("    }")
-        self.o()
-        idx = 1
-        for member in union.members:
-            llname = lcamel(self.value(member.identifier))
-            if member.list_:
-                self.generate_union_list_out(member, llname, idx, True)
-            elif member.table:
-                self.generate_union_table_out(member, llname, idx, True)
-            elif member.type_.type == TokenType.BYTES:
-                self.generate_union_bytes_out(member, llname, idx, True)
-            elif member.type_.type == TokenType.TEXT:
-                self.generate_union_text_out(member, llname, idx, True)
-            else:
-                raise ICE()
-            idx += 1
-        self.generate_union_copy(union)
-        self.o("}")
+        # self.o("export class %sInplaceOut extends scalgoproto.UnionOut {" % union.name)
+        # self.o(
+        #     "    /** Private constructor. Call factory methods on scalgoproto.Writer to construct instances */"
+        # )
+        # self.o(
+        #     "    constructor(writer: scalgoproto.Writer, offset: number, end: number = 0) {"
+        # )
+
+        # self.o("        super(writer, offset, end);")
+        # self.o("    }")
+        # self.o()
+        # idx = 1
+        # for member in union.members:
+        #     llname = lcamel(self.value(member.identifier))
+        #     if member.list_:
+        #         self.generate_union_list_out(member, llname, idx, True)
+        #     elif member.table:
+        #         self.generate_union_table_out(member, llname, idx, True)
+        #     elif member.type_.type == TokenType.BYTES:
+        #         self.generate_union_bytes_out(member, llname, idx, True)
+        #     elif member.type_.type == TokenType.TEXT:
+        #         self.generate_union_text_out(member, llname, idx, True)
+        #     else:
+        #         raise ICE()
+        #     idx += 1
+        # self.generate_union_copy(union)
+        # self.o("}")
         self.o()
 
     def generate_table_copy(self, table: Table) -> None:
