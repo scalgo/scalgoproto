@@ -99,6 +99,39 @@ macro_rules! require {
     }};
 }
 
+macro_rules! require_none {
+    ( $x:expr ) => {{
+        if let Some(_) = $x {
+            println!("Error {} should yield None", stringify!($x),);
+            return Err(scalgo_proto::Error::InvalidPointer());
+        }
+    }};
+}
+
+macro_rules! require_some {
+    ( $x:expr) => {{
+        match $x {
+            None => {
+                println!("Error {} should yield Some", stringify!($x),);
+                return Err(scalgo_proto::Error::InvalidPointer());
+            }
+            Some(v) => v,
+        }
+    }};
+}
+
+macro_rules! ce {
+    ( $x: expr ) => {{
+        match $x {
+            Ok(v) => v,
+            Err(e) => {
+                println!("Error {} failed", stringify!($x),);
+                return Err(e);
+            }
+        }
+    }};
+}
+
 fn test_in_default(path: &str) -> scalgo_proto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
     let s = scalgo_proto::read_message::<simple::Simple>(&data)?;
@@ -130,10 +163,7 @@ fn test_in_default(path: &str) -> scalgo_proto::Result<()> {
     require!(s.i64(), 9);
     require!(s.f(), 10.0);
     require!(s.d(), 11.0);
-    match s.os() {
-        Some(v) => return Err(scalgo_proto::Error::InvalidPointer()),
-        None => (),
-    };
+    require_none!(s.os());
     require!(s.ob(), None);
     require!(s.ou8(), None);
     require!(s.ou16(), None);
@@ -146,10 +176,7 @@ fn test_in_default(path: &str) -> scalgo_proto::Result<()> {
     require!(s.of(), None);
     require!(s.od(), None);
     require!(s.ne(), None);
-    match s.ns() {
-        Some(v) => return Err(scalgo_proto::Error::InvalidPointer()),
-        None => (),
-    };
+    require_none!(s.ns());
     require!(s.nb(), None);
     require!(s.nu8(), None);
     require!(s.nu16(), None);
@@ -245,14 +272,10 @@ fn test_in(path: &str) -> scalgo_proto::Result<()> {
     require!(s.i64(), 5465779);
     require!(s.f(), 2.0);
     require!(s.d(), 3.0);
-    match s.os() {
-        Some(v) => {
-            require!(v.x(), 43);
-            require!(v.y(), 28.0);
-            require!(v.z(), false);
-        }
-        None => return Err(scalgo_proto::Error::InvalidPointer()),
-    };
+    let v = require_some!(s.os());
+    require!(v.x(), 43);
+    require!(v.y(), 28.0);
+    require!(v.z(), false);
     require!(s.ob(), Some(false));
     require!(s.ou8(), Some(252));
     require!(s.ou16(), Some(4034));
@@ -265,10 +288,7 @@ fn test_in(path: &str) -> scalgo_proto::Result<()> {
     require!(s.of(), Some(5.0));
     require!(s.od(), Some(6.4));
     require!(s.ne(), None);
-    match s.ns() {
-        Some(v) => return Err(scalgo_proto::Error::InvalidPointer()),
-        None => (),
-    };
+    require_none!(s.ns());
     require!(s.nb(), None);
     require!(s.nu8(), None);
     require!(s.nu16(), None);
@@ -280,6 +300,141 @@ fn test_in(path: &str) -> scalgo_proto::Result<()> {
     require!(s.ni64(), None);
     require!(s.nf(), None);
     require!(s.nd(), None);
+    Ok(())
+}
+
+fn test_out_complex(path: &str) -> bool {
+    false
+}
+
+fn test_complex_in(path: &str) -> scalgo_proto::Result<()> {
+    let data = std::fs::read(path).expect("Unable to read file");
+    let s = scalgo_proto::read_message::<simple::Complex>(&data)?;
+    require_none!(ce!(s.nmember()));
+    require_none!(ce!(s.ntext()));
+    require_none!(ce!(s.nbytes()));
+    require!(ce!(s.text()), Some("text"));
+    require!(ce!(s.my_bytes()), Some((b"bytes").as_ref()));
+    let m = require_some!(ce!(s.member()));
+    require!(m.id(), 42);
+    require_none!(ce!(s.nint_list()));
+    let l = require_some!(ce!(s.int_list()));
+    require!(l.len(), 31);
+    // for (i, v) in l.iter().enumerate() {
+    //     require!(v, 100 - 2 * i);
+    // }
+    let l = require_some!(ce!(s.enum_list()));
+    require!(l.len(), 2);
+    require!(l.get(0), Some(simple::MyEnum::A));
+    require!(l.get(1), None);
+
+    /*
+    if require(s.has_struct_list, True):
+        return False
+    l3 = s.struct_list
+    if require(len(l3), 1):
+        return False
+
+    if require(s.has_text_list, True):
+        return False
+    l4 = s.text_list
+    if require(len(l4), 200):
+        return False
+    for i in range(len(l4)):
+        if i % 2 == 0:
+            if require(l4.has(i), False):
+                return False
+        else:
+            if require(l4.has(i), True):
+                return False
+            if require(l4[i], "HI THERE"):
+                return False
+
+    if require(s.has_bytes_list, True):
+        return False
+    l5 = s.bytes_list
+    if require(len(l5), 1):
+        return False
+    if require(l5.has(0), True):
+        return False
+    if require(l5[0], b"bytes"):
+        return False
+
+    if require(s.has_member_list, True):
+        return False
+    l6 = s.member_list
+    if require(len(l6), 3):
+        return False
+    if require(l6.has(0), True):
+        return False
+    if require(l6.has(1), False):
+        return False
+    if require(l6.has(2), True):
+        return False
+    if require(l6[0].id, 42):
+        return False
+    if require(l6[2].id, 42):
+        return False
+
+    if require(s.has_f32list, True):
+        return False
+    l7 = s.f32list
+    if require(len(l7), 2):
+        return False
+    if require(l7[0], 0.0):
+        return False
+    if require(l7[1], 98.0):
+        return False
+
+    if require(s.has_f64list, True):
+        return False
+    l8 = s.f64list
+    if require(len(l8), 3):
+        return False
+    if require(l8[0], 0.0):
+        return False
+    if require(l8[1], 0.0):
+        return False
+    if require(l8[2], 78.0):
+        return False
+
+    if require(s.has_u8list, True):
+        return False
+    l9 = s.u8list
+    if require(len(l9), 2):
+        return False
+    if require(l9[0], 4):
+        return False
+    if require(l9[1], 0):
+        return False
+
+    if require(s.has_blist, True):
+        return False
+    l10 = s.blist
+    if require(len(l10), 10):
+        return False
+    if require(l10[0], True):
+        return False
+    if require(l10[1], False):
+        return False
+    if require(l10[2], True):
+        return False
+    if require(l10[3], False):
+        return False
+    if require(l10[4], False):
+        return False
+    if require(l10[5], False):
+        return False
+    if require(l10[6], False):
+        return False
+    if require(l10[7], False):
+        return False
+    if require(l10[8], True):
+        return False
+    if require(l10[9], False):
+        return False
+
+    return True*/
     Ok(())
 }
 
@@ -296,6 +451,10 @@ fn main() {
     };
     if let Err(_) = test_in("test/simple.bin") {
         println!("test_in_failed");
+    };
+
+    if let Err(_) = test_complex_in("test/complex.bin") {
+        println!("test_complex_in_failed");
     };
     println!("Tests done")
 }

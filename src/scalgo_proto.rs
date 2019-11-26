@@ -149,7 +149,7 @@ impl<'a> Reader<'a> {
         }
     }
 
-    pub fn get_ptr(&self, offset: usize, expected_magic: u32) -> Result<Option<(usize, usize)>> {
+    pub fn get_ptr(&self, offset: usize) -> Result<Option<(usize, u32, usize)>> {
         let o = match self.get_48_usize(offset)? {
             Some(v) => v,
             None => return Ok(None),
@@ -158,14 +158,8 @@ impl<'a> Reader<'a> {
             return Err(Error::InvalidPointer());
         }
         let magic: u32 = unsafe { to_pod(&self.full[o..o + 4]) };
-        if magic != expected_magic {
-            return Err(Error::BadMagic());
-        }
         let size = unsafe { to_u48_usize(&self.full[o + 4..o + 10]) }?;
-        if o + 10 + size > self.full.len() {
-            return Err(Error::InvalidPointer());
-        }
-        return Ok(Some((o + 10, size)));
+        return Ok(Some((o + 10, magic, size)));
     }
 
     pub fn get_ptr_inplace(&self, offset: usize) -> Result<Option<(usize, usize)>> {
@@ -174,23 +168,36 @@ impl<'a> Reader<'a> {
             None => return Ok(None),
         };
         let o = self.part.as_ptr() as usize - self.full.as_ptr() as usize + self.part.len();
-        if o + size > self.full.len() {
-            return Err(Error::InvalidPointer());
-        }
         return Ok(Some((o, size)));
     }
 
-    pub fn get_table<F: TableFactory<'a> + 'a>(&self, offset: usize) -> Result<Option<F::In>> {
-        match self.get_ptr(offset, F::magic()) {
-            Err(e) => Err(e),
-            Ok(None) => Ok(None),
-            Ok(Some((o, s))) => Ok(Some(F::new_in(Reader {
-                full: self.full,
-                part: &self.full[o..o + s],
-            }))),
+    pub fn get_table_union<F: TableFactory<'a> + 'a>(
+        &self,
+        magic: Option<u32>,
+        offset: usize,
+        size: usize,
+    ) -> Result<F::In> {
+        if let Some(m) = magic {
+            if m != F::magic() {
+                return Err(Error::BadMagic());
+            }
         }
+        if offset + size > self.full.len() {
+            return Err(Error::InvalidPointer());
+        }
+        Ok(F::new_in(Reader {
+            full: self.full,
+            part: &self.full[offset..offset + size],
+        }))
     }
 
+    pub fn get_table<F: TableFactory<'a> + 'a>(&self, offset: usize) -> Result<Option<F::In>> {
+        match self.get_ptr(offset) {
+            Err(e) => Err(e),
+            Ok(None) => Ok(None),
+            Ok(Some((o, m, s))) => Ok(Some(self.get_table_union::<F>(Some(m), o, s)?)),
+        }
+    }
     pub fn get_table_inplace<F: TableFactory<'a> + 'a>(
         &self,
         offset: usize,
@@ -198,18 +205,32 @@ impl<'a> Reader<'a> {
         match self.get_ptr_inplace(offset) {
             Err(e) => Err(e),
             Ok(None) => Ok(None),
-            Ok(Some((o, s))) => Ok(Some(F::new_in(Reader {
-                full: self.full,
-                part: &self.full[o..o + s],
-            }))),
+            Ok(Some((o, s))) => Ok(Some(self.get_table_union::<F>(None, o, s)?)),
         }
     }
 
+    pub fn get_text_union(
+        &self,
+        magic: Option<u32>,
+        offset: usize,
+        size: usize,
+    ) -> Result<&'a str> {
+        if let Some(m) = magic {
+            if m != TEXTMAGIC {
+                return Err(Error::BadMagic());
+            }
+        }
+        if offset + size > self.full.len() {
+            return Err(Error::InvalidPointer());
+        }
+        Ok(std::str::from_utf8(&self.full[offset..offset + size])?)
+    }
+
     pub fn get_text(&self, offset: usize) -> Result<Option<&'a str>> {
-        match self.get_ptr(offset, TEXTMAGIC) {
+        match self.get_ptr(offset) {
             Err(e) => Err(e),
             Ok(None) => Ok(None),
-            Ok(Some((o, s))) => Ok(Some(std::str::from_utf8(&self.full[o..o + s])?)),
+            Ok(Some((o, m, s))) => Ok(Some(self.get_text_union(Some(m), o, s)?)),
         }
     }
 
@@ -217,15 +238,32 @@ impl<'a> Reader<'a> {
         match self.get_ptr_inplace(offset) {
             Err(e) => Err(e),
             Ok(None) => Ok(None),
-            Ok(Some((o, s))) => Ok(Some(std::str::from_utf8(&self.full[o..o + s])?)),
+            Ok(Some((o, s))) => Ok(Some(self.get_text_union(None, o, s)?)),
         }
     }
 
+    pub fn get_bytes_union(
+        &self,
+        magic: Option<u32>,
+        offset: usize,
+        size: usize,
+    ) -> Result<&'a [u8]> {
+        if let Some(m) = magic {
+            if m != BYTESMAGIC {
+                return Err(Error::BadMagic());
+            }
+        }
+        if offset + size > self.full.len() {
+            return Err(Error::InvalidPointer());
+        }
+        Ok(&self.full[offset..offset + size])
+    }
+
     pub fn get_bytes(&self, offset: usize) -> Result<Option<&'a [u8]>> {
-        match self.get_ptr(offset, BYTESMAGIC) {
+        match self.get_ptr(offset) {
             Err(e) => Err(e),
             Ok(None) => Ok(None),
-            Ok(Some((o, s))) => Ok(Some(&self.full[o..o + s])),
+            Ok(Some((o, m, s))) => Ok(Some(self.get_bytes_union(Some(m), o, s)?)),
         }
     }
 
@@ -233,21 +271,40 @@ impl<'a> Reader<'a> {
         match self.get_ptr_inplace(offset) {
             Err(e) => Err(e),
             Ok(None) => Ok(None),
-            Ok(Some((o, s))) => Ok(Some(&self.full[o..o + s])),
+            Ok(Some((o, s))) => Ok(Some(self.get_bytes_union(None, o, s)?)),
         }
     }
 
+    pub fn get_list_union<A: ListAccess<'a> + 'a>(
+        &self,
+        magic: Option<u32>,
+        offset: usize,
+        size: usize,
+    ) -> Result<ListIn<'a, A>> {
+        if let Some(m) = magic {
+            if m != LISTMAGIC {
+                return Err(Error::BadMagic());
+            }
+        }
+        //TODO(jakobt) HOW TO VALIDATE LIST LENGTHS
+        let size_bytes = size;
+        if offset + size_bytes > self.full.len() {
+            return Err(Error::InvalidPointer());
+        }
+        Ok(ListIn {
+            reader: Reader {
+                full: self.full,
+                part: &self.full[offset..offset + size_bytes],
+            },
+            phantom: std::marker::PhantomData {},
+        })
+    }
+
     pub fn get_list<A: ListAccess<'a> + 'a>(&self, offset: usize) -> Result<Option<ListIn<'a, A>>> {
-        match self.get_ptr(offset, LISTMAGIC) {
+        match self.get_ptr(offset) {
             Err(e) => Err(e),
             Ok(None) => Ok(None),
-            Ok(Some((o, s))) => Ok(Some(ListIn {
-                reader: Reader {
-                    full: self.full,
-                    part: &self.full[o..o + s],
-                },
-                phantom: std::marker::PhantomData {},
-            })),
+            Ok(Some((o, m, s))) => Ok(Some(self.get_list_union::<A>(Some(m), o, s)?)),
         }
     }
 
@@ -258,13 +315,23 @@ impl<'a> Reader<'a> {
         match self.get_ptr_inplace(offset) {
             Err(e) => Err(e),
             Ok(None) => Ok(None),
-            Ok(Some((o, s))) => Ok(Some(ListIn {
-                reader: Reader {
-                    full: self.full,
-                    part: &self.full[o..o + s],
-                },
-                phantom: std::marker::PhantomData {},
-            })),
+            Ok(Some((o, s))) => Ok(Some(self.get_list_union::<A>(None, o, s)?)),
+        }
+    }
+
+    pub fn get_union<F: UnionFactory<'a> + 'a>(&self, offset: usize) -> Result<F::In> {
+        let t = self.get_pod::<u16>(offset).unwrap_or(0);
+        match self.get_ptr(offset + 2)? {
+            Some((o, magic, size)) => F::new_in(t, Some(magic), o, size, self),
+            None => F::new_in(t, None, 0, 0, self),
+        }
+    }
+
+    pub fn get_union_inplace<F: UnionFactory<'a> + 'a>(&self, offset: usize) -> Result<F::In> {
+        let t = self.get_pod::<u16>(offset).unwrap_or(0);
+        match self.get_ptr_inplace(offset + 2)? {
+            Some((o, size)) => F::new_in(t, None, o, size, self),
+            None => F::new_in(t, None, 0, 0, self),
         }
     }
 }
@@ -437,7 +504,13 @@ impl<'a> ListAccess<'a> for BoolListAccess<'a> {
 
 pub trait UnionFactory<'a> {
     type In: std::fmt::Debug;
-    fn get(t: u8, reader: &Reader<'a>) -> Result<Self::In>;
+    fn new_in(
+        t: u16,
+        magic: Option<u32>,
+        offset: usize,
+        size: usize,
+        reader: &Reader<'a>,
+    ) -> Result<Self::In>;
 }
 
 pub trait TableOut {
