@@ -47,6 +47,18 @@ class Generator:
         self.documents: Documents = documents
         self.out: TextIO = out
 
+    def byte_encode(self, b: bytes) -> str:
+        x = []
+        m = {ord('\r'): "\\r", ord("\n"): "\\n", ord("\0"): "\\0", ord("\""): "\\\"", ord("\\"): "\\\\"}
+        for c in b:
+            if c in m:
+                x.append(m[c])
+            elif 32 <= c <= 126:
+                x.append(chr(c))
+            else:
+                x.append("\\x%02x"%c)
+        return "".join(x)
+
     def out_list_type(self, node: Value) -> str:
         if node.type_.type == TokenType.BOOL:
             return "scalgoproto.ListOut<boolean>"
@@ -364,7 +376,11 @@ class Generator:
             raise ICE()
         ti = typeMap[node.type_.type]
         self.output_doc(node, "    ")
-        if  node.optional:
+        if node.optional and ti.p in ('f32', 'f64'):
+            self.o("    pub fn %s(&self, v : Option<%s>) {match v {None => unsafe{self._arena.set_pod(self._offset + %d, &std::%s::NAN)}, Some(b) => unsafe{self._arena.set_pod(self._offset + %d, &b)}}}"% (
+                lname, ti.p, node.offset, ti.p, node.offset
+            ))
+        elif node.optional:
             self.o("    pub fn %s(&self, v : Option<%s>) {match v {None => unsafe{self._arena.set_bit(self._offset + %d, %d, false)}, Some(b) => unsafe{self._arena.set_bit(self._offset + %d, %d, true); self._arena.set_pod(self._offset + %d, &b)}}}"% (
                 lname, ti.p, node.has_offset, node.has_bit, node.has_offset, node.has_bit, node.offset
             ))
@@ -920,6 +936,7 @@ class Generator:
         self.o("    type Out = %sOut<'a>;"%table.name)
         self.o("    fn magic() -> u32 {0x%08X}" % table.magic)
         self.o("    fn size() -> usize {%d}" % table.bytes)
+        self.o("    fn default() -> &'static [u8] {b\"%s\"}" % self.byte_encode(table.default))
         self.o("    fn new_in(reader: scalgo_proto::Reader<'a>) -> Self::In {Self::In { _reader: reader }}")
         self.o("    fn new_out(arena: &'a scalgo_proto::Arena, offset: usize) -> Self::Out {Self::Out { _arena: arena, _offset: offset }}")
         self.o("}")
@@ -1009,7 +1026,7 @@ class Generator:
     def generate_enum(self, node: Enum) -> None:
         self.output_doc(node, "")
         self.o("#[repr(u8)]")
-        self.o("#[derive(Copy, Clone, Debug)]")
+        self.o("#[derive(Copy, Clone, Debug, PartialEq)]")
         self.o("pub enum %s {" % node.name)
         for ev in node.members:
             self.o("    %s," % (usnake(self.value(ev.identifier))))
