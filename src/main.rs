@@ -44,12 +44,12 @@ macro_rules! require_enum {
         let x = $x;
         match x {
             $y => $z,
-            _ =>  {
+            _ => {
                 println!("Error {} should yield {}", stringify!($x), stringify!($y));
                 return Err(scalgo_proto::Error::InvalidPointer());
             }
         }
-    }}
+    }};
 }
 
 macro_rules! ce {
@@ -110,7 +110,7 @@ fn validate_out(data: &[u8], path: &str) -> bool {
             }
             match exp.get(j) {
                 Some(v) if 32 <= *v && *v <= 126 => print!("{}", *v as char),
-                Some(v) => print!("."),
+                Some(_) => print!("."),
                 None => print!(" "),
             };
             if j % 4 == 3 {
@@ -126,7 +126,7 @@ fn validate_out(data: &[u8], path: &str) -> bool {
             }
             match data.get(j) {
                 Some(v) if 32 <= *v && *v <= 126 => print!("{}", *v as char),
-                Some(v) => print!("."),
+                Some(_) => print!("."),
                 None => print!(" "),
             };
             if j % 4 == 3 {
@@ -322,56 +322,59 @@ fn test_out_complex(path: &str) -> bool {
     let mut m = writer.add_table::<simple::Member>();
     m.id(42);
 
-    // l = w.construct_int32_list(31)
-    // for i in range(31):
-    //     l[i] = 100 - 2 * i
+    let mut l = writer.add_i32_list(31);
+    for i in 0..31 {
+        l.set(i, 100 - 2 * (i) as i32);
+    }
 
-    // l2 = w.construct_enum_list(base.MyEnum, 2)
-    // l2[0] = base.MyEnum.a
+    let mut l2 = writer.add_enum_list::<simple::MyEnum>(2);
+    l2.set(0, Some(simple::MyEnum::A));
 
-    // l3 = w.construct_struct_list(base.MyStruct, 1)
+    let mut l3 = writer.add_struct_list::<simple::MyStruct>(1);
 
     let b = writer.add_bytes(b"bytes");
     let t = writer.add_text("text");
 
-    // l4 = w.construct_text_list(200)
-    // for i in range(1, len(l4), 2):
-    //     l4[i] = "HI THERE"
-    // l5 = w.construct_bytes_list(1)
-    // l5[0] = b
+    let mut l4 = writer.add_text_list(200);
+    for i in (0..200).step_by(2) {
+        l4.add(i, "HI THERE");
+    }
 
-    // l6 = w.construct_table_list(base.MemberOut, 3)
-    // l6[0] = m
-    // l6[2] = m
+    let mut l5 = writer.add_bytes_list(1);
+    l5.set(0, Some(b));
 
-    // l7 = w.construct_float32_list(2)
-    // l7[1] = 98.0
+    let mut l6 = writer.add_table_list::<simple::Member>(3);
+    l6.set(0, Some(m));
+    l6.set(2, Some(m));
 
-    // l8 = w.construct_float64_list(3)
-    // l8[2] = 78.0
+    let mut l7 = writer.add_f32_list(2);
+    l7.set(1, 98.0);
 
-    // l9 = w.construct_uint8_list(2)
-    // l9[0] = 4
+    let mut l8 = writer.add_f64_list(2);
+    l8.set(1, 78.0);
 
-    // l10 = w.construct_bool_list(10)
-    // l10[0] = True
-    // l10[2] = True
-    // l10[8] = True
+    let mut l9 = writer.add_u8_list(2);
+    l9.set(1, 4);
+
+    let mut l10 = writer.add_bool_list(10);
+    l10.set(0, true);
+    l10.set(2, true);
+    l10.set(8, true);
 
     let mut s = writer.add_table::<simple::Complex>();
     s.set_member(Some(m));
     s.set_text(Some(t));
     s.set_my_bytes(Some(b));
-    /*s.int_list = l
-    s.struct_list = l3
-    s.enum_list = l2
-    s.text_list = l4
-    s.bytes_list = l5
-    s.member_list = l6
-    s.f32list = l7
-    s.f64list = l8
-    s.u8list = l9
-    s.blist = l10*/
+    s.set_int_list(Some(l));
+    s.set_struct_list(Some(l3));
+    s.set_enum_list(Some(l2));
+    s.set_text_list(Some(l4));
+    s.set_bytes_list(Some(l5));
+    s.set_member_list(Some(l6));
+    s.set_f32list(Some(l7));
+    s.set_f64list(Some(l8));
+    s.set_u8list(Some(l9));
+    s.set_blist(Some(l10));
     let data = writer.finalize(s);
     return validate_out(data, path);
 }
@@ -476,52 +479,52 @@ fn test_out_complex2(path: &str) -> bool {
 fn test_in_complex2(path: &str) -> scalgo_proto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
     /*let s = scalgo_proto::read_message::<simple::Complex2>(&data)?;
-    let m = match s.u1() {
-    
-    };
+        let m = match s.u1() {
 
-    s = r.root(complex2.Complex2In)
-    if require(s.u1.is_member, True):
-        return False
-    if require(s.u1.member.id, 42):
-        return False
-    if require(s.u2.is_text, True):
-        return False
-    if require(s.u2.text, "text"):
-        return False
-    if require(s.u3.is_my_bytes, True):
-        return False
-    if require(s.u3.my_bytes, b"bytes"):
-        return False
-    if require(s.u4.is_enum_list, True):
-        return False
-    l = s.u4.enum_list
-    if require(len(l), 2):
-        return False
-    if require(l[0], base.NamedUnionEnumList.x):
-        return False
-    if require(l[1], base.NamedUnionEnumList.z):
-        return False
-    if require(s.u5.is_a, True):
-        return False
-    if require(s.has_hat, True):
-        return False
-    if require(s.hat.id, 43):
-        return False
-    if require(s.has_l, True):
-        return False
-    l2 = s.l
-    if require(len(l2), 1):
-        return False
-    if require(l2[0].a, 2):
-        return False
-    if require(l2[0].b, True):
-        return False
-    if require(s.s.x, complex2.Complex2SX.p):
-        return False
-    if require(s.s.y.z, 8):
-        return False
-*/
+        };
+
+        s = r.root(complex2.Complex2In)
+        if require(s.u1.is_member, True):
+            return False
+        if require(s.u1.member.id, 42):
+            return False
+        if require(s.u2.is_text, True):
+            return False
+        if require(s.u2.text, "text"):
+            return False
+        if require(s.u3.is_my_bytes, True):
+            return False
+        if require(s.u3.my_bytes, b"bytes"):
+            return False
+        if require(s.u4.is_enum_list, True):
+            return False
+        l = s.u4.enum_list
+        if require(len(l), 2):
+            return False
+        if require(l[0], base.NamedUnionEnumList.x):
+            return False
+        if require(l[1], base.NamedUnionEnumList.z):
+            return False
+        if require(s.u5.is_a, True):
+            return False
+        if require(s.has_hat, True):
+            return False
+        if require(s.hat.id, 43):
+            return False
+        if require(s.has_l, True):
+            return False
+        l2 = s.l
+        if require(len(l2), 1):
+            return False
+        if require(l2[0].a, 2):
+            return False
+        if require(l2[0].b, True):
+            return False
+        if require(s.s.x, complex2.Complex2SX.p):
+            return False
+        if require(s.s.y.z, 8):
+            return False
+    */
     Ok(())
 }
 
@@ -530,10 +533,10 @@ fn test_out_inplace(path: &str) -> bool {
 
     let name = writer.add_text("nilson");
     let u = writer.add_table::<simple::InplaceUnion>();
-//     u.u.add_monkey().name = name
+    //     u.u.add_monkey().name = name
 
     let u2 = writer.add_table::<simple::InplaceUnion>();
-//     u2.u.add_text().t = "foobar"
+    //     u2.u.add_text().t = "foobar"
 
     let t = writer.add_table::<simple::InplaceText>();
     t.id(45);
@@ -558,7 +561,6 @@ fn test_out_inplace(path: &str) -> bool {
     let data = writer.finalize(root);
     return validate_out(data, path);
 }
-
 
 fn test_in_inplace(path: &str) -> scalgo_proto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
@@ -617,7 +619,10 @@ fn test_in_extend2(path: &str) -> scalgo_proto::Result<()> {
     let s = scalgo_proto::read_message::<simple::Gen3>(&data)?;
     require!(s.aa(), 80);
     require!(s.bb(), 81);
-    require!(require_enum!(ce!(s.u()), simple::Gen3UIn::CAKE(cake), cake).v(), 45);
+    require!(
+        require_enum!(ce!(s.u()), simple::Gen3UIn::CAKE(cake), cake).v(),
+        45
+    );
     require!(s.e(), Some(simple::MyEnum::C));
     require!(s.s().x(), 0);
     require!(s.s().y(), 0.0);
@@ -656,7 +661,6 @@ fn test_in_extend2(path: &str) -> scalgo_proto::Result<()> {
     require_none!(ce!(s.member_list()));
     Ok(())
 }
-
 
 fn main() {
     if !test_out_default("test/simple_default.bin") {

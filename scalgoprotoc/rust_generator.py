@@ -75,30 +75,21 @@ class Generator:
 
     def out_list_type(self, node: Value) -> str:
         if node.type_.type == TokenType.BOOL:
-            return "scalgoproto.ListOut<boolean>"
+            return "scalgo_proto::BoolListOut<'a>"
         elif node.type_.type in typeMap:
-            return "scalgoproto.ListOut<number>"
+            return "scalgo_proto::PodListOut<'a, %s>" % (typeMap[node.type_.type].p)
         elif node.struct:
-            return "scalgoproto.ListOut<%s>" % (node.struct.name)
+            return "scalgo_proto::StructListOut<'a, %s>" % (node.struct.name)
         elif node.enum:
-            return "scalgoproto.ListOut<%s, %s | null>" % (
-                node.enum.name,
-                node.enum.name,
-            )
+            return "scalgo_proto::EnumListOut<'a, %s>" % (node.enum.name)
         elif node.table:
-            return "scalgoproto.ListOut<%sOut, %sIn | null>" % (
-                node.table.name,
-                node.table.name,
-            )
+            return "scalgo_proto::TableListOut<'a, %s>" % (node.table.name)
         elif node.union:
-            return "scalgoproto.ListOut<%sOut, %sIn>" % (
-                node.union.name,
-                node.union.name,
-            )
+            return "scalgo_proto::UnionListOut<'a, %s>" % (node.union.name)
         elif node.type_.type == TokenType.TEXT:
-            return "scalgoproto.ListOut<string | scalgoproto.TextOut, string | null>"
+            return "scalgo_proto::TextListOut<'a>"
         elif node.type_.type == TokenType.BYTES:
-            return "scalgoproto.ListOut<ArrayBuffer | scalgoproto.BytesOut, ArrayBuffer | null>"
+            return "scalgo_proto::BytesListOut<'a>"
         else:
             raise ICE()
 
@@ -252,58 +243,45 @@ class Generator:
         self.o()
 
     def generate_list_out(self, node: Value, lname: str, size: int) -> None:
-        it = "scalgoproto.ListIn<%s>" % self.in_list_help(node, "")[0]
+        # it = "scalgoproto.ListIn<%s>" % self.in_list_help(node, "")[0]
         ot = self.out_list_type(node)
         if not node.inplace:
             self.output_doc(node, "    ")
-            self.o("    set %s(value: %s | %s) {" % (lname, it, ot))
-            self.o("        if (value instanceof scalgoproto.ListIn) {")
             self.o(
-                "            this.add%s(value.length)._copy(value);" % (ucamel(lname))
+                "    pub fn set_%s(&mut self, v: Option<%s>) { unsafe{self._arena.set_list(%d, v)} }"
+                % (lname, ot, node.offset)
             )
-            self.o("            return;")
-            self.o("        }")
-            self.o("        console.assert(value instanceof scalgoproto.ListOut);")
-            self.o("        this._setList(%d, value);" % (node.offset))
-            self.o("    }")
-            self.o()
 
-            self.output_doc(node, "    ")
-            self.o(
-                "    add%s(size:number) : %s {"
-                % (ucamel(lname), self.out_list_type(node))
-            )
-            self.o(
-                "        const res = this._writer.%s;" % self.out_list_constructor(node)
-            )
-            self.o("        this._setList(%d, res);" % (node.offset))
-            self.o("        return res;")
-            self.o("    }")
-            self.o()
+            # self.output_doc(node, "    ")
+            # self.o("    pub fn add_%s(size:number) -> %s {"
+            #    % (lname, ot)
+            # )
+            # self.o("    }")
         else:
-            self.output_doc(node, "    ")
-            self.o("    set %s(value: %s) {" % (lname, it))
-            self.o("        console.assert(value instanceof scalgoproto.ListIn);")
-            self.o("        this.add%s(value.length)._copy(value);" % (ucamel(lname)))
-            self.o("    }")
+            pass
+            # self.output_doc(node, "    ")
+            # self.o("    set %s(value: %s) {" % (lname, it))
+            # self.o("        console.assert(value instanceof scalgoproto.ListIn);")
+            # self.o("        this.add%s(value.length)._copy(value);" % (ucamel(lname)))
+            # self.o("    }")
 
-            self.output_doc(node, "    ")
-            self.o(
-                "    add%s(size: number) : %s {"
-                % (ucamel(lname), self.out_list_type(node))
-            )
-            self.o(
-                "        console.assert(this._writer._size == this._offset + %s);"
-                % size
-            )
-            self.o(
-                "        const l = this._writer.%s;"
-                % self.out_list_constructor(node, True)
-            )
-            self.o("        this._setInplaceList(%d, size);" % (node.offset))
-            self.o("        return l;")
-            self.o("    }")
-            self.o()
+            # self.output_doc(node, "    ")
+            # self.o(
+            #     "    add%s(size: number) : %s {"
+            #     % (ucamel(lname), self.out_list_type(node))
+            # )
+            # self.o(
+            #     "        console.assert(this._writer._size == this._offset + %s);"
+            #     % size
+            # )
+            # self.o(
+            #     "        const l = this._writer.%s;"
+            #     % self.out_list_constructor(node, True)
+            # )
+            # self.o("        this._setInplaceList(%d, size);" % (node.offset))
+            # self.o("        return l;")
+            # self.o("    }")
+            # self.o()
 
     def generate_union_list_out(
         self, node: Value, lname: str, idx: int, inplace: bool
@@ -753,8 +731,7 @@ class Generator:
     def generate_value_out(self, table: Table, node: Value) -> None:
         lname = snake(self.value(node.identifier))
         if node.list_:
-            # self.generate_list_out(node, lname, len(table.default))
-            pass
+            self.generate_list_out(node, lname, len(table.default))
         elif node.type_.type == TokenType.BOOL:
             self.generate_bool_out(node, lname)
         elif node.type_.type in typeMap:
@@ -1027,6 +1004,7 @@ class Generator:
 
         # Generate Table writer
         self.output_doc(table, "")
+        self.o("#[derive(Copy, Clone)]")
         self.o("pub struct %sOut<'a> {" % table.name)
         self.o("    _arena: &'a scalgo_proto::Arena,")
         self.o("    _offset: usize,")

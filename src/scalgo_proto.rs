@@ -341,7 +341,7 @@ impl<'a> Reader<'a> {
 pub trait ListAccess<'a> {
     type Output: std::fmt::Debug;
     fn bytes(size: usize) -> usize;
-    fn get(reader: &Reader<'a>, idx: usize) -> Self::Output;
+    unsafe fn get(reader: &Reader<'a>, idx: usize) -> Self::Output;
 }
 
 pub struct ListIn<'a, A: ListAccess<'a>> {
@@ -356,7 +356,7 @@ impl<'a, A: ListAccess<'a>> ListIn<'a, A> {
     }
     pub fn get(&self, idx: usize) -> A::Output {
         assert!(idx < self._len);
-        A::get(&self.reader, idx)
+        unsafe { A::get(&self.reader, idx) }
     }
     pub fn iter(&self) -> ListIter<'a, A> {
         ListIter {
@@ -381,7 +381,7 @@ impl<'a, A: ListAccess<'a> + 'a> std::iter::Iterator for ListIter<'a, A> {
         if self.idx >= self._len {
             return None;
         }
-        let ans = A::get(&self.reader, self.idx);
+        let ans = unsafe { A::get(&self.reader, self.idx) };
         self.idx += 1;
         Some(ans)
     }
@@ -422,6 +422,179 @@ impl<'a, A: ListAccess<'a>> std::fmt::Debug for ListIn<'a, A> {
     }
 }
 
+trait ListOut {
+    fn offset(&self) -> usize;
+}
+
+#[derive(Copy, Clone)]
+pub struct PodListOut<'a, T: Copy + std::fmt::Debug> {
+    arena: &'a Arena,
+    offset: usize,
+    _len: usize,
+    phantom: std::marker::PhantomData<T>,
+}
+impl<'a, T: Copy + std::fmt::Debug> PodListOut<'a, T> {
+    pub fn set(&mut self, idx: usize, v: T) {
+        assert!(idx < self._len);
+        unsafe {
+            self.arena
+                .set_pod(self.offset + idx * std::mem::size_of::<T>(), &v)
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self._len
+    }
+}
+impl<'a, T: Copy + std::fmt::Debug> ListOut for PodListOut<'a, T> {
+    fn offset(&self) -> usize {
+        self.offset
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct BoolListOut<'a> {
+    arena: &'a Arena,
+    offset: usize,
+    _len: usize,
+}
+impl<'a> BoolListOut<'a> {
+    pub fn set(&mut self, idx: usize, v: bool) {
+        assert!(idx < self._len);
+        unsafe { self.arena.set_bit(self.offset + (idx >> 3), idx & 7, v) }
+    }
+
+    pub fn len(&self) -> usize {
+        self._len
+    }
+}
+impl<'a> ListOut for BoolListOut<'a> {
+    fn offset(&self) -> usize {
+        self.offset
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct EnumListOut<'a, T: Enum + Copy> {
+    arena: &'a Arena,
+    offset: usize,
+    _len: usize,
+    phantom: std::marker::PhantomData<T>,
+}
+impl<'a, T: Enum + Copy> EnumListOut<'a, T> {
+    pub fn set(&mut self, idx: usize, v: Option<T>) {
+        assert!(idx < self._len);
+        unsafe { self.arena.set_enum(self.offset + idx, v) }
+    }
+
+    pub fn len(&self) -> usize {
+        self._len
+    }
+}
+impl<'a, T: Enum + Copy> ListOut for EnumListOut<'a, T> {
+    fn offset(&self) -> usize {
+        self.offset
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct TextListOut<'a> {
+    arena: &'a Arena,
+    offset: usize,
+    _len: usize,
+}
+impl<'a> TextListOut<'a> {
+    pub fn set(&mut self, idx: usize, v: Option<TextOut<'a>>) {
+        assert!(idx < self._len);
+        unsafe { self.arena.set_text(self.offset + idx * 6, v) }
+    }
+    pub fn add(&mut self, idx: usize, v: &str) -> TextOut<'a> {
+        assert!(idx < self._len);
+        unsafe { self.arena.add_text(self.offset + idx * 6, v) }
+    }
+    pub fn len(&self) -> usize {
+        self._len
+    }
+}
+impl<'a> ListOut for TextListOut<'a> {
+    fn offset(&self) -> usize {
+        self.offset
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct BytesListOut<'a> {
+    arena: &'a Arena,
+    offset: usize,
+    _len: usize,
+}
+impl<'a> BytesListOut<'a> {
+    pub fn set(&mut self, idx: usize, v: Option<BytesOut<'a>>) {
+        assert!(idx < self._len);
+        unsafe { self.arena.set_bytes(self.offset + idx * 6, v) }
+    }
+    pub fn add(&mut self, idx: usize, v: &[u8]) -> BytesOut<'a> {
+        assert!(idx < self._len);
+        unsafe { self.arena.add_bytes(self.offset + idx * 6, v) }
+    }
+    pub fn len(&self) -> usize {
+        self._len
+    }
+}
+impl<'a> ListOut for BytesListOut<'a> {
+    fn offset(&self) -> usize {
+        self.offset
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct TableListOut<'a, F: TableFactory<'a>> {
+    arena: &'a Arena,
+    offset: usize,
+    _len: usize,
+    phantom: std::marker::PhantomData<F>,
+}
+impl<'a, F: TableFactory<'a>> TableListOut<'a, F> {
+    pub fn set(&mut self, idx: usize, v: Option<F::Out>) {
+        assert!(idx < self._len);
+        unsafe { self.arena.set_table(self.offset + idx * 6, v) }
+    }
+    pub fn add(&mut self, idx: usize) -> F::Out {
+        assert!(idx < self._len);
+        unsafe { self.arena.add_table::<'a, F>(self.offset + idx * 6) }
+    }
+    pub fn len(&self) -> usize {
+        self._len
+    }
+}
+impl<'a, F: TableFactory<'a>> ListOut for TableListOut<'a, F> {
+    fn offset(&self) -> usize {
+        self.offset
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct StructListOut<'a, F: StructFactory<'a>> {
+    arena: &'a Arena,
+    offset: usize,
+    _len: usize,
+    phantom: std::marker::PhantomData<F>,
+}
+impl<'a, F: StructFactory<'a>> StructListOut<'a, F> {
+    pub fn get(&mut self, idx: usize) -> F::Out {
+        assert!(idx < self._len);
+        unsafe { F::new_out(self.arena, self.offset + idx * F::size()) }
+    }
+    pub fn len(&self) -> usize {
+        self._len
+    }
+}
+impl<'a, F: StructFactory<'a>> ListOut for StructListOut<'a, F> {
+    fn offset(&self) -> usize {
+        self.offset
+    }
+}
+
 pub struct PodListAccess<'a, T: Copy + std::fmt::Debug> {
     p: std::marker::PhantomData<&'a T>,
 }
@@ -430,7 +603,7 @@ impl<'a, T: Copy + std::fmt::Debug> ListAccess<'a> for PodListAccess<'a, T> {
     fn bytes(size: usize) -> usize {
         size * std::mem::size_of::<T>()
     }
-    fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
+    unsafe fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
         reader
             .get_pod::<T>(idx * std::mem::size_of::<T>())
             .expect("Index error")
@@ -445,7 +618,7 @@ impl<'a, T: Enum + Copy + std::fmt::Debug> ListAccess<'a> for EnumListAccess<'a,
     fn bytes(size: usize) -> usize {
         size
     }
-    fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
+    unsafe fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
         reader.get_enum::<T>(idx, 255)
     }
 }
@@ -458,7 +631,7 @@ impl<'a, F: StructFactory<'a> + 'a> ListAccess<'a> for StructListAccess<'a, F> {
     fn bytes(size: usize) -> usize {
         size * F::size()
     }
-    fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
+    unsafe fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
         reader.get_struct::<F>(idx * F::size())
     }
 }
@@ -471,7 +644,7 @@ impl<'a> ListAccess<'a> for TextListAccess<'a> {
     fn bytes(size: usize) -> usize {
         size * 6
     }
-    fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
+    unsafe fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
         reader.get_text(idx * 6)
     }
 }
@@ -484,7 +657,7 @@ impl<'a> ListAccess<'a> for BytesListAccess<'a> {
     fn bytes(size: usize) -> usize {
         size * 6
     }
-    fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
+    unsafe fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
         reader.get_bytes(idx * 6)
     }
 }
@@ -497,7 +670,7 @@ impl<'a, F: TableFactory<'a> + 'a> ListAccess<'a> for TableListAccess<'a, F> {
     fn bytes(size: usize) -> usize {
         size * 6
     }
-    fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
+    unsafe fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
         reader.get_table::<F>(idx * 6)
     }
 }
@@ -510,7 +683,7 @@ impl<'a> ListAccess<'a> for BoolListAccess<'a> {
     fn bytes(size: usize) -> usize {
         (size + 7) >> 3
     }
-    fn get(reader: &Reader<'a>, idx: usize) -> bool {
+    unsafe fn get(reader: &Reader<'a>, idx: usize) -> bool {
         reader.get_bit(idx >> 3, idx & 7)
     }
 }
@@ -532,7 +705,7 @@ pub trait TableOut {
 
 pub trait TableFactory<'a> {
     type In: std::fmt::Debug;
-    type Out;
+    type Out: TableOut;
     fn magic() -> u32;
     fn size() -> usize;
     fn default() -> &'static [u8];
@@ -622,6 +795,14 @@ impl Arena {
         self.set_u48(offset, o as u64);
     }
 
+    pub unsafe fn set_list<T: ListOut>(&self, offset: usize, v: Option<T>) {
+        let o = match v {
+            Some(t) => t.offset(),
+            None => 0,
+        };
+        self.set_u48(offset, o as u64);
+    }
+
     pub unsafe fn add_table<'a, F: TableFactory<'a>>(&'a self, offset: usize) -> F::Out {
         let o = self.allocate_default(10, F::default());
         unsafe {
@@ -638,13 +819,12 @@ impl Arena {
             self.set_pod(o, &BYTESMAGIC);
             self.set_u48(o + 4, v.len() as u64);
             let data = &mut *self.data.get();
-            std::ptr::copy_nonoverlapping(
-                v.as_ptr(),
-                data.as_mut_ptr().add(o+10),
-                v.len(),
-            );
+            std::ptr::copy_nonoverlapping(v.as_ptr(), data.as_mut_ptr().add(o + 10), v.len());
         };
-        BytesOut{arena: self, offset: o}
+        BytesOut {
+            arena: self,
+            offset: o,
+        }
     }
 
     pub unsafe fn add_bytes<'a>(&'a self, offset: usize, v: &[u8]) -> BytesOut<'a> {
@@ -653,24 +833,22 @@ impl Arena {
         ans
     }
 
-    pub unsafe fn add_bytes_inplace<'a>(&'a self, offset: usize, v: &[u8])  {
+    pub unsafe fn add_bytes_inplace<'a>(&'a self, offset: usize, v: &[u8]) {
         let o = self.allocate(v.len());
         //TODO(jakobt) check that o is right after the table
         unsafe {
             self.set_u48(offset, v.len() as u64);
             let data = &mut *self.data.get();
-            std::ptr::copy_nonoverlapping(
-                v.as_ptr(),
-                data.as_mut_ptr().add(o),
-                v.len(),
-            );
+            std::ptr::copy_nonoverlapping(v.as_ptr(), data.as_mut_ptr().add(o), v.len());
         };
     }
 
-
     pub unsafe fn set_bytes<'a>(&'a self, offset: usize, v: Option<BytesOut<'a>>) {
         let o = match v {
-            Some(b) => {assert!(std::ptr::eq(self, b.arena)); b.offset},
+            Some(b) => {
+                assert!(std::ptr::eq(self, b.arena));
+                b.offset
+            }
             None => 0,
         };
         self.set_u48(offset, o as u64);
@@ -684,11 +862,14 @@ impl Arena {
             let data = &mut *self.data.get();
             std::ptr::copy_nonoverlapping(
                 v.as_bytes().as_ptr(),
-                data.as_mut_ptr().add(o+10),
+                data.as_mut_ptr().add(o + 10),
                 v.len(),
             );
         }
-        TextOut{arena: self, offset: o}
+        TextOut {
+            arena: self,
+            offset: o,
+        }
     }
 
     pub unsafe fn add_text<'a>(&'a self, offset: usize, v: &str) -> TextOut<'a> {
@@ -703,20 +884,106 @@ impl Arena {
         unsafe {
             self.set_u48(offset, v.len() as u64);
             let data = &mut *self.data.get();
-            std::ptr::copy_nonoverlapping(
-                v.as_bytes().as_ptr(),
-                data.as_mut_ptr().add(o),
-                v.len(),
-            );
+            std::ptr::copy_nonoverlapping(v.as_bytes().as_ptr(), data.as_mut_ptr().add(o), v.len());
         };
     }
 
     pub unsafe fn set_text<'a>(&'a self, offset: usize, v: Option<TextOut<'a>>) {
         let o = match v {
-            Some(b) => {assert!(std::ptr::eq(self, b.arena)); b.offset},
+            Some(b) => {
+                assert!(std::ptr::eq(self, b.arena));
+                b.offset
+            }
             None => 0,
         };
         self.set_u48(offset, o as u64);
+    }
+
+    pub fn create_list(&self, length: usize, bytes: usize, def: u8) -> usize {
+        unsafe {
+            let d = &mut *self.data.get();
+            let ans = d.len();
+            d.resize(ans + bytes + 10, def);
+            self.set_pod(ans, &LISTMAGIC);
+            self.set_u48(ans + 4, length as u64);
+            ans
+        }
+    }
+
+    pub fn create_pod_list<'a, T: Copy + std::fmt::Debug + 'a>(
+        &'a self,
+        size: usize,
+    ) -> PodListOut<'a, T> {
+        let o = self.create_list(size, size * std::mem::size_of::<T>(), 0);
+        PodListOut {
+            offset: o,
+            _len: size,
+            arena: self,
+            phantom: std::marker::PhantomData {},
+        }
+    }
+
+    pub fn create_enum_list<'a, T: Enum + Copy + 'a>(&'a self, size: usize) -> EnumListOut<'a, T> {
+        let o = self.create_list(size, size, 255);
+        EnumListOut {
+            offset: o,
+            _len: size,
+            arena: self,
+            phantom: std::marker::PhantomData {},
+        }
+    }
+
+    pub fn create_bool_list<'a>(&'a self, size: usize) -> BoolListOut<'a> {
+        let o = self.create_list(size, (size + 7) >> 3, 0);
+        BoolListOut {
+            offset: o,
+            _len: size,
+            arena: self,
+        }
+    }
+
+    pub fn create_text_list<'a>(&'a self, size: usize) -> TextListOut<'a> {
+        let o = self.create_list(size, size * 6, 0);
+        TextListOut {
+            offset: o,
+            _len: size,
+            arena: self,
+        }
+    }
+
+    pub fn create_bytes_list<'a>(&'a self, size: usize) -> BytesListOut<'a> {
+        let o = self.create_list(size, size * 6, 0);
+        BytesListOut {
+            offset: o,
+            _len: size,
+            arena: self,
+        }
+    }
+
+    pub fn create_struct_list<'a, F: StructFactory<'a> + 'a>(
+        &'a self,
+        size: usize,
+    ) -> StructListOut<'a, F> {
+        let o = self.create_list(size, size * F::size(), 0);
+        StructListOut {
+            offset: o,
+            _len: size,
+            arena: self,
+            phantom: std::marker::PhantomData {},
+        }
+    }
+
+    pub fn create_table_list<'a, F: TableFactory<'a> + 'a>(
+        &'a self,
+        size: usize,
+    ) -> TableListOut<'a, F> {
+        let o = self.create_list(size, size * 6, 0);
+        TableListOut {
+            offset: o,
+            _len: size,
+            arena: self,
+            phantom: std::marker::PhantomData {},
+        }
     }
 
     pub fn allocate(&self, size: usize) -> usize {
@@ -771,6 +1038,63 @@ impl Writer {
         self.arena.create_bytes(bytes)
     }
 
+    pub fn add_u8_list<'a>(&'a self, size: usize) -> PodListOut<'a, u8> {
+        self.arena.create_pod_list::<u8>(size)
+    }
+    pub fn add_u16_list<'a>(&'a self, size: usize) -> PodListOut<'a, u16> {
+        self.arena.create_pod_list::<u16>(size)
+    }
+    pub fn add_u32_list<'a>(&'a self, size: usize) -> PodListOut<'a, u32> {
+        self.arena.create_pod_list::<u32>(size)
+    }
+    pub fn add_u64_list<'a>(&'a self, size: usize) -> PodListOut<'a, u64> {
+        self.arena.create_pod_list::<u64>(size)
+    }
+    pub fn add_i8_list<'a>(&'a self, size: usize) -> PodListOut<'a, i8> {
+        self.arena.create_pod_list::<i8>(size)
+    }
+    pub fn add_i16_list<'a>(&'a self, size: usize) -> PodListOut<'a, i16> {
+        self.arena.create_pod_list::<i16>(size)
+    }
+    pub fn add_i32_list<'a>(&'a self, size: usize) -> PodListOut<'a, i32> {
+        self.arena.create_pod_list::<i32>(size)
+    }
+    pub fn add_i64_list<'a>(&'a self, size: usize) -> PodListOut<'a, i64> {
+        self.arena.create_pod_list::<i64>(size)
+    }
+    pub fn add_f32_list<'a>(&'a self, size: usize) -> PodListOut<'a, f32> {
+        self.arena.create_pod_list::<f32>(size)
+    }
+    pub fn add_f64_list<'a>(&'a self, size: usize) -> PodListOut<'a, f64> {
+        self.arena.create_pod_list::<f64>(size)
+    }
+    pub fn add_enum_list<'a, T: Enum + Copy + std::fmt::Debug + 'a>(
+        &'a self,
+        size: usize,
+    ) -> EnumListOut<'a, T> {
+        self.arena.create_enum_list::<T>(size)
+    }
+    pub fn add_table_list<'a, F: TableFactory<'a> + 'a>(
+        &'a self,
+        size: usize,
+    ) -> TableListOut<'a, F> {
+        self.arena.create_table_list::<F>(size)
+    }
+    pub fn add_struct_list<'a, F: StructFactory<'a> + 'a>(
+        &'a self,
+        size: usize,
+    ) -> StructListOut<'a, F> {
+        self.arena.create_struct_list::<F>(size)
+    }
+    pub fn add_text_list<'a>(&'a self, size: usize) -> TextListOut<'a> {
+        self.arena.create_text_list(size)
+    }
+    pub fn add_bytes_list<'a>(&'a self, size: usize) -> BytesListOut<'a> {
+        self.arena.create_bytes_list(size)
+    }
+    pub fn add_bool_list<'a>(&'a self, size: usize) -> BoolListOut<'a> {
+        self.arena.create_bool_list(size)
+    }
     pub fn finalize<T: TableOut>(&self, root: T) -> &[u8] {
         unsafe {
             self.arena.set_pod(0, &ROOTMAGIC);
@@ -784,11 +1108,13 @@ impl Writer {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct TextOut<'a> {
     arena: &'a Arena,
     offset: usize,
 }
 
+#[derive(Copy, Clone)]
 pub struct BytesOut<'a> {
     arena: &'a Arena,
     offset: usize,
