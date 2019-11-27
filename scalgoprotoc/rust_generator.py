@@ -455,8 +455,8 @@ class Generator:
             raise ICE()
         self.output_doc(node, "    ")
         self.o(
-            "    pub fn %s(&self) -> Option<%s> {self._reader.get_enum(%d)}"
-            % (lname, node.enum.name, node.offset)
+            "    pub fn %s(&self) -> Option<%s> {self._reader.get_enum(%d, %d)}"
+            % (lname, node.enum.name, node.offset, node.parsed_value)
         )
 
     def generate_enum_out(self, node: Value, lname: str) -> None:

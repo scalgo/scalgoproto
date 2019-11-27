@@ -143,10 +143,10 @@ impl<'a> Reader<'a> {
         unsafe { Some(to_pod(s)) }
     }
 
-    pub fn get_enum<T: Enum + Copy>(&self, offset: usize) -> Option<T> {
+    pub fn get_enum<T: Enum + Copy>(&self, offset: usize, default: u8) -> Option<T> {
         match self.get_u8(offset) {
             Some(v) => unsafe { to_enum(v) },
-            None => None,
+            None => unsafe { to_enum(default) },
         }
     }
 
@@ -446,7 +446,7 @@ impl<'a, T: Enum + Copy + std::fmt::Debug> ListAccess<'a> for EnumListAccess<'a,
         size
     }
     fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
-        reader.get_enum::<T>(idx)
+        reader.get_enum::<T>(idx, 255)
     }
 }
 
