@@ -632,6 +632,93 @@ impl Arena {
         F::new_out(&self, o + 10)
     }
 
+    pub fn create_bytes<'a>(&'a self, v: &[u8]) -> BytesOut<'a> {
+        let o = self.allocate(10 + v.len());
+        unsafe {
+            self.set_pod(o, &BYTESMAGIC);
+            self.set_u48(o + 4, v.len() as u64);
+            let data = &mut *self.data.get();
+            std::ptr::copy_nonoverlapping(
+                v.as_ptr(),
+                data.as_mut_ptr().add(o+10),
+                v.len(),
+            );
+        };
+        BytesOut{arena: self, offset: o}
+    }
+
+    pub unsafe fn add_bytes<'a>(&'a self, offset: usize, v: &[u8]) -> BytesOut<'a> {
+        let ans = self.create_bytes(v);
+        self.set_u48(offset, ans.offset as u64);
+        ans
+    }
+
+    pub unsafe fn add_bytes_inplace<'a>(&'a self, offset: usize, v: &[u8])  {
+        let o = self.allocate(v.len());
+        //TODO(jakobt) check that o is right after the table
+        unsafe {
+            self.set_u48(offset, v.len() as u64);
+            let data = &mut *self.data.get();
+            std::ptr::copy_nonoverlapping(
+                v.as_ptr(),
+                data.as_mut_ptr().add(o),
+                v.len(),
+            );
+        };
+    }
+
+
+    pub unsafe fn set_bytes<'a>(&'a self, offset: usize, v: Option<BytesOut<'a>>) {
+        let o = match v {
+            Some(b) => {assert!(std::ptr::eq(self, b.arena)); b.offset},
+            None => 0,
+        };
+        self.set_u48(offset, o as u64);
+    }
+
+    pub fn create_text<'a>(&'a self, v: &str) -> TextOut<'a> {
+        let o = self.allocate(11 + v.len());
+        unsafe {
+            self.set_pod(o, &TEXTMAGIC);
+            self.set_u48(o + 4, v.len() as u64);
+            let data = &mut *self.data.get();
+            std::ptr::copy_nonoverlapping(
+                v.as_bytes().as_ptr(),
+                data.as_mut_ptr().add(o+10),
+                v.len(),
+            );
+        }
+        TextOut{arena: self, offset: o}
+    }
+
+    pub unsafe fn add_text<'a>(&'a self, offset: usize, v: &str) -> TextOut<'a> {
+        let ans = self.create_text(v);
+        self.set_u48(offset, ans.offset as u64);
+        ans
+    }
+
+    pub unsafe fn add_text_inplace<'a>(&'a self, offset: usize, v: &str) {
+        let o = self.allocate(1 + v.len());
+        //TODO(jakobt) check that o is right after the table
+        unsafe {
+            self.set_u48(offset, v.len() as u64);
+            let data = &mut *self.data.get();
+            std::ptr::copy_nonoverlapping(
+                v.as_bytes().as_ptr(),
+                data.as_mut_ptr().add(o),
+                v.len(),
+            );
+        };
+    }
+
+    pub unsafe fn set_text<'a>(&'a self, offset: usize, v: Option<TextOut<'a>>) {
+        let o = match v {
+            Some(b) => {assert!(std::ptr::eq(self, b.arena)); b.offset},
+            None => 0,
+        };
+        self.set_u48(offset, o as u64);
+    }
+
     pub fn allocate(&self, size: usize) -> usize {
         unsafe {
             let d = &mut *self.data.get();
@@ -676,6 +763,14 @@ impl Writer {
         F::new_out(&self.arena, offset + 10)
     }
 
+    pub fn add_text<'a>(&'a self, text: &str) -> TextOut<'a> {
+        self.arena.create_text(text)
+    }
+
+    pub fn add_bytes<'a>(&'a self, bytes: &[u8]) -> BytesOut<'a> {
+        self.arena.create_bytes(bytes)
+    }
+
     pub fn finalize<T: TableOut>(&self, root: T) -> &[u8] {
         unsafe {
             self.arena.set_pod(0, &ROOTMAGIC);
@@ -687,4 +782,14 @@ impl Writer {
     pub fn clear(&mut self) {
         unsafe { (&mut *self.arena.data.get()).resize(10, 0) }
     }
+}
+
+pub struct TextOut<'a> {
+    arena: &'a Arena,
+    offset: usize,
+}
+
+pub struct BytesOut<'a> {
+    arena: &'a Arena,
+    offset: usize,
 }

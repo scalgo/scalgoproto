@@ -331,8 +331,8 @@ fn test_out_complex(path: &str) -> bool {
 
     // l3 = w.construct_struct_list(base.MyStruct, 1)
 
-    // b = w.construct_bytes(b"bytes")
-    // t = w.construct_text("text")
+    let b = writer.add_bytes(b"bytes");
+    let t = writer.add_text("text");
 
     // l4 = w.construct_text_list(200)
     // for i in range(1, len(l4), 2):
@@ -360,10 +360,9 @@ fn test_out_complex(path: &str) -> bool {
 
     let mut s = writer.add_table::<simple::Complex>();
     s.set_member(Some(m));
-    /*
-    s.text = t
-    s.my_bytes = b
-    s.int_list = l
+    s.set_text(Some(t));
+    s.set_my_bytes(Some(b));
+    /*s.int_list = l
     s.struct_list = l3
     s.enum_list = l2
     s.text_list = l4
@@ -440,15 +439,11 @@ fn test_in_complex(path: &str) -> scalgo_proto::Result<()> {
 
 fn test_out_complex2(path: &str) -> bool {
     let mut writer = scalgo_proto::Writer::new(1024);
-
-
     let mut m = writer.add_table::<simple::Member>();
     m.id(42);
-
-/*
-    b = w.construct_bytes(b"bytes")
-    t = w.construct_text("text")
-
+    let b = writer.add_bytes(b"bytes");
+    let t = writer.add_text("text");
+    /*
     l = w.construct_enum_list(base.NamedUnionEnumList, 2)
     l[0] = base.NamedUnionEnumList.x
     l[1] = base.NamedUnionEnumList.z
@@ -533,7 +528,7 @@ fn test_in_complex2(path: &str) -> scalgo_proto::Result<()> {
 fn test_out_inplace(path: &str) -> bool {
     let mut writer = scalgo_proto::Writer::new(1024);
 
-    //let name = writer.add_text("nilson");
+    let name = writer.add_text("nilson");
     let u = writer.add_table::<simple::InplaceUnion>();
 //     u.u.add_monkey().name = name
 
@@ -542,11 +537,11 @@ fn test_out_inplace(path: &str) -> bool {
 
     let t = writer.add_table::<simple::InplaceText>();
     t.id(45);
-    //t.add_t("cake");
+    t.add_t("cake");
 
     let b = writer.add_table::<simple::InplaceBytes>();
     b.id(46);
-    //b.add_b(b"hi");
+    b.add_b(b"hi");
 
     let l = writer.add_table::<simple::InplaceList>();
     l.id(47);
@@ -555,11 +550,11 @@ fn test_out_inplace(path: &str) -> bool {
     //ll[1] = 99
 
     let mut root = writer.add_table::<simple::InplaceRoot>();
-    //root.u(Some(u));
-    //root.u2(Some(u2));
-    //root.t(Some(t));
-    //root.b(Some(b));
-    //root.l(Some(l));
+    root.set_u(Some(u));
+    root.set_u2(Some(u2));
+    root.set_t(Some(t));
+    root.set_b(Some(b));
+    root.set_l(Some(l));
     let data = writer.finalize(root);
     return validate_out(data, path);
 }

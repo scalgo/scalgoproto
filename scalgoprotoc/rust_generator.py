@@ -521,7 +521,7 @@ class Generator:
                 % (lname, node.table.name, node.table.name, node.offset)
             )
 
-    def generate_table_out(self, node: Value, lname: str, size: int) -> None:
+    def generate_table_out(self, node: Value, lname: str) -> None:
         if not node.inplace:
             self.output_doc(node, "    ")
             self.o(
@@ -546,7 +546,7 @@ class Generator:
             self.o("    add%s() : %sOut {" % (ucamel(lname), node.table.name))
             self.o(
                 "        console.assert(this._writer._size == this._offset + %s);"
-                % size
+                % 4242
             )
             self.o(
                 "        this._setUint48(%d, %d);"
@@ -623,22 +623,25 @@ class Generator:
             % (lname, "_inplace" if node.inplace else "", node.offset)
         )
 
-    def generate_text_out(self, node: Value, lname: str, size: int) -> None:
+    def generate_text_out(self, node: Value, lname: str) -> None:
         self.output_doc(node, "    ")
-        if node.inplace:
-            self.o("    set %s(text: string) {" % (lname))
-        else:
-            self.o("    set %s(t: scalgoproto.TextOut | string) {" % (lname))
-        if node.inplace:
+        if not node.inplace:
+            self.output_doc(node, "    ")
             self.o(
-                "        console.assert(this._writer._size == this._offset + %s);"
-                % size
+                "    pub fn set_%s(&self, v: Option<scalgo_proto::TextOut<'a>>) {unsafe{self._arena.set_text(self._offset + %d, v)}}"
+                % (lname, node.offset)
             )
-            self.o("        this._addInplaceText(%d, text);" % (node.offset))
+            self.output_doc(node, "    ")
+            self.o(
+                "    pub fn add_%s(&self, v: & str) -> scalgo_proto::TextOut<'a> {unsafe{self._arena.add_text(self._offset + %d, v)}}"
+                % (lname, node.offset)
+            )
         else:
-            self.o("        this._setText(%d, t);" % (node.offset))
-        self.o("    }")
-        self.o()
+            self.output_doc(node, "    ")
+            self.o(
+                "    pub fn add_%s(&self, v: & str) {unsafe{self._arena.add_text_inplace(self._offset + %d, v)}}"
+                % (lname, node.offset)
+            )
 
     def generate_union_text_out(
         self, node: Value, lname: str, idx: int, inplace: bool
@@ -662,20 +665,20 @@ class Generator:
             % (lname, "_inplace" if node.inplace else "", node.offset)
         )
 
-    def generate_bytes_out(self, node: Value, lname: str, size: int) -> None:
+    def generate_bytes_out(self, node: Value, lname: str) -> None:
         self.output_doc(node, "    ")
         if not node.inplace:
             self.o(
-                "    pub fn create_%s(bytes: &[u8]) -> scalgoproto.BytesOut<'a> {self._area.create_bytes(self._offset + %d, bytes)}"
+                "    pub fn add_%s(&self, bytes: &[u8]) -> scalgo_proto::BytesOut<'a> {unsafe{self._arena.add_bytes(self._offset + %d, bytes)}}"
                 % (lname, node.offset)
             )
             self.o(
-                "    pub fn add_%s(bytes: &scalgoproto.BytesOut) {} {self._arena.set_bytes(self._offset + %d, bytes)}"
+                "    pub fn set_%s(&self, bytes: Option<scalgo_proto::BytesOut<'a>>) {unsafe{self._arena.set_bytes(self._offset + %d, bytes)}}"
                 % (lname, node.offset)
             )
         else:
             self.o(
-                "    pub fn create_%s(bytes: &[u8]) {self._area.create_bytes_inplace(self._offset + %d, bytes)}"
+                "    pub fn add_%s(&self, bytes: &[u8]) {unsafe{self._arena.add_bytes_inplace(self._offset + %d, bytes)}}"
                 % (lname, node.offset)
             )
 
@@ -748,7 +751,7 @@ class Generator:
             raise ICE()
 
     def generate_value_out(self, table: Table, node: Value) -> None:
-        lname = lcamel(self.value(node.identifier))
+        lname = snake(self.value(node.identifier))
         if node.list_:
             # self.generate_list_out(node, lname, len(table.default))
             pass
@@ -761,15 +764,15 @@ class Generator:
         elif node.struct:
             self.generate_struct_out(node, lname)
         elif node.table:
-            self.generate_table_out(node, lname, len(table.default))
+            self.generate_table_out(node, lname)
         elif node.union:
             # self.generate_union_out(node, lname, table)
             pass
         elif node.type_.type == TokenType.TEXT:
-            # self.generate_text_out(node, lname, len(table.default))
+            self.generate_text_out(node, lname)
             pass
         elif node.type_.type == TokenType.BYTES:
-            # self.generate_bytes_out(node, lname, len(table.default))
+            self.generate_bytes_out(node, lname)
             pass
         else:
             raise ICE()
