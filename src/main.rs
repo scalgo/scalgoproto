@@ -1,6 +1,69 @@
 mod scalgo_proto;
 mod simple;
 
+macro_rules! require {
+    ( $x:expr, $y:expr ) => {{
+        let got = $x;
+        let expected = $y;
+        if got != expected {
+            println!(
+                "Error {} gave {:?} expected {:?} ({})",
+                stringify!($x),
+                got,
+                expected,
+                stringify!($y)
+            );
+            return Err(scalgo_proto::Error::InvalidPointer());
+        }
+    }};
+}
+
+macro_rules! require_none {
+    ( $x:expr ) => {{
+        if let Some(_) = $x {
+            println!("Error {} should yield None", stringify!($x),);
+            return Err(scalgo_proto::Error::InvalidPointer());
+        }
+    }};
+}
+
+macro_rules! require_some {
+    ( $x:expr) => {{
+        match $x {
+            None => {
+                println!("Error {} should yield Some", stringify!($x),);
+                return Err(scalgo_proto::Error::InvalidPointer());
+            }
+            Some(v) => v,
+        }
+    }};
+}
+
+macro_rules! require_enum {
+    ( $x:expr, $y:pat, $z:expr) => {{
+        let x = $x;
+        match x {
+            $y => $z,
+            _ =>  {
+                println!("Error {} should yield {}", stringify!($x), stringify!($y));
+                return Err(scalgo_proto::Error::InvalidPointer());
+            }
+        }
+    }}
+}
+
+macro_rules! ce {
+    ( $x: expr ) => {{
+        match $x {
+            Ok(v) => v,
+            Err(e) => {
+                println!("Error {} failed {:?}", stringify!($x), e);
+                return Err(e);
+            }
+        }
+    }};
+}
+
 fn validate_out(data: &[u8], path: &str) -> bool {
     let exp = std::fs::read(path).expect("Unable to read file");
     if exp == data {
@@ -80,56 +143,6 @@ fn test_out_default(path: &str) -> bool {
     let mut o = writer.add_table::<simple::Simple>();
     let data = writer.finalize(o);
     return validate_out(data, path);
-}
-
-macro_rules! require {
-    ( $x:expr, $y:expr ) => {{
-        let got = $x;
-        let expected = $y;
-        if got != expected {
-            println!(
-                "Error {} gave {:?} expected {:?} ({})",
-                stringify!($x),
-                got,
-                expected,
-                stringify!($y)
-            );
-            return Err(scalgo_proto::Error::InvalidPointer());
-        }
-    }};
-}
-
-macro_rules! require_none {
-    ( $x:expr ) => {{
-        if let Some(_) = $x {
-            println!("Error {} should yield None", stringify!($x),);
-            return Err(scalgo_proto::Error::InvalidPointer());
-        }
-    }};
-}
-
-macro_rules! require_some {
-    ( $x:expr) => {{
-        match $x {
-            None => {
-                println!("Error {} should yield Some", stringify!($x),);
-                return Err(scalgo_proto::Error::InvalidPointer());
-            }
-            Some(v) => v,
-        }
-    }};
-}
-
-macro_rules! ce {
-    ( $x: expr ) => {{
-        match $x {
-            Ok(v) => v,
-            Err(e) => {
-                println!("Error {} failed {:?}", stringify!($x), e);
-                return Err(e);
-            }
-        }
-    }};
 }
 
 fn test_in_default(path: &str) -> scalgo_proto::Result<()> {
@@ -304,10 +317,67 @@ fn test_in(path: &str) -> scalgo_proto::Result<()> {
 }
 
 fn test_out_complex(path: &str) -> bool {
-    false
+    let mut writer = scalgo_proto::Writer::new(1024);
+
+    let mut m = writer.add_table::<simple::Member>();
+    m.id(42);
+
+    // l = w.construct_int32_list(31)
+    // for i in range(31):
+    //     l[i] = 100 - 2 * i
+
+    // l2 = w.construct_enum_list(base.MyEnum, 2)
+    // l2[0] = base.MyEnum.a
+
+    // l3 = w.construct_struct_list(base.MyStruct, 1)
+
+    // b = w.construct_bytes(b"bytes")
+    // t = w.construct_text("text")
+
+    // l4 = w.construct_text_list(200)
+    // for i in range(1, len(l4), 2):
+    //     l4[i] = "HI THERE"
+    // l5 = w.construct_bytes_list(1)
+    // l5[0] = b
+
+    // l6 = w.construct_table_list(base.MemberOut, 3)
+    // l6[0] = m
+    // l6[2] = m
+
+    // l7 = w.construct_float32_list(2)
+    // l7[1] = 98.0
+
+    // l8 = w.construct_float64_list(3)
+    // l8[2] = 78.0
+
+    // l9 = w.construct_uint8_list(2)
+    // l9[0] = 4
+
+    // l10 = w.construct_bool_list(10)
+    // l10[0] = True
+    // l10[2] = True
+    // l10[8] = True
+
+    let mut s = writer.add_table::<simple::Complex>();
+    s.set_member(Some(m));
+    /*
+    s.text = t
+    s.my_bytes = b
+    s.int_list = l
+    s.struct_list = l3
+    s.enum_list = l2
+    s.text_list = l4
+    s.bytes_list = l5
+    s.member_list = l6
+    s.f32list = l7
+    s.f64list = l8
+    s.u8list = l9
+    s.blist = l10*/
+    let data = writer.finalize(s);
+    return validate_out(data, path);
 }
 
-fn test_complex_in(path: &str) -> scalgo_proto::Result<()> {
+fn test_in_complex(path: &str) -> scalgo_proto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
     let s = scalgo_proto::read_message::<simple::Complex>(&data)?;
     require_none!(ce!(s.nmember()));
@@ -368,23 +438,279 @@ fn test_complex_in(path: &str) -> scalgo_proto::Result<()> {
     Ok(())
 }
 
+fn test_out_complex2(path: &str) -> bool {
+    let mut writer = scalgo_proto::Writer::new(1024);
+
+
+    let mut m = writer.add_table::<simple::Member>();
+    m.id(42);
+
+/*
+    b = w.construct_bytes(b"bytes")
+    t = w.construct_text("text")
+
+    l = w.construct_enum_list(base.NamedUnionEnumList, 2)
+    l[0] = base.NamedUnionEnumList.x
+    l[1] = base.NamedUnionEnumList.z
+
+    l2 = w.construct_struct_list(complex2.Complex2L, 1)
+    l2[0] = complex2.Complex2L(2, True)
+
+    l3 = w.construct_union_list(base.NamedUnionOut, 2)
+    l3[0].text = t
+    l3[1].my_bytes = b
+
+    r = w.construct_table(complex2.Complex2Out)
+    r.u1.member = m
+    r.u2.text = t
+    r.u3.my_bytes = b
+    r.u4.enum_list = l
+    r.u5.add_a()
+
+    m2 = r.add_hat()
+    m2.id = 43
+
+    r.l = l2
+    r.s = complex2.Complex2S(complex2.Complex2SX.p, complex2.Complex2SY(8))
+    r.l2 = l3
+    data = w.finalize(r)*/
+
+    false
+}
+
+fn test_in_complex2(path: &str) -> scalgo_proto::Result<()> {
+    let data = std::fs::read(path).expect("Unable to read file");
+    /*let s = scalgo_proto::read_message::<simple::Complex2>(&data)?;
+    let m = match s.u1() {
+    
+    };
+
+    s = r.root(complex2.Complex2In)
+    if require(s.u1.is_member, True):
+        return False
+    if require(s.u1.member.id, 42):
+        return False
+    if require(s.u2.is_text, True):
+        return False
+    if require(s.u2.text, "text"):
+        return False
+    if require(s.u3.is_my_bytes, True):
+        return False
+    if require(s.u3.my_bytes, b"bytes"):
+        return False
+    if require(s.u4.is_enum_list, True):
+        return False
+    l = s.u4.enum_list
+    if require(len(l), 2):
+        return False
+    if require(l[0], base.NamedUnionEnumList.x):
+        return False
+    if require(l[1], base.NamedUnionEnumList.z):
+        return False
+    if require(s.u5.is_a, True):
+        return False
+    if require(s.has_hat, True):
+        return False
+    if require(s.hat.id, 43):
+        return False
+    if require(s.has_l, True):
+        return False
+    l2 = s.l
+    if require(len(l2), 1):
+        return False
+    if require(l2[0].a, 2):
+        return False
+    if require(l2[0].b, True):
+        return False
+    if require(s.s.x, complex2.Complex2SX.p):
+        return False
+    if require(s.s.y.z, 8):
+        return False
+*/
+    Ok(())
+}
+
+fn test_out_inplace(path: &str) -> bool {
+    let mut writer = scalgo_proto::Writer::new(1024);
+
+    //let name = writer.add_text("nilson");
+    let u = writer.add_table::<simple::InplaceUnion>();
+//     u.u.add_monkey().name = name
+
+    let u2 = writer.add_table::<simple::InplaceUnion>();
+//     u2.u.add_text().t = "foobar"
+
+    let t = writer.add_table::<simple::InplaceText>();
+    t.id(45);
+    //t.add_t("cake");
+
+    let b = writer.add_table::<simple::InplaceBytes>();
+    b.id(46);
+    //b.add_b(b"hi");
+
+    let l = writer.add_table::<simple::InplaceList>();
+    l.id(47);
+    //let ll = l.add_l(2);
+    //ll[0] = 24
+    //ll[1] = 99
+
+    let mut root = writer.add_table::<simple::InplaceRoot>();
+    //root.u(Some(u));
+    //root.u2(Some(u2));
+    //root.t(Some(t));
+    //root.b(Some(b));
+    //root.l(Some(l));
+    let data = writer.finalize(root);
+    return validate_out(data, path);
+}
+
+
+fn test_in_inplace(path: &str) -> scalgo_proto::Result<()> {
+    let data = std::fs::read(path).expect("Unable to read file");
+    let s = scalgo_proto::read_message::<simple::InplaceRoot>(&data)?;
+
+    let u = require_some!(ce!(s.u()));
+    let v = require_enum!(ce!(u.u()), simple::InplaceUnionUIn::MONKEY(v), v);
+    require!(ce!(v.name()), Some("nilson"));
+    let u = require_some!(ce!(s.u2()));
+    let v = require_enum!(ce!(u.u()), simple::InplaceUnionUIn::TEXT(v), v);
+    require!(ce!(v.t()), Some("foobar"));
+    let u = require_some!(ce!(s.t()));
+    require!(ce!(u.t()), Some("cake"));
+    let b = require_some!(ce!(s.b()));
+    require!(b.id(), 46);
+    require!(ce!(b.b()), Some(b"hi".as_ref()));
+    let l = require_some!(ce!(s.l()));
+    require!(l.id(), 47);
+    let ll = require_some!(ce!(l.l()));
+    require!(ll.len(), 2);
+    require!(ll.get(0), 24);
+    require!(ll.get(1), 99);
+    Ok(())
+}
+
+fn test_out_extend1(path: &str) -> bool {
+    let mut writer = scalgo_proto::Writer::new(1024);
+    let mut o = writer.add_table::<simple::Gen1>();
+    o.aa(77);
+    let data = writer.finalize(o);
+    return validate_out(data, path);
+}
+
+fn test_in_extend1(path: &str) -> scalgo_proto::Result<()> {
+    let data = std::fs::read(path).expect("Unable to read file");
+    let s = scalgo_proto::read_message::<simple::Gen2>(&data)?;
+    require!(s.aa(), 77);
+    require!(s.bb(), 42);
+    require_enum!(ce!(s.u()), simple::Gen2UIn::NONE, ());
+    Ok(())
+}
+
+fn test_out_extend2(path: &str) -> bool {
+    let mut writer = scalgo_proto::Writer::new(1024);
+    let mut o = writer.add_table::<simple::Gen2>();
+    o.aa(80);
+    o.bb(81);
+    //     cake = root.u.add_cake()
+    //     cake.v = 45
+    let data = writer.finalize(o);
+    return validate_out(data, path);
+}
+
+fn test_in_extend2(path: &str) -> scalgo_proto::Result<()> {
+    let data = std::fs::read(path).expect("Unable to read file");
+    let s = scalgo_proto::read_message::<simple::Gen3>(&data)?;
+    require!(s.aa(), 80);
+    require!(s.bb(), 81);
+    require!(require_enum!(ce!(s.u()), simple::Gen3UIn::CAKE(cake), cake).v(), 45);
+    require!(s.e(), Some(simple::MyEnum::C));
+    require!(s.s().x(), 0);
+    require!(s.s().y(), 0.0);
+    require!(s.s().z(), false);
+    require!(s.b(), false);
+    require!(s.u8(), 2);
+    require!(s.u16(), 3);
+    require!(s.u32(), 4);
+    require!(s.u64(), 5);
+    require!(s.i8(), 6);
+    require!(s.i16(), 7);
+    require!(s.i32(), 8);
+    require!(s.i64(), 9);
+    require!(s.f(), 10.0);
+    require!(s.d(), 11.0);
+    require_none!(s.os());
+    require_none!(s.ob());
+    require_none!(s.ou8());
+    require_none!(s.ou16());
+    require_none!(s.ou32());
+    require_none!(s.ou64());
+    require_none!(s.oi8());
+    require_none!(s.oi16());
+    require_none!(s.oi32());
+    require_none!(s.oi64());
+    require_none!(s.of());
+    require_none!(s.od());
+    require_none!(ce!(s.member()));
+    require_none!(ce!(s.text()));
+    require_none!(ce!(s.mbytes()));
+    require_none!(ce!(s.int_list()));
+    require_none!(ce!(s.enum_list()));
+    require_none!(ce!(s.struct_list()));
+    require_none!(ce!(s.text_list()));
+    require_none!(ce!(s.bytes_list()));
+    require_none!(ce!(s.member_list()));
+    Ok(())
+}
+
+
 fn main() {
     if !test_out_default("test/simple_default.bin") {
         println!("test_out_default failed");
-    };
+    }
     if let Err(_) = test_in_default("test/simple_default.bin") {
         println!("test_in_default failed");
-    };
+    }
 
     if !test_out("test/simple.bin") {
         println!("test_out failed");
-    };
+    }
     if let Err(_) = test_in("test/simple.bin") {
         println!("test_in_failed");
-    };
+    }
 
-    if let Err(_) = test_complex_in("test/complex.bin") {
-        println!("test_complex_in_failed");
-    };
+    if !test_out_complex("test/complex.bin") {
+        println!("test_out_complex failed");
+    }
+    if let Err(_) = test_in_complex("test/complex.bin") {
+        println!("test_in_complex failed");
+    }
+
+    if !test_out_complex2("test/complex2.bin") {
+        println!("test_out_complex2 failed");
+    }
+    if let Err(_) = test_in_complex2("test/complex2.bin") {
+        println!("test_in_complex2 failed");
+    }
+
+    if !test_out_inplace("test/inplace.bin") {
+        println!("test_out_inplace failed");
+    }
+    if let Err(_) = test_in_inplace("test/inplace.bin") {
+        println!("test_in_inplace failed");
+    }
+
+    if !test_out_extend1("test/extend1.bin") {
+        println!("test_out_extend1 failed");
+    }
+    if let Err(_) = test_in_extend1("test/extend1.bin") {
+        println!("test_in_extend1 failed");
+    }
+
+    if !test_out_extend2("test/extend2.bin") {
+        println!("test_out_extend2 failed");
+    }
+    if let Err(_) = test_in_extend2("test/extend2.bin") {
+        println!("test_in_extend2 failed");
+    }
     println!("Tests done")
 }
