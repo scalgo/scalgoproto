@@ -125,7 +125,7 @@ macro_rules! ce {
         match $x {
             Ok(v) => v,
             Err(e) => {
-                println!("Error {} failed", stringify!($x),);
+                println!("Error {} failed {:?}", stringify!($x), e);
                 return Err(e);
             }
         }
@@ -320,121 +320,51 @@ fn test_complex_in(path: &str) -> scalgo_proto::Result<()> {
     require_none!(ce!(s.nint_list()));
     let l = require_some!(ce!(s.int_list()));
     require!(l.len(), 31);
-    // for (i, v) in l.iter().enumerate() {
-    //     require!(v, 100 - 2 * i);
-    // }
+    for (i, v) in l.iter().enumerate() {
+        require!(v, (100 - 2 * i) as i32);
+    }
     let l = require_some!(ce!(s.enum_list()));
     require!(l.len(), 2);
     require!(l.get(0), Some(simple::MyEnum::A));
     require!(l.get(1), None);
-
-    /*
-    if require(s.has_struct_list, True):
-        return False
-    l3 = s.struct_list
-    if require(len(l3), 1):
-        return False
-
-    if require(s.has_text_list, True):
-        return False
-    l4 = s.text_list
-    if require(len(l4), 200):
-        return False
-    for i in range(len(l4)):
-        if i % 2 == 0:
-            if require(l4.has(i), False):
-                return False
-        else:
-            if require(l4.has(i), True):
-                return False
-            if require(l4[i], "HI THERE"):
-                return False
-
-    if require(s.has_bytes_list, True):
-        return False
-    l5 = s.bytes_list
-    if require(len(l5), 1):
-        return False
-    if require(l5.has(0), True):
-        return False
-    if require(l5[0], b"bytes"):
-        return False
-
-    if require(s.has_member_list, True):
-        return False
-    l6 = s.member_list
-    if require(len(l6), 3):
-        return False
-    if require(l6.has(0), True):
-        return False
-    if require(l6.has(1), False):
-        return False
-    if require(l6.has(2), True):
-        return False
-    if require(l6[0].id, 42):
-        return False
-    if require(l6[2].id, 42):
-        return False
-
-    if require(s.has_f32list, True):
-        return False
-    l7 = s.f32list
-    if require(len(l7), 2):
-        return False
-    if require(l7[0], 0.0):
-        return False
-    if require(l7[1], 98.0):
-        return False
-
-    if require(s.has_f64list, True):
-        return False
-    l8 = s.f64list
-    if require(len(l8), 3):
-        return False
-    if require(l8[0], 0.0):
-        return False
-    if require(l8[1], 0.0):
-        return False
-    if require(l8[2], 78.0):
-        return False
-
-    if require(s.has_u8list, True):
-        return False
-    l9 = s.u8list
-    if require(len(l9), 2):
-        return False
-    if require(l9[0], 4):
-        return False
-    if require(l9[1], 0):
-        return False
-
-    if require(s.has_blist, True):
-        return False
-    l10 = s.blist
-    if require(len(l10), 10):
-        return False
-    if require(l10[0], True):
-        return False
-    if require(l10[1], False):
-        return False
-    if require(l10[2], True):
-        return False
-    if require(l10[3], False):
-        return False
-    if require(l10[4], False):
-        return False
-    if require(l10[5], False):
-        return False
-    if require(l10[6], False):
-        return False
-    if require(l10[7], False):
-        return False
-    if require(l10[8], True):
-        return False
-    if require(l10[9], False):
-        return False
-
-    return True*/
+    let l = require_some!(ce!(s.struct_list()));
+    require!(l.len(), 1);
+    let l = require_some!(ce!(s.text_list()));
+    require!(l.len(), 200);
+    for (i, v) in l.iter().enumerate() {
+        require!(ce!(v), if i % 2 == 0 { None } else { Some("HI THERE") });
+    }
+    let l = require_some!(ce!(s.bytes_list()));
+    require!(l.len(), 1);
+    require!(ce!(l.get(0)), Some((b"bytes").as_ref()));
+    let l = require_some!(ce!(s.member_list()));
+    require!(l.len(), 3);
+    require!(require_some!(ce!(l.get(0))).id(), 42);
+    require_none!(ce!(l.get(1)));
+    require!(require_some!(ce!(l.get(2))).id(), 42);
+    let l = require_some!(ce!(s.f32list()));
+    require!(l.len(), 2);
+    require!(l.get(0), 0.0);
+    require!(l.get(1), 98.0);
+    let l = require_some!(ce!(s.f64list()));
+    require!(l.len(), 3);
+    require!(l.get(0), 0.0);
+    require!(l.get(1), 0.0);
+    require!(l.get(2), 78.0);
+    let l = require_some!(ce!(s.u8list()));
+    require!(l.len(), 2);
+    require!(l.get(0), 4);
+    require!(l.get(1), 0);
+    let l = require_some!(ce!(s.blist()));
+    require!(l.len(), 10);
+    for (v, e) in l.iter().zip(
+        [
+            true, false, true, false, false, false, false, false, true, false,
+        ]
+        .into_iter(),
+    ) {
+        require!(v, *e);
+    }
     Ok(())
 }
 

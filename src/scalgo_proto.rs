@@ -3,7 +3,7 @@ pub enum Error {
     Utf8(std::str::Utf8Error),
     InvalidPointer(),
     Overflow(),
-    BadMagic(),
+    BadMagic(u32, u32),
 }
 
 impl From<std::str::Utf8Error> for Error {
@@ -83,6 +83,7 @@ pub unsafe fn to_u48_usize(v: &[u8]) -> Result<usize> {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct Reader<'a> {
     full: &'a [u8],
     part: &'a [u8],
@@ -151,6 +152,7 @@ impl<'a> Reader<'a> {
 
     pub fn get_ptr(&self, offset: usize) -> Result<Option<(usize, u32, usize)>> {
         let o = match self.get_48_usize(offset)? {
+            Some(v) if v == 0 => return Ok(None),
             Some(v) => v,
             None => return Ok(None),
         };
@@ -179,7 +181,7 @@ impl<'a> Reader<'a> {
     ) -> Result<F::In> {
         if let Some(m) = magic {
             if m != F::magic() {
-                return Err(Error::BadMagic());
+                return Err(Error::BadMagic(m, F::magic()));
             }
         }
         if offset + size > self.full.len() {
@@ -217,7 +219,7 @@ impl<'a> Reader<'a> {
     ) -> Result<&'a str> {
         if let Some(m) = magic {
             if m != TEXTMAGIC {
-                return Err(Error::BadMagic());
+                return Err(Error::BadMagic(m, TEXTMAGIC));
             }
         }
         if offset + size > self.full.len() {
@@ -250,7 +252,7 @@ impl<'a> Reader<'a> {
     ) -> Result<&'a [u8]> {
         if let Some(m) = magic {
             if m != BYTESMAGIC {
-                return Err(Error::BadMagic());
+                return Err(Error::BadMagic(m, BYTESMAGIC));
             }
         }
         if offset + size > self.full.len() {
@@ -283,11 +285,10 @@ impl<'a> Reader<'a> {
     ) -> Result<ListIn<'a, A>> {
         if let Some(m) = magic {
             if m != LISTMAGIC {
-                return Err(Error::BadMagic());
+                return Err(Error::BadMagic(m, LISTMAGIC));
             }
         }
-        //TODO(jakobt) HOW TO VALIDATE LIST LENGTHS
-        let size_bytes = size;
+        let size_bytes = A::bytes(size);
         if offset + size_bytes > self.full.len() {
             return Err(Error::InvalidPointer());
         }
@@ -296,6 +297,7 @@ impl<'a> Reader<'a> {
                 full: self.full,
                 part: &self.full[offset..offset + size_bytes],
             },
+            _len: size,
             phantom: std::marker::PhantomData {},
         })
     }
@@ -338,27 +340,37 @@ impl<'a> Reader<'a> {
 
 pub trait ListAccess<'a> {
     type Output: std::fmt::Debug;
-    fn item_size() -> usize;
+    fn bytes(size: usize) -> usize;
     fn get(reader: &Reader<'a>, idx: usize) -> Self::Output;
 }
 
 pub struct ListIn<'a, A: ListAccess<'a>> {
     reader: Reader<'a>,
+    _len: usize,
     phantom: std::marker::PhantomData<A>,
 }
 
 impl<'a, A: ListAccess<'a>> ListIn<'a, A> {
     pub fn len(&self) -> usize {
-        self.reader.part.len() / A::item_size()
+        self._len
     }
     pub fn get(&self, idx: usize) -> A::Output {
-        // TODO(jakob) check range
+        assert!(idx < self._len);
         A::get(&self.reader, idx)
+    }
+    pub fn iter(&self) -> ListIter<'a, A> {
+        ListIter {
+            reader: self.reader,
+            _len: self._len,
+            idx: 0,
+            phantom: std::marker::PhantomData {},
+        }
     }
 }
 
 pub struct ListIter<'a, A: ListAccess<'a>> {
     reader: Reader<'a>,
+    _len: usize,
     idx: usize,
     phantom: std::marker::PhantomData<A>,
 }
@@ -366,7 +378,7 @@ pub struct ListIter<'a, A: ListAccess<'a>> {
 impl<'a, A: ListAccess<'a> + 'a> std::iter::Iterator for ListIter<'a, A> {
     type Item = A::Output;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.idx * A::item_size() >= self.reader.part.len() {
+        if self.idx >= self._len {
             return None;
         }
         let ans = A::get(&self.reader, self.idx);
@@ -374,7 +386,7 @@ impl<'a, A: ListAccess<'a> + 'a> std::iter::Iterator for ListIter<'a, A> {
         Some(ans)
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let s = self.reader.part.len() / A::item_size() - self.idx;
+        let s = self._len - self.idx;
         (s, Some(s))
     }
 }
@@ -385,6 +397,7 @@ impl<'a, A: ListAccess<'a> + 'a> std::iter::IntoIterator for ListIn<'a, A> {
     fn into_iter(self) -> Self::IntoIter {
         Self::IntoIter {
             reader: self.reader,
+            _len: self._len,
             idx: 0,
             phantom: std::marker::PhantomData {},
         }
@@ -414,8 +427,8 @@ pub struct PodListAccess<'a, T: Copy + std::fmt::Debug> {
 }
 impl<'a, T: Copy + std::fmt::Debug> ListAccess<'a> for PodListAccess<'a, T> {
     type Output = T;
-    fn item_size() -> usize {
-        std::mem::size_of::<T>()
+    fn bytes(size: usize) -> usize {
+        size * std::mem::size_of::<T>()
     }
     fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
         reader
@@ -429,8 +442,8 @@ pub struct EnumListAccess<'a, T: Enum + Copy + std::fmt::Debug> {
 }
 impl<'a, T: Enum + Copy + std::fmt::Debug> ListAccess<'a> for EnumListAccess<'a, T> {
     type Output = Option<T>;
-    fn item_size() -> usize {
-        1
+    fn bytes(size: usize) -> usize {
+        size
     }
     fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
         reader.get_enum::<T>(idx)
@@ -442,8 +455,8 @@ pub struct StructListAccess<'a, F: StructFactory<'a> + 'a> {
 }
 impl<'a, F: StructFactory<'a> + 'a> ListAccess<'a> for StructListAccess<'a, F> {
     type Output = F::In;
-    fn item_size() -> usize {
-        F::size()
+    fn bytes(size: usize) -> usize {
+        size * F::size()
     }
     fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
         reader.get_struct::<F>(idx * F::size())
@@ -455,8 +468,8 @@ pub struct TextListAccess<'a> {
 }
 impl<'a> ListAccess<'a> for TextListAccess<'a> {
     type Output = Result<Option<&'a str>>;
-    fn item_size() -> usize {
-        6
+    fn bytes(size: usize) -> usize {
+        size * 6
     }
     fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
         reader.get_text(idx * 6)
@@ -468,8 +481,8 @@ pub struct BytesListAccess<'a> {
 }
 impl<'a> ListAccess<'a> for BytesListAccess<'a> {
     type Output = Result<Option<&'a [u8]>>;
-    fn item_size() -> usize {
-        6
+    fn bytes(size: usize) -> usize {
+        size * 6
     }
     fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
         reader.get_bytes(idx * 6)
@@ -481,8 +494,8 @@ pub struct TableListAccess<'a, F: TableFactory<'a> + 'a> {
 }
 impl<'a, F: TableFactory<'a> + 'a> ListAccess<'a> for TableListAccess<'a, F> {
     type Output = Result<Option<F::In>>;
-    fn item_size() -> usize {
-        6
+    fn bytes(size: usize) -> usize {
+        size * 6
     }
     fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
         reader.get_table::<F>(idx * 6)
@@ -494,11 +507,11 @@ pub struct BoolListAccess<'a> {
 }
 impl<'a> ListAccess<'a> for BoolListAccess<'a> {
     type Output = bool;
-    fn item_size() -> usize {
-        1
-    } //TODO(jakob) THIS IS WRONG
+    fn bytes(size: usize) -> usize {
+        (size + 7) >> 3
+    }
     fn get(reader: &Reader<'a>, idx: usize) -> bool {
-        true
+        reader.get_bit(idx >> 3, idx & 7)
     }
 }
 
