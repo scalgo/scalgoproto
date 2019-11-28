@@ -286,53 +286,36 @@ class Generator:
     def generate_union_list_out(
         self, node: Value, lname: str, idx: int, inplace: bool
     ) -> None:
-        it = "scalgoproto.ListIn<%s>" % self.in_list_help(node, "")[0]
         ot = self.out_list_type(node)
         if not inplace:
             self.output_doc(node, "    ")
-            self.o("    set %s(value: %s |%s ) {" % (lname, ot, it))
-            self.o("        if (value instanceof scalgoproto.ListIn) {")
             self.o(
-                "            this.add%s(value.length)._copy(value)" % (ucamel(lname))
+                "    pub fn set_%s(&mut self, v: %s) { unsafe{self._arena.set_pod::<u16>(self._offset, &%d); self._arena.set_list(self._offset + 2, Some(v))} }"
+                % (lname, ot, idx)
             )
-            self.o("            return;")
-            self.o("        }")
-            self.o("        console.assert(value instanceof scalgoproto.ListOut);")
-            self.o("        this._set(%d, value._offset - 10);" % (idx,))
-            self.o("    }")
-            self.o()
 
-            self.output_doc(node, "    ")
-            self.o(
-                "    add%s(size:number) : %s {"
-                % (ucamel(lname), self.out_list_type(node))
-            )
-            self.o(
-                "        const res = this._writer.%s;" % self.out_list_constructor(node)
-            )
-            self.o("        this._set(%d, res._offset - 10);" % (idx,))
-            self.o("        return res;")
-            self.o("    }")
-            self.o()
+            # self.o("    pub fn add_%s(&self, v: &str) -> scalgo_proto::TextOut {let a = self._arena.create_text(v); self.set_%s(a); a}"%(lname, lname))
+
         else:
-            self.output_doc(node, "    ")
-            self.o("    set %s(value: %s) {" % (lname, it))
-            self.o("        console.assert(value instanceof scalgoproto.ListIn);")
-            self.o("        this.add%s(value.length)._copy(value);" % (ucamel(lname)))
-            self.o("    }")
-            self.o()
-            self.output_doc(node, "    ")
-            self.o(
-                "    add%s(size: number) : %s {"
-                % (ucamel(lname), self.out_list_type(node))
-            )
-            self.o("        this._set(%d, size);" % (idx,))
-            self.o(
-                "        return this._writer.%s;"
-                % self.out_list_constructor(node, True)
-            )
-            self.o("    }")
-            self.o()
+            # self.output_doc(node, "    ")
+            # self.o("    set %s(value: %s) {" % (lname, it))
+            # self.o("        console.assert(value instanceof scalgoproto.ListIn);")
+            # self.o("        this.add%s(value.length)._copy(value);" % (ucamel(lname)))
+            # self.o("    }")
+            # self.o()
+            # self.output_doc(node, "    ")
+            # self.o(
+            #     "    add%s(size: number) : %s {"
+            #     % (ucamel(lname), self.out_list_type(node))
+            # )
+            # self.o("        this._set(%d, size);" % (idx,))
+            # self.o(
+            #     "        return this._writer.%s;"
+            #     % self.out_list_constructor(node, True)
+            # )
+            # self.o("    }")
+            # self.o()
+            pass
 
     def generate_bool_in(self, node: Value, lname: str) -> None:
         if node.inplace:
@@ -546,53 +529,36 @@ class Generator:
         table = node.table
         if table.empty:
             self.output_doc(node, "    ")
-            self.o("    add%s() {" % (ucamel(lname)))
-            self.o("        this._set(%d, 0);" % (idx))
-            self.o("    }")
-            self.o()
+            self.o(
+                "    pub fn add_%s(&self) {unsafe{self._arena.set_pod::<u16>(self._offset, &%d); self._arena.set_u48(self._offset+2, 0);}}"
+                % (lname, idx)
+            )
         elif not inplace:
             self.output_doc(node, "    ")
             self.o(
-                "    set %s(value: %sOut | %sIn) {" % (lname, table.name, table.name)
+                "    pub fn set_%s(&self, v: %sOut<'a>) {unsafe{self._arena.set_pod::<u16>(self._offset, &%d); self._arena.set_table(self._offset+2, Some(v));}}"
+                % (lname, table.name, idx)
             )
-            self.o("        if (value instanceof %sIn) {" % (node.table.name))
-            self.o("            const v = value;")
-            self.o(
-                "            value = this._writer.constructTable(%sOut);"
-                % node.table.name
-            )
-            self.o("            value._copy(v);")
-            self.o("        }")
-            self.o(
-                "        console.assert(value instanceof %sOut);" % (node.table.name)
-            )
-            self.o("        this._set(%d, value._offset - 10);" % (idx))
-            self.o("    }")
-            self.o()
             self.output_doc(node, "    ")
-            self.o("    add%s() : %sOut {" % (ucamel(lname), table.name))
             self.o(
-                "        const res = this._writer.constructTable(%sOut);"
-                % node.table.name
+                "    pub fn add_%s(&self) -> %sOut<'a> {unsafe{let a = self._arena.create_table::<%s>(); self.set_%s(a); a}}"
+                % (lname, table.name, table.name, lname)
             )
-            self.o("        this._set(%d, res._offset - 10);" % (idx,))
-            self.o("        return res;")
-            self.o("    }")
-            self.o()
         else:
-            self.output_doc(node, "    ")
-            self.o("    set %s(value: %sIn) {" % (lname, node.table.name))
-            self.o("        console.assert(value instanceof %sIn);" % (node.table.name))
-            self.o("        this.add%s()._copy(value);" % (ucamel(lname),))
-            self.o("    }")
-            self.o()
-            self.output_doc(node, "    ")
-            self.o("    add%s() : %sOut {" % (ucamel(lname), table.name))
-            self.o("        console.assert(this._end == this._writer._size);")
-            self.o("        this._set(%d, %d);" % (idx, table.bytes))
-            self.o("        return new %sOut(this._writer, false)" % table.name)
-            self.o("    }")
-            self.o()
+            # self.output_doc(node, "    ")
+            # self.o("    set %s(value: %sIn) {" % (lname, node.table.name))
+            # self.o("        console.assert(value instanceof %sIn);" % (node.table.name))
+            # self.o("        this.add%s()._copy(value);" % (ucamel(lname),))
+            # self.o("    }")
+            # self.o()
+            # self.output_doc(node, "    ")
+            # self.o("    add%s() : %sOut {" % (ucamel(lname), table.name))
+            # self.o("        console.assert(this._end == this._writer._size);")
+            # self.o("        this._set(%d, %d);" % (idx, table.bytes))
+            # self.o("        return new %sOut(this._writer, false)" % table.name)
+            # self.o("    }")
+            # self.o()
+            pass
 
     def generate_text_in(self, node: Value, lname: str) -> None:
         self.output_doc(node, "    ")
@@ -626,15 +592,18 @@ class Generator:
     ) -> None:
         self.output_doc(node, "    ")
         if inplace:
-            self.o("    set %s(value: string) {" % (lname))
+            # self.o("    set %s(value: string) {" % (lname))
+            # self.o("        this._addInplaceText(%d, value);" % (idx))
+            pass
         else:
-            self.o("    set %s(value: scalgoproto.TextOut | string) {" % (lname))
-        if inplace:
-            self.o("        this._addInplaceText(%d, value);" % (idx))
-        else:
-            self.o("        this._setText(%d, value);" % (idx))
-        self.o("}")
-        self.o()
+            self.o(
+                "    pub fn set_%s(&self, v: scalgo_proto::TextOut<'a>) {unsafe{self._arena.set_pod::<u16>(self._offset, &%d); self._arena.set_text(self._offset+2, Some(v));}}"
+                % (lname, idx)
+            )
+            self.o(
+                "    pub fn add_%s(&self, v: &str) -> scalgo_proto::TextOut {unsafe{let a = self._arena.create_text(v); self.set_%s(a); a}}"
+                % (lname, lname)
+            )
 
     def generate_bytes_in(self, node: Value, lname: str) -> None:
         self.output_doc(node, "    ")
@@ -665,15 +634,18 @@ class Generator:
     ) -> None:
         self.output_doc(node, "        ")
         if inplace:
-            self.o("    set %s(value: ArrayBuffer) {" % (lname))
+            # self.o("    set %s(value: ArrayBuffer) {" % (lname))
+            # self.o("        this._addInplaceBytes(%d, value);" % (idx))
+            pass
         else:
-            self.o("    set %s(value: scalgoproto.BytesOut | ArrayBuffer) {" % (lname))
-        if inplace:
-            self.o("        this._addInplaceBytes(%d, value);" % (idx))
-        else:
-            self.o("        this._setBytes(%d, value);" % (idx))
-        self.o("    }")
-        self.o()
+            self.o(
+                "    pub fn set_%s(&self, v: scalgo_proto::BytesOut<'a>) {unsafe{self._arena.set_pod::<u16>(self._offset, &%d); self._arena.set_bytes(self._offset+2, Some(v));}}"
+                % (lname, idx)
+            )
+            self.o(
+                "    pub fn add_%s(&self, v: &[u8]) -> scalgo_proto::BytesOut {unsafe{let a = self._arena.create_bytes(v); self.set_%s(a); a}}"
+                % (lname, lname)
+            )
 
     def generate_union_in(self, node: Value, lname: str, table: Table) -> None:
         self.output_doc(node, "    ")
@@ -690,20 +662,16 @@ class Generator:
 
     def generate_union_out(self, node: Value, lname: str, table: Table) -> None:
         self.o(
-            "    get %s() : %s%sOut {"
-            % (lname, node.union.name, "Inplace" if node.inplace else "")
-        )
-        self.o(
-            "        return new %s%sOut(this._writer, this._offset + %d, this._offset + %d);"
+            "    pub fn %s(&self) -> %s%sOut {unsafe{self._arena.get_union%s::<%s>(self._offset + %d)}}"
             % (
+                lname,
                 node.union.name,
                 "Inplace" if node.inplace else "",
+                "_inplace" if node.inplace else "",
+                node.union.name,
                 node.offset,
-                table.bytes,
             )
         )
-        self.o("    }")
-        self.o()
 
     def generate_value_in(self, table: Table, node: Value) -> None:
         lname = snake(self.value(node.identifier))
@@ -743,14 +711,11 @@ class Generator:
         elif node.table:
             self.generate_table_out(node, lname)
         elif node.union:
-            # self.generate_union_out(node, lname, table)
-            pass
+            self.generate_union_out(node, lname, table)
         elif node.type_.type == TokenType.TEXT:
             self.generate_text_out(node, lname)
-            pass
         elif node.type_.type == TokenType.BYTES:
             self.generate_bytes_out(node, lname)
-            pass
         else:
             raise ICE()
 
@@ -811,65 +776,42 @@ class Generator:
         self.o("}")
 
         self.o("impl<'a> %sOut<'a> {" % (union.name))
-        self.o("    fn none(&self) {}")
+        self.o(
+            "    pub fn set_none(&self) {unsafe{self._arena.set_pod::<u16>(self._offset, &0); self._arena.set_u48(self._offset+2, 0);}}"
+        )
+        for idx, member in enumerate(union.members):
+            llname = lcamel(self.value(member.identifier))
+            if member.list_:
+                self.generate_union_list_out(member, llname, idx + 1, False)
+            elif member.table:
+                self.generate_union_table_out(member, llname, idx + 1, False)
+            elif member.type_.type == TokenType.BYTES:
+                self.generate_union_bytes_out(member, llname, idx + 1, False)
+            elif member.type_.type == TokenType.TEXT:
+                self.generate_union_text_out(member, llname, idx + 1, False)
+            else:
+                raise ICE()
         self.o("}")
 
-        # self.o("export class %sOut extends scalgoproto.UnionOut {" % union.name)
-        # self.o("    static readonly _IN = %sIn;" % (union.name))
-        # self.o(
-        #     "    /***Private constructor. Call factory methods on scalgoproto.Writer to construct instances*/"
-        # )
-        # self.o(
-        #     "    constructor(writer: scalgoproto.Writer, offset: number, end: number = 0) {"
-        # )
-        # self.o("        super(writer, offset, end);")
-        # self.o("    }")
-        # self.o()
-        # idx = 1
-        # for member in union.members:
-        #     llname = lcamel(self.value(member.identifier))
-        #     if member.list_:
-        #         self.generate_union_list_out(member, llname, idx, False)
-        #     elif member.table:
-        #         self.generate_union_table_out(member, llname, idx, False)
-        #     elif member.type_.type == TokenType.BYTES:
-        #         self.generate_union_bytes_out(member, llname, idx, False)
-        #     elif member.type_.type == TokenType.TEXT:
-        #         self.generate_union_text_out(member, llname, idx, False)
-        #     else:
-        #         raise ICE()
-        #     idx += 1
-        # self.generate_union_copy(union)
-        # self.o("}")
-        # self.o()
-
-        # self.o("export class %sInplaceOut extends scalgoproto.UnionOut {" % union.name)
-        # self.o(
-        #     "    /** Private constructor. Call factory methods on scalgoproto.Writer to construct instances */"
-        # )
-        # self.o(
-        #     "    constructor(writer: scalgoproto.Writer, offset: number, end: number = 0) {"
-        # )
-
-        # self.o("        super(writer, offset, end);")
-        # self.o("    }")
-        # self.o()
-        # idx = 1
-        # for member in union.members:
-        #     llname = lcamel(self.value(member.identifier))
-        #     if member.list_:
-        #         self.generate_union_list_out(member, llname, idx, True)
-        #     elif member.table:
-        #         self.generate_union_table_out(member, llname, idx, True)
-        #     elif member.type_.type == TokenType.BYTES:
-        #         self.generate_union_bytes_out(member, llname, idx, True)
-        #     elif member.type_.type == TokenType.TEXT:
-        #         self.generate_union_text_out(member, llname, idx, True)
-        #     else:
-        #         raise ICE()
-        #     idx += 1
-        # self.generate_union_copy(union)
-        # self.o("}")
+        # TODO(jakobt) copy union
+        self.o("impl<'a> %sInplaceOut<'a> {" % (union.name))
+        self.o(
+            "    pub fn set_none(&self) {unsafe{self._arena.set_pod::<u16>(self._offset, &0); self._arena.set_u48(self._offset+2, 0);}}"
+        )
+        for idx, member in enumerate(union.members):
+            llname = lcamel(self.value(member.identifier))
+            if member.list_:
+                self.generate_union_list_out(member, llname, idx + 1, True)
+            elif member.table:
+                self.generate_union_table_out(member, llname, idx + 1, True)
+            elif member.type_.type == TokenType.BYTES:
+                self.generate_union_bytes_out(member, llname, idx + 1, True)
+            elif member.type_.type == TokenType.TEXT:
+                self.generate_union_text_out(member, llname, idx + 1, True)
+            else:
+                raise ICE()
+        self.o("}")
+        # TODO(jakobt) copy union inplace
 
         self.o("pub struct %s {}" % union.name)
         self.o("impl<'a> scalgo_proto::UnionFactory<'a> for %s {" % union.name)

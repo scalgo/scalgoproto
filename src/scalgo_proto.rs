@@ -705,7 +705,7 @@ pub trait TableOut {
 
 pub trait TableFactory<'a> {
     type In: std::fmt::Debug;
-    type Out: TableOut;
+    type Out: TableOut + Copy;
     fn magic() -> u32;
     fn size() -> usize;
     fn default() -> &'static [u8];
@@ -803,14 +803,19 @@ impl Arena {
         self.set_u48(offset, o as u64);
     }
 
-    pub unsafe fn add_table<'a, F: TableFactory<'a>>(&'a self, offset: usize) -> F::Out {
-        let o = self.allocate_default(10, F::default());
+    pub fn create_table<'a, F: TableFactory<'a>>(&'a self) -> F::Out {
         unsafe {
-            self.set_u48(offset, o as u64);
+            let o = self.allocate_default(10, F::default());
             self.set_pod(o, &F::magic());
             self.set_u48(o + 4, F::size() as u64);
+            F::new_out(&self, o + 10)
         }
-        F::new_out(&self, o + 10)
+    }
+
+    pub unsafe fn add_table<'a, F: TableFactory<'a>>(&'a self, offset: usize) -> F::Out {
+        let a = self.create_table::<F>();
+        self.set_table(offset, Some(a));
+        a
     }
 
     pub fn create_bytes<'a>(&'a self, v: &[u8]) -> BytesOut<'a> {

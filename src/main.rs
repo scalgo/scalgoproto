@@ -608,8 +608,8 @@ fn test_out_extend2(path: &str) -> bool {
     let mut o = writer.add_table::<simple::Gen2>();
     o.aa(80);
     o.bb(81);
-    //     cake = root.u.add_cake()
-    //     cake.v = 45
+    let mut cake = o.u().add_cake();
+    cake.v(45);
     let data = writer.finalize(o);
     return validate_out(data, path);
 }
