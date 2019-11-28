@@ -248,7 +248,7 @@ class Generator:
         if not node.inplace:
             self.output_doc(node, "    ")
             self.o(
-                "    pub fn set_%s(&mut self, v: Option<%s>) { unsafe{self._arena.set_list(%d, v)} }"
+                "    pub fn set_%s(&mut self, v: Option<%s>) { unsafe{self._arena.set_list(self._offset + %d, v)} }"
                 % (lname, ot, node.offset)
             )
 
@@ -503,14 +503,14 @@ class Generator:
         if not node.inplace:
             self.output_doc(node, "    ")
             self.o(
-                "    pub fn set_%s(&self, v: Option<%sOut>) {unsafe{self._arena.set_table(%d, v)}}"
+                "    pub fn set_%s(&self, v: Option<%sOut>) {unsafe{self._arena.set_table(self._offset + %d, v)}}"
                 % (lname, node.table.name, node.offset)
             )
             # TODO (jakob) add table copy
 
             self.output_doc(node, "    ")
             self.o(
-                "    pub fn add_%s(&self) -> %sOut {unsafe{self._arena.add_table::<%s>(%d)}}"
+                "    pub fn add_%s(&self) -> %sOut {unsafe{self._arena.add_table::<%s>(self._offset + %d)}}"
                 % (lname, node.table.name, node.table.name, node.offset)
             )
         elif not node.table.empty:

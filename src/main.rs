@@ -336,7 +336,7 @@ fn test_out_complex(path: &str) -> bool {
     let t = writer.add_text("text");
 
     let mut l4 = writer.add_text_list(200);
-    for i in (0..200).step_by(2) {
+    for i in (1..200).step_by(2) {
         l4.add(i, "HI THERE");
     }
 
@@ -350,11 +350,11 @@ fn test_out_complex(path: &str) -> bool {
     let mut l7 = writer.add_f32_list(2);
     l7.set(1, 98.0);
 
-    let mut l8 = writer.add_f64_list(2);
-    l8.set(1, 78.0);
+    let mut l8 = writer.add_f64_list(3);
+    l8.set(2, 78.0);
 
     let mut l9 = writer.add_u8_list(2);
-    l9.set(1, 4);
+    l9.set(0, 4);
 
     let mut l10 = writer.add_bool_list(10);
     l10.set(0, true);

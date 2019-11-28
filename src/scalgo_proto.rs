@@ -791,7 +791,7 @@ impl Arena {
         let o = match v {
             Some(t) => t.offset(),
             None => 0,
-        };
+        } - 10;
         self.set_u48(offset, o as u64);
     }
 
@@ -799,7 +799,7 @@ impl Arena {
         let o = match v {
             Some(t) => t.offset(),
             None => 0,
-        };
+        } - 10;
         self.set_u48(offset, o as u64);
     }
 
@@ -906,7 +906,7 @@ impl Arena {
             d.resize(ans + bytes + 10, def);
             self.set_pod(ans, &LISTMAGIC);
             self.set_u48(ans + 4, length as u64);
-            ans
+            ans + 10
         }
     }
 
