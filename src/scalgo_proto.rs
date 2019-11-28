@@ -690,6 +690,9 @@ impl<'a> ListAccess<'a> for BoolListAccess<'a> {
 
 pub trait UnionFactory<'a> {
     type In: std::fmt::Debug;
+    type Out;
+    type InplaceOut;
+
     fn new_in(
         t: u16,
         magic: Option<u32>,
@@ -697,6 +700,10 @@ pub trait UnionFactory<'a> {
         size: usize,
         reader: &Reader<'a>,
     ) -> Result<Self::In>;
+
+    fn new_out(arena: &'a Arena, offset: usize) -> Self::Out;
+
+    fn new_inplace_out(arena: &'a Arena, offset: usize) -> Self::InplaceOut;
 }
 
 pub trait TableOut {
@@ -816,6 +823,15 @@ impl Arena {
         let a = self.create_table::<F>();
         self.set_table(offset, Some(a));
         a
+    }
+
+    pub unsafe fn add_table_inplace<'a, F: TableFactory<'a>>(&'a self, offset: usize) -> F::Out {
+        // TODO (jakob) check that we are in the right location
+        unsafe {
+            let o = self.allocate_default(0, F::default());
+            self.set_u48(offset, F::size() as u64);
+            F::new_out(&self, o)
+        }
     }
 
     pub fn create_bytes<'a>(&'a self, v: &[u8]) -> BytesOut<'a> {
@@ -989,6 +1005,17 @@ impl Arena {
             arena: self,
             phantom: std::marker::PhantomData {},
         }
+    }
+
+    pub fn get_union<'a, F: UnionFactory<'a> + 'a>(&'a self, offset: usize) -> F::Out {
+        F::new_out(self, offset)
+    }
+
+    pub fn get_union_inplace<'a, F: UnionFactory<'a> + 'a>(
+        &'a self,
+        offset: usize,
+    ) -> F::InplaceOut {
+        F::new_inplace_out(self, offset)
     }
 
     pub fn allocate(&self, size: usize) -> usize {

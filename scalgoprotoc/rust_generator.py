@@ -545,20 +545,11 @@ class Generator:
                 % (lname, table.name, table.name, lname)
             )
         else:
-            # self.output_doc(node, "    ")
-            # self.o("    set %s(value: %sIn) {" % (lname, node.table.name))
-            # self.o("        console.assert(value instanceof %sIn);" % (node.table.name))
-            # self.o("        this.add%s()._copy(value);" % (ucamel(lname),))
-            # self.o("    }")
-            # self.o()
-            # self.output_doc(node, "    ")
-            # self.o("    add%s() : %sOut {" % (ucamel(lname), table.name))
-            # self.o("        console.assert(this._end == this._writer._size);")
-            # self.o("        this._set(%d, %d);" % (idx, table.bytes))
-            # self.o("        return new %sOut(this._writer, false)" % table.name)
-            # self.o("    }")
-            # self.o()
-            pass
+            self.output_doc(node, "    ")
+            self.o(
+                "    pub fn add_%s(&self) -> %sOut<'a> {unsafe{self._arena.set_pod::<u16>(self._offset, &%d); self._arena.add_table_inplace::<%s>(self._offset+2)}}"
+                % (lname, table.name, idx, table.name)
+            )
 
     def generate_text_in(self, node: Value, lname: str) -> None:
         self.output_doc(node, "    ")
@@ -592,9 +583,7 @@ class Generator:
     ) -> None:
         self.output_doc(node, "    ")
         if inplace:
-            # self.o("    set %s(value: string) {" % (lname))
-            # self.o("        this._addInplaceText(%d, value);" % (idx))
-            pass
+            self.o("    pub fn add_%s(&self, v: &str) {}" % (lname))  # TODO(jakobt)
         else:
             self.o(
                 "    pub fn set_%s(&self, v: scalgo_proto::TextOut<'a>) {unsafe{self._arena.set_pod::<u16>(self._offset, &%d); self._arena.set_text(self._offset+2, Some(v));}}"
@@ -634,9 +623,7 @@ class Generator:
     ) -> None:
         self.output_doc(node, "        ")
         if inplace:
-            # self.o("    set %s(value: ArrayBuffer) {" % (lname))
-            # self.o("        this._addInplaceBytes(%d, value);" % (idx))
-            pass
+            self.o("    pub fn add_%s(&self, v: &[u8]) {}" % (lname))  # TODO(jakobt)
         else:
             self.o(
                 "    pub fn set_%s(&self, v: scalgo_proto::BytesOut<'a>) {unsafe{self._arena.set_pod::<u16>(self._offset, &%d); self._arena.set_bytes(self._offset+2, Some(v));}}"
@@ -774,7 +761,6 @@ class Generator:
         self.o("    _arena: &'a scalgo_proto::Arena,")
         self.o("    _offset: usize,")
         self.o("}")
-
         self.o("impl<'a> %sOut<'a> {" % (union.name))
         self.o(
             "    pub fn set_none(&self) {unsafe{self._arena.set_pod::<u16>(self._offset, &0); self._arena.set_u48(self._offset+2, 0);}}"
@@ -794,6 +780,10 @@ class Generator:
         self.o("}")
 
         # TODO(jakobt) copy union
+        self.o("pub struct %sInplaceOut<'a> {" % (union.name))
+        self.o("    _arena: &'a scalgo_proto::Arena,")
+        self.o("    _offset: usize,")
+        self.o("}")
         self.o("impl<'a> %sInplaceOut<'a> {" % (union.name))
         self.o(
             "    pub fn set_none(&self) {unsafe{self._arena.set_pod::<u16>(self._offset, &0); self._arena.set_u48(self._offset+2, 0);}}"
@@ -816,6 +806,8 @@ class Generator:
         self.o("pub struct %s {}" % union.name)
         self.o("impl<'a> scalgo_proto::UnionFactory<'a> for %s {" % union.name)
         self.o("    type In = %sIn<'a>;" % union.name)
+        self.o("    type Out = %sOut<'a>;" % union.name)
+        self.o("    type InplaceOut = %sInplaceOut<'a>;" % union.name)
         self.o(
             "    fn new_in(t: u16, magic: Option<u32>, offset: usize, size: usize, reader: &scalgo_proto::Reader<'a>) -> scalgo_proto::Result<Self::In> {"
         )
@@ -847,8 +839,17 @@ class Generator:
         self.o("        _ => Ok(Self::In::NONE),")
         self.o("        }")
         self.o("    }")
+        self.o(
+            "    fn new_out(arena: &'a scalgo_proto::Arena, offset: usize) -> Self::Out {"
+        )
+        self.o("        Self::Out{_arena: arena, _offset: offset}")
+        self.o("    }")
+        self.o(
+            "    fn new_inplace_out(arena: &'a scalgo_proto::Arena, offset: usize) -> Self::InplaceOut {"
+        )
+        self.o("        Self::InplaceOut{_arena: arena, _offset: offset}")
+        self.o("    }")
         self.o("}")
-        self.o()
         self.o()
 
     def generate_table_copy(self, table: Table) -> None:
