@@ -1,3 +1,79 @@
+/* Trait used to describe the placment of lists, tabels and unions. There should only be two implementations: Normal and Inplace */
+pub trait Placement {}
+
+#[derive(Copy, Clone)]
+pub struct Inplace {}
+impl Placement for Inplace {}
+#[derive(Copy, Clone)]
+pub struct Normal {}
+impl Placement for Normal {}
+
+/* The meta types describes types of members */
+pub trait MetaType {
+    fn list_bytes(len: usize) -> usize;
+    fn list_def() -> u8 {
+        0
+    }
+}
+
+pub struct PodType<T: Copy + std::fmt::Debug> {
+    p: std::marker::PhantomData<T>,
+}
+impl<T: Copy + std::fmt::Debug> MetaType for PodType<T> {
+    fn list_bytes(len: usize) -> usize {
+        len * std::mem::size_of::<T>()
+    }
+}
+pub struct BoolType {}
+impl MetaType for BoolType {
+    fn list_bytes(len: usize) -> usize {
+        (len + 7) >> 3
+    }
+}
+pub struct EnumType<T: Enum + Copy + std::fmt::Debug> {
+    p: std::marker::PhantomData<T>,
+}
+impl<T: Enum + Copy + std::fmt::Debug> MetaType for EnumType<T> {
+    fn list_bytes(len: usize) -> usize {
+        len
+    }
+    fn list_def() -> u8 {
+        255
+    }
+}
+pub struct TextType {}
+impl MetaType for TextType {
+    fn list_bytes(len: usize) -> usize {
+        len * 6
+    }
+}
+pub struct BytesType {}
+impl MetaType for BytesType {
+    fn list_bytes(len: usize) -> usize {
+        len * 6
+    }
+}
+pub struct TableType<'a, F: TableFactory<'a>> {
+    p: std::marker::PhantomData<&'a F>,
+}
+impl<'a, F: TableFactory<'a>> MetaType for TableType<'a, F> {
+    fn list_bytes(len: usize) -> usize {
+        len * 6
+    }
+}
+pub struct StructType<'a, F: StructFactory<'a>> {
+    p: std::marker::PhantomData<&'a F>,
+}
+impl<'a, F: StructFactory<'a>> MetaType for StructType<'a, F> {
+    fn list_bytes(len: usize) -> usize {
+        len * F::size()
+    }
+}
+
+pub trait Enum {
+    fn max_value() -> u8;
+}
+
 #[derive(Debug)]
 pub enum Error {
     Utf8(std::str::Utf8Error),
@@ -10,10 +86,6 @@ impl From<std::str::Utf8Error> for Error {
     fn from(err: std::str::Utf8Error) -> Self {
         Self::Utf8(err)
     }
-}
-
-pub trait Enum {
-    fn max_value() -> u8;
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -422,18 +494,21 @@ impl<'a, A: ListAccess<'a>> std::fmt::Debug for ListIn<'a, A> {
     }
 }
 
-trait ListOut {
-    fn offset(&self) -> usize;
-}
-
 #[derive(Copy, Clone)]
-pub struct PodListOut<'a, T: Copy + std::fmt::Debug> {
+pub struct ListOut<'a, T: MetaType, P: Placement> {
     arena: &'a Arena,
     offset: usize,
     _len: usize,
-    phantom: std::marker::PhantomData<T>,
+    p1: std::marker::PhantomData<T>,
+    p2: std::marker::PhantomData<P>,
 }
-impl<'a, T: Copy + std::fmt::Debug> PodListOut<'a, T> {
+impl<'a, T: MetaType, P: Placement> ListOut<'a, T, P> {
+    pub fn len(&self) -> usize {
+        self._len
+    }
+}
+
+impl<'a, T: Copy + std::fmt::Debug, P: Placement> ListOut<'a, PodType<T>, P> {
     pub fn set(&mut self, idx: usize, v: T) {
         assert!(idx < self._len);
         unsafe {
@@ -441,69 +516,20 @@ impl<'a, T: Copy + std::fmt::Debug> PodListOut<'a, T> {
                 .set_pod(self.offset + idx * std::mem::size_of::<T>(), &v)
         }
     }
-
-    pub fn len(&self) -> usize {
-        self._len
-    }
 }
-impl<'a, T: Copy + std::fmt::Debug> ListOut for PodListOut<'a, T> {
-    fn offset(&self) -> usize {
-        self.offset
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct BoolListOut<'a> {
-    arena: &'a Arena,
-    offset: usize,
-    _len: usize,
-}
-impl<'a> BoolListOut<'a> {
+impl<'a, P: Placement> ListOut<'a, BoolType, P> {
     pub fn set(&mut self, idx: usize, v: bool) {
         assert!(idx < self._len);
         unsafe { self.arena.set_bit(self.offset + (idx >> 3), idx & 7, v) }
     }
-
-    pub fn len(&self) -> usize {
-        self._len
-    }
 }
-impl<'a> ListOut for BoolListOut<'a> {
-    fn offset(&self) -> usize {
-        self.offset
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct EnumListOut<'a, T: Enum + Copy> {
-    arena: &'a Arena,
-    offset: usize,
-    _len: usize,
-    phantom: std::marker::PhantomData<T>,
-}
-impl<'a, T: Enum + Copy> EnumListOut<'a, T> {
+impl<'a, T: Enum + Copy + std::fmt::Debug, P: Placement> ListOut<'a, EnumType<T>, P> {
     pub fn set(&mut self, idx: usize, v: Option<T>) {
         assert!(idx < self._len);
         unsafe { self.arena.set_enum(self.offset + idx, v) }
     }
-
-    pub fn len(&self) -> usize {
-        self._len
-    }
 }
-impl<'a, T: Enum + Copy> ListOut for EnumListOut<'a, T> {
-    fn offset(&self) -> usize {
-        self.offset
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct TextListOut<'a> {
-    arena: &'a Arena,
-    offset: usize,
-    _len: usize,
-}
-impl<'a> TextListOut<'a> {
+impl<'a, P: Placement> ListOut<'a, TextType, P> {
     pub fn set(&mut self, idx: usize, v: Option<TextOut<'a>>) {
         assert!(idx < self._len);
         unsafe { self.arena.set_text(self.offset + idx * 6, v) }
@@ -512,23 +538,8 @@ impl<'a> TextListOut<'a> {
         assert!(idx < self._len);
         unsafe { self.arena.add_text(self.offset + idx * 6, v) }
     }
-    pub fn len(&self) -> usize {
-        self._len
-    }
 }
-impl<'a> ListOut for TextListOut<'a> {
-    fn offset(&self) -> usize {
-        self.offset
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct BytesListOut<'a> {
-    arena: &'a Arena,
-    offset: usize,
-    _len: usize,
-}
-impl<'a> BytesListOut<'a> {
+impl<'a, P: Placement> ListOut<'a, BytesType, P> {
     pub fn set(&mut self, idx: usize, v: Option<BytesOut<'a>>) {
         assert!(idx < self._len);
         unsafe { self.arena.set_bytes(self.offset + idx * 6, v) }
@@ -537,24 +548,8 @@ impl<'a> BytesListOut<'a> {
         assert!(idx < self._len);
         unsafe { self.arena.add_bytes(self.offset + idx * 6, v) }
     }
-    pub fn len(&self) -> usize {
-        self._len
-    }
 }
-impl<'a> ListOut for BytesListOut<'a> {
-    fn offset(&self) -> usize {
-        self.offset
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct TableListOut<'a, F: TableFactory<'a>> {
-    arena: &'a Arena,
-    offset: usize,
-    _len: usize,
-    phantom: std::marker::PhantomData<F>,
-}
-impl<'a, F: TableFactory<'a>> TableListOut<'a, F> {
+impl<'a, F: TableFactory<'a>, P: Placement> ListOut<'a, TableType<'a, F>, P> {
     pub fn set(&mut self, idx: usize, v: Option<F::Out>) {
         assert!(idx < self._len);
         unsafe { self.arena.set_table(self.offset + idx * 6, v) }
@@ -563,35 +558,11 @@ impl<'a, F: TableFactory<'a>> TableListOut<'a, F> {
         assert!(idx < self._len);
         unsafe { self.arena.add_table::<'a, F>(self.offset + idx * 6) }
     }
-    pub fn len(&self) -> usize {
-        self._len
-    }
 }
-impl<'a, F: TableFactory<'a>> ListOut for TableListOut<'a, F> {
-    fn offset(&self) -> usize {
-        self.offset
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct StructListOut<'a, F: StructFactory<'a>> {
-    arena: &'a Arena,
-    offset: usize,
-    _len: usize,
-    phantom: std::marker::PhantomData<F>,
-}
-impl<'a, F: StructFactory<'a>> StructListOut<'a, F> {
+impl<'a, F: StructFactory<'a>, P: Placement> ListOut<'a, StructType<'a, F>, P> {
     pub fn get(&mut self, idx: usize) -> F::Out {
         assert!(idx < self._len);
         unsafe { F::new_out(self.arena, self.offset + idx * F::size()) }
-    }
-    pub fn len(&self) -> usize {
-        self._len
-    }
-}
-impl<'a, F: StructFactory<'a>> ListOut for StructListOut<'a, F> {
-    fn offset(&self) -> usize {
-        self.offset
     }
 }
 
@@ -706,18 +677,20 @@ pub trait UnionFactory<'a> {
     fn new_inplace_out(arena: &'a Arena, offset: usize) -> Self::InplaceOut;
 }
 
-pub trait TableOut {
+pub trait TableOut<P: Placement> {
     fn offset(&self) -> usize;
 }
 
 pub trait TableFactory<'a> {
     type In: std::fmt::Debug;
-    type Out: TableOut + Copy;
+    type Out: TableOut<Normal> + Copy;
+    type InplaceOut: TableOut<Inplace> + Copy;
     fn magic() -> u32;
     fn size() -> usize;
     fn default() -> &'static [u8];
     fn new_in(reader: Reader<'a>) -> Self::In;
     fn new_out(arena: &'a Arena, offset: usize) -> Self::Out;
+    fn new_inplace_out(arena: &'a Arena, offset: usize) -> Self::InplaceOut;
 }
 
 pub fn read_message<'a, F: TableFactory<'a> + 'a>(data: &'a [u8]) -> Result<F::In> {
@@ -794,7 +767,7 @@ impl Arena {
         }
     }
 
-    pub unsafe fn set_table<T: TableOut>(&self, offset: usize, v: Option<T>) {
+    pub unsafe fn set_table<T: TableOut<Normal>>(&self, offset: usize, v: Option<T>) {
         let o = match v {
             Some(t) => t.offset(),
             None => 0,
@@ -802,9 +775,13 @@ impl Arena {
         self.set_u48(offset, o as u64);
     }
 
-    pub unsafe fn set_list<T: ListOut>(&self, offset: usize, v: Option<T>) {
+    pub unsafe fn set_list<'a, T: MetaType>(
+        &'a self,
+        offset: usize,
+        v: Option<ListOut<'a, T, Normal>>,
+    ) {
         let o = match v {
-            Some(t) => t.offset(),
+            Some(t) => t.offset,
             None => 0,
         } - 10;
         self.set_u48(offset, o as u64);
@@ -825,12 +802,15 @@ impl Arena {
         a
     }
 
-    pub unsafe fn add_table_inplace<'a, F: TableFactory<'a>>(&'a self, offset: usize) -> F::Out {
+    pub unsafe fn add_table_inplace<'a, F: TableFactory<'a>>(
+        &'a self,
+        offset: usize,
+    ) -> F::InplaceOut {
         // TODO (jakob) check that we are in the right location
         unsafe {
             let o = self.allocate_default(0, F::default());
             self.set_u48(offset, F::size() as u64);
-            F::new_out(&self, o)
+            F::new_inplace_out(&self, o)
         }
     }
 
@@ -920,90 +900,20 @@ impl Arena {
         self.set_u48(offset, o as u64);
     }
 
-    pub fn create_list(&self, length: usize, bytes: usize, def: u8) -> usize {
+    pub fn create_list<'a, T: MetaType>(&'a self, len: usize) -> ListOut<'a, T, Normal> {
         unsafe {
             let d = &mut *self.data.get();
             let ans = d.len();
-            d.resize(ans + bytes + 10, def);
+            d.resize(ans + T::list_bytes(len) + 10, T::list_def());
             self.set_pod(ans, &LISTMAGIC);
-            self.set_u48(ans + 4, length as u64);
-            ans + 10
-        }
-    }
-
-    pub fn create_pod_list<'a, T: Copy + std::fmt::Debug + 'a>(
-        &'a self,
-        size: usize,
-    ) -> PodListOut<'a, T> {
-        let o = self.create_list(size, size * std::mem::size_of::<T>(), 0);
-        PodListOut {
-            offset: o,
-            _len: size,
-            arena: self,
-            phantom: std::marker::PhantomData {},
-        }
-    }
-
-    pub fn create_enum_list<'a, T: Enum + Copy + 'a>(&'a self, size: usize) -> EnumListOut<'a, T> {
-        let o = self.create_list(size, size, 255);
-        EnumListOut {
-            offset: o,
-            _len: size,
-            arena: self,
-            phantom: std::marker::PhantomData {},
-        }
-    }
-
-    pub fn create_bool_list<'a>(&'a self, size: usize) -> BoolListOut<'a> {
-        let o = self.create_list(size, (size + 7) >> 3, 0);
-        BoolListOut {
-            offset: o,
-            _len: size,
-            arena: self,
-        }
-    }
-
-    pub fn create_text_list<'a>(&'a self, size: usize) -> TextListOut<'a> {
-        let o = self.create_list(size, size * 6, 0);
-        TextListOut {
-            offset: o,
-            _len: size,
-            arena: self,
-        }
-    }
-
-    pub fn create_bytes_list<'a>(&'a self, size: usize) -> BytesListOut<'a> {
-        let o = self.create_list(size, size * 6, 0);
-        BytesListOut {
-            offset: o,
-            _len: size,
-            arena: self,
-        }
-    }
-
-    pub fn create_struct_list<'a, F: StructFactory<'a> + 'a>(
-        &'a self,
-        size: usize,
-    ) -> StructListOut<'a, F> {
-        let o = self.create_list(size, size * F::size(), 0);
-        StructListOut {
-            offset: o,
-            _len: size,
-            arena: self,
-            phantom: std::marker::PhantomData {},
-        }
-    }
-
-    pub fn create_table_list<'a, F: TableFactory<'a> + 'a>(
-        &'a self,
-        size: usize,
-    ) -> TableListOut<'a, F> {
-        let o = self.create_list(size, size * 6, 0);
-        TableListOut {
-            offset: o,
-            _len: size,
-            arena: self,
-            phantom: std::marker::PhantomData {},
+            self.set_u48(ans + 4, len as u64);
+            ListOut {
+                offset: ans + 10,
+                _len: len,
+                arena: self,
+                p1: std::marker::PhantomData {},
+                p2: std::marker::PhantomData {},
+            }
         }
     }
 
@@ -1070,64 +980,64 @@ impl Writer {
         self.arena.create_bytes(bytes)
     }
 
-    pub fn add_u8_list<'a>(&'a self, size: usize) -> PodListOut<'a, u8> {
-        self.arena.create_pod_list::<u8>(size)
+    pub fn add_u8_list<'a>(&'a self, size: usize) -> ListOut<'a, PodType<u8>, Normal> {
+        self.arena.create_list::<PodType<u8>>(size)
     }
-    pub fn add_u16_list<'a>(&'a self, size: usize) -> PodListOut<'a, u16> {
-        self.arena.create_pod_list::<u16>(size)
+    pub fn add_u16_list<'a>(&'a self, size: usize) -> ListOut<'a, PodType<u16>, Normal> {
+        self.arena.create_list::<PodType<u16>>(size)
     }
-    pub fn add_u32_list<'a>(&'a self, size: usize) -> PodListOut<'a, u32> {
-        self.arena.create_pod_list::<u32>(size)
+    pub fn add_u32_list<'a>(&'a self, size: usize) -> ListOut<'a, PodType<u32>, Normal> {
+        self.arena.create_list::<PodType<u32>>(size)
     }
-    pub fn add_u64_list<'a>(&'a self, size: usize) -> PodListOut<'a, u64> {
-        self.arena.create_pod_list::<u64>(size)
+    pub fn add_u64_list<'a>(&'a self, size: usize) -> ListOut<'a, PodType<u64>, Normal> {
+        self.arena.create_list::<PodType<u64>>(size)
     }
-    pub fn add_i8_list<'a>(&'a self, size: usize) -> PodListOut<'a, i8> {
-        self.arena.create_pod_list::<i8>(size)
+    pub fn add_i8_list<'a>(&'a self, size: usize) -> ListOut<'a, PodType<i8>, Normal> {
+        self.arena.create_list::<PodType<i8>>(size)
     }
-    pub fn add_i16_list<'a>(&'a self, size: usize) -> PodListOut<'a, i16> {
-        self.arena.create_pod_list::<i16>(size)
+    pub fn add_i16_list<'a>(&'a self, size: usize) -> ListOut<'a, PodType<i16>, Normal> {
+        self.arena.create_list::<PodType<i16>>(size)
     }
-    pub fn add_i32_list<'a>(&'a self, size: usize) -> PodListOut<'a, i32> {
-        self.arena.create_pod_list::<i32>(size)
+    pub fn add_i32_list<'a>(&'a self, size: usize) -> ListOut<'a, PodType<i32>, Normal> {
+        self.arena.create_list::<PodType<i32>>(size)
     }
-    pub fn add_i64_list<'a>(&'a self, size: usize) -> PodListOut<'a, i64> {
-        self.arena.create_pod_list::<i64>(size)
+    pub fn add_i64_list<'a>(&'a self, size: usize) -> ListOut<'a, PodType<i64>, Normal> {
+        self.arena.create_list::<PodType<i64>>(size)
     }
-    pub fn add_f32_list<'a>(&'a self, size: usize) -> PodListOut<'a, f32> {
-        self.arena.create_pod_list::<f32>(size)
+    pub fn add_f32_list<'a>(&'a self, size: usize) -> ListOut<'a, PodType<f32>, Normal> {
+        self.arena.create_list::<PodType<f32>>(size)
     }
-    pub fn add_f64_list<'a>(&'a self, size: usize) -> PodListOut<'a, f64> {
-        self.arena.create_pod_list::<f64>(size)
+    pub fn add_f64_list<'a>(&'a self, size: usize) -> ListOut<'a, PodType<f64>, Normal> {
+        self.arena.create_list::<PodType<f64>>(size)
     }
     pub fn add_enum_list<'a, T: Enum + Copy + std::fmt::Debug + 'a>(
         &'a self,
         size: usize,
-    ) -> EnumListOut<'a, T> {
-        self.arena.create_enum_list::<T>(size)
+    ) -> ListOut<'a, EnumType<T>, Normal> {
+        self.arena.create_list::<EnumType<T>>(size)
     }
     pub fn add_table_list<'a, F: TableFactory<'a> + 'a>(
         &'a self,
         size: usize,
-    ) -> TableListOut<'a, F> {
-        self.arena.create_table_list::<F>(size)
+    ) -> ListOut<'a, TableType<F>, Normal> {
+        self.arena.create_list::<TableType<F>>(size)
     }
     pub fn add_struct_list<'a, F: StructFactory<'a> + 'a>(
         &'a self,
         size: usize,
-    ) -> StructListOut<'a, F> {
-        self.arena.create_struct_list::<F>(size)
+    ) -> ListOut<'a, StructType<F>, Normal> {
+        self.arena.create_list::<StructType<F>>(size)
     }
-    pub fn add_text_list<'a>(&'a self, size: usize) -> TextListOut<'a> {
-        self.arena.create_text_list(size)
+    pub fn add_text_list<'a>(&'a self, size: usize) -> ListOut<'a, TextType, Normal> {
+        self.arena.create_list::<TextType>(size)
     }
-    pub fn add_bytes_list<'a>(&'a self, size: usize) -> BytesListOut<'a> {
-        self.arena.create_bytes_list(size)
+    pub fn add_bytes_list<'a>(&'a self, size: usize) -> ListOut<'a, BytesType, Normal> {
+        self.arena.create_list::<BytesType>(size)
     }
-    pub fn add_bool_list<'a>(&'a self, size: usize) -> BoolListOut<'a> {
-        self.arena.create_bool_list(size)
+    pub fn add_bool_list<'a>(&'a self, size: usize) -> ListOut<'a, BoolType, Normal> {
+        self.arena.create_list::<BoolType>(size)
     }
-    pub fn finalize<T: TableOut>(&self, root: T) -> &[u8] {
+    pub fn finalize<T: TableOut<Normal>>(&self, root: T) -> &[u8] {
         unsafe {
             self.arena.set_pod(0, &ROOTMAGIC);
             self.arena.set_u48(4, (root.offset() - 10) as u64);

@@ -433,7 +433,7 @@ fn test_in_complex(path: &str) -> scalgo_proto::Result<()> {
         [
             true, false, true, false, false, false, false, false, true, false,
         ]
-        .into_iter(),
+        .iter(),
     ) {
         require!(v, *e);
     }
@@ -533,10 +533,10 @@ fn test_out_inplace(path: &str) -> bool {
 
     let name = writer.add_text("nilson");
     let u = writer.add_table::<simple::InplaceUnion>();
-    //     u.u.add_monkey().name = name
+    u.u().add_monkey().set_name(Some(name));
 
     let u2 = writer.add_table::<simple::InplaceUnion>();
-    //     u2.u.add_text().t = "foobar"
+    u2.u().add_text().add_t("foobar");
 
     let t = writer.add_table::<simple::InplaceText>();
     t.id(45);
@@ -549,8 +549,8 @@ fn test_out_inplace(path: &str) -> bool {
     let l = writer.add_table::<simple::InplaceList>();
     l.id(47);
     //let ll = l.add_l(2);
-    //ll[0] = 24
-    //ll[1] = 99
+    //ll.set(0, 24);
+    //ll.set(1, 99);
 
     let mut root = writer.add_table::<simple::InplaceRoot>();
     root.set_u(Some(u));
