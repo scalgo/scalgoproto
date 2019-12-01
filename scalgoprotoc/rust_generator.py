@@ -273,29 +273,17 @@ class Generator:
                 "    pub fn set_%s(&mut self, v: scalgo_proto::ListOut<'a, %s, scalgo_proto::Normal>) { unsafe{self._arena.set_pod::<u16>(self._offset, &%d); self._arena.set_list(self._offset + 2, Some(v))} }"
                 % (lname, ot, idx)
             )
-
-            # self.o("    pub fn add_%s(&self, v: &str) -> scalgo_proto::TextOut {let a = self._arena.create_text(v); self.set_%s(a); a}"%(lname, lname))
-
+            self.output_doc(node, "    ")
+            self.o(
+                "    pub fn add_%s(&mut self, len: usize) -> scalgo_proto::ListOut::<'a, %s, scalgo_proto::Normal> { unsafe{self._arena.set_pod::<u16>(self._offset, &%d); self._arena.add_list::<%s>(self._offset + 2, len)}}"
+                % (lname, ot, idx, ot)
+            )
         else:
-            # self.output_doc(node, "    ")
-            # self.o("    set %s(value: %s) {" % (lname, it))
-            # self.o("        console.assert(value instanceof scalgoproto.ListIn);")
-            # self.o("        this.add%s(value.length)._copy(value);" % (ucamel(lname)))
-            # self.o("    }")
-            # self.o()
-            # self.output_doc(node, "    ")
-            # self.o(
-            #     "    add%s(size: number) : %s {"
-            #     % (ucamel(lname), self.out_list_type(node))
-            # )
-            # self.o("        this._set(%d, size);" % (idx,))
-            # self.o(
-            #     "        return this._writer.%s;"
-            #     % self.out_list_constructor(node, True)
-            # )
-            # self.o("    }")
-            # self.o()
-            pass
+            self.output_doc(node, "    ")
+            self.o(
+                "    pub fn add_%s(&mut self, len: usize) -> scalgo_proto::ListOut::<'a, %s, scalgo_proto::Inplace> { unsafe{self._arena.set_pod::<u16>(self._offset, &%d); self._arena.add_list_inplace::<%s>(self._offset + 2, len)}}"
+                % (lname, ot, idx, ot)
+            )
 
     def generate_bool_in(self, node: Value, lname: str) -> None:
         if node.inplace:
