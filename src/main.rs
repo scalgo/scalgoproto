@@ -546,11 +546,11 @@ fn test_out_inplace(path: &str) -> bool {
     b.id(46);
     b.add_b(b"hi");
 
-    let l = writer.add_table::<simple::InplaceList>();
+    let mut l = writer.add_table::<simple::InplaceList>();
     l.id(47);
-    //let ll = l.add_l(2);
-    //ll.set(0, 24);
-    //ll.set(1, 99);
+    let mut ll = l.add_l(2);
+    ll.set(0, 24);
+    ll.set(1, 99);
 
     let mut root = writer.add_table::<simple::InplaceRoot>();
     root.set_u(Some(u));

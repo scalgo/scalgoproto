@@ -251,37 +251,17 @@ class Generator:
                 "    pub fn set_%s(&mut self, v: Option<scalgo_proto::ListOut::<'a, %s, scalgo_proto::Normal>>) { unsafe{self._arena.set_list(self._offset + %d, v)} }"
                 % (lname, ot, node.offset)
             )
-
-            # self.output_doc(node, "    ")
-            # self.o("    pub fn add_%s(size:number) -> %s {"
-            #    % (lname, ot)
-            # )
-            # self.o("    }")
+            self.output_doc(node, "    ")
+            self.o(
+                "    pub fn add_%s(&mut self, len: usize) -> scalgo_proto::ListOut::<'a, %s, scalgo_proto::Normal> { unsafe{self._arena.add_list::<%s>(self._offset + %d, len)}}"
+                % (lname, ot, ot, node.offset)
+            )
         else:
-            pass
-            # self.output_doc(node, "    ")
-            # self.o("    set %s(value: %s) {" % (lname, it))
-            # self.o("        console.assert(value instanceof scalgoproto.ListIn);")
-            # self.o("        this.add%s(value.length)._copy(value);" % (ucamel(lname)))
-            # self.o("    }")
-
-            # self.output_doc(node, "    ")
-            # self.o(
-            #     "    add%s(size: number) : %s {"
-            #     % (ucamel(lname), self.out_list_type(node))
-            # )
-            # self.o(
-            #     "        console.assert(this._writer._size == this._offset + %s);"
-            #     % size
-            # )
-            # self.o(
-            #     "        const l = this._writer.%s;"
-            #     % self.out_list_constructor(node, True)
-            # )
-            # self.o("        this._setInplaceList(%d, size);" % (node.offset))
-            # self.o("        return l;")
-            # self.o("    }")
-            # self.o()
+            self.output_doc(node, "    ")
+            self.o(
+                "    pub fn add_%s(&mut self, len: usize) -> scalgo_proto::ListOut::<'a, %s, scalgo_proto::Inplace> { unsafe{self._arena.add_list_inplace::<%s>(self._offset + %d, len)}}"
+                % (lname, ot, ot, node.offset)
+            )
 
     def generate_union_list_out(
         self, node: Value, lname: str, idx: int, inplace: bool
@@ -969,6 +949,7 @@ class Generator:
         self.o("    fn offset(&self) -> usize {self._offset}")
         self.o("}")
         self.output_doc(table, "")
+        self.o("#[derive(Copy, Clone)]")
         self.o("pub struct %s {}" % table.name)
         self.o("impl<'a> scalgo_proto::TableFactory<'a> for %s {" % table.name)
         self.o("    type In = %sIn<'a>;" % table.name)
@@ -1000,6 +981,7 @@ class Generator:
                 self.generate_struct(value.direct_struct)
 
         self.output_doc(node, "")
+        self.o("#[derive(Copy, Clone)]")
         self.o("pub struct %s {}" % node.name)
         self.output_doc(node, "")
         self.o("pub struct %sIn<'a> {" % node.name)

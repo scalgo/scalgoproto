@@ -1,5 +1,5 @@
 /* Trait used to describe the placment of lists, tabels and unions. There should only be two implementations: Normal and Inplace */
-pub trait Placement {}
+pub trait Placement: Copy {}
 
 #[derive(Copy, Clone)]
 pub struct Inplace {}
@@ -9,13 +9,14 @@ pub struct Normal {}
 impl Placement for Normal {}
 
 /* The meta types describes types of members */
-pub trait MetaType {
+pub trait MetaType: Clone {
     fn list_bytes(len: usize) -> usize;
     fn list_def() -> u8 {
         0
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct PodType<T: Copy + std::fmt::Debug> {
     p: std::marker::PhantomData<T>,
 }
@@ -24,16 +25,20 @@ impl<T: Copy + std::fmt::Debug> MetaType for PodType<T> {
         len * std::mem::size_of::<T>()
     }
 }
+
+#[derive(Copy, Clone)]
 pub struct BoolType {}
 impl MetaType for BoolType {
     fn list_bytes(len: usize) -> usize {
         (len + 7) >> 3
     }
 }
-pub struct EnumType<T: Enum + Copy + std::fmt::Debug> {
+
+#[derive(Copy, Clone)]
+pub struct EnumType<T: Enum> {
     p: std::marker::PhantomData<T>,
 }
-impl<T: Enum + Copy + std::fmt::Debug> MetaType for EnumType<T> {
+impl<T: Enum> MetaType for EnumType<T> {
     fn list_bytes(len: usize) -> usize {
         len
     }
@@ -41,18 +46,24 @@ impl<T: Enum + Copy + std::fmt::Debug> MetaType for EnumType<T> {
         255
     }
 }
+
+#[derive(Copy, Clone)]
 pub struct TextType {}
 impl MetaType for TextType {
     fn list_bytes(len: usize) -> usize {
         len * 6
     }
 }
+
+#[derive(Copy, Clone)]
 pub struct BytesType {}
 impl MetaType for BytesType {
     fn list_bytes(len: usize) -> usize {
         len * 6
     }
 }
+
+#[derive(Copy, Clone)]
 pub struct TableType<'a, F: TableFactory<'a>> {
     p: std::marker::PhantomData<&'a F>,
 }
@@ -61,6 +72,8 @@ impl<'a, F: TableFactory<'a>> MetaType for TableType<'a, F> {
         len * 6
     }
 }
+
+#[derive(Copy, Clone)]
 pub struct StructType<'a, F: StructFactory<'a>> {
     p: std::marker::PhantomData<&'a F>,
 }
@@ -70,7 +83,7 @@ impl<'a, F: StructFactory<'a>> MetaType for StructType<'a, F> {
     }
 }
 
-pub trait Enum {
+pub trait Enum: Copy + std::fmt::Debug {
     fn max_value() -> u8;
 }
 
@@ -90,7 +103,7 @@ impl From<std::str::Utf8Error> for Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub trait StructFactory<'a> {
+pub trait StructFactory<'a>: Copy {
     type In: std::fmt::Debug;
     type Out;
     type B;
@@ -215,7 +228,7 @@ impl<'a> Reader<'a> {
         unsafe { Some(to_pod(s)) }
     }
 
-    pub fn get_enum<T: Enum + Copy>(&self, offset: usize, default: u8) -> Option<T> {
+    pub fn get_enum<T: Enum>(&self, offset: usize, default: u8) -> Option<T> {
         match self.get_u8(offset) {
             Some(v) => unsafe { to_enum(v) },
             None => unsafe { to_enum(default) },
@@ -523,7 +536,7 @@ impl<'a, P: Placement> ListOut<'a, BoolType, P> {
         unsafe { self.arena.set_bit(self.offset + (idx >> 3), idx & 7, v) }
     }
 }
-impl<'a, T: Enum + Copy + std::fmt::Debug, P: Placement> ListOut<'a, EnumType<T>, P> {
+impl<'a, T: Enum, P: Placement> ListOut<'a, EnumType<T>, P> {
     pub fn set(&mut self, idx: usize, v: Option<T>) {
         assert!(idx < self._len);
         unsafe { self.arena.set_enum(self.offset + idx, v) }
@@ -581,10 +594,10 @@ impl<'a, T: Copy + std::fmt::Debug> ListAccess<'a> for PodListAccess<'a, T> {
     }
 }
 
-pub struct EnumListAccess<'a, T: Enum + Copy + std::fmt::Debug> {
+pub struct EnumListAccess<'a, T: Enum> {
     p: std::marker::PhantomData<&'a T>,
 }
-impl<'a, T: Enum + Copy + std::fmt::Debug> ListAccess<'a> for EnumListAccess<'a, T> {
+impl<'a, T: Enum> ListAccess<'a> for EnumListAccess<'a, T> {
     type Output = Option<T>;
     fn bytes(size: usize) -> usize {
         size
@@ -677,14 +690,14 @@ pub trait UnionFactory<'a> {
     fn new_inplace_out(arena: &'a Arena, offset: usize) -> Self::InplaceOut;
 }
 
-pub trait TableOut<P: Placement> {
+pub trait TableOut<P: Placement>: Copy {
     fn offset(&self) -> usize;
 }
 
-pub trait TableFactory<'a> {
+pub trait TableFactory<'a>: Copy {
     type In: std::fmt::Debug;
-    type Out: TableOut<Normal> + Copy;
-    type InplaceOut: TableOut<Inplace> + Copy;
+    type Out: TableOut<Normal>;
+    type InplaceOut: TableOut<Inplace>;
     fn magic() -> u32;
     fn size() -> usize;
     fn default() -> &'static [u8];
@@ -753,7 +766,7 @@ impl Arena {
         );
     }
 
-    pub unsafe fn set_enum<T: Copy>(&self, offset: usize, v: Option<T>) {
+    pub unsafe fn set_enum<T: Enum>(&self, offset: usize, v: Option<T>) {
         let data = &mut *self.data.get();
         assert!(offset < data.len());
         //TODO check size
@@ -917,6 +930,39 @@ impl Arena {
         }
     }
 
+    pub fn add_list<'a, T: MetaType>(
+        &'a self,
+        offset: usize,
+        len: usize,
+    ) -> ListOut<'a, T, Normal> {
+        unsafe {
+            let ans = self.create_list::<T>(len);
+            self.set_list(offset, Some(ans.clone()));
+            ans
+        }
+    }
+
+    pub fn add_list_inplace<'a, T: MetaType>(
+        &'a self,
+        offset: usize,
+        len: usize,
+    ) -> ListOut<'a, T, Inplace> {
+        unsafe {
+            //TODO (jakobt) check if we are in the right spot
+            let d = &mut *self.data.get();
+            let ans = d.len();
+            d.resize(ans + T::list_bytes(len), T::list_def());
+            self.set_u48(offset, len as u64);
+            ListOut {
+                offset: ans,
+                _len: len,
+                arena: self,
+                p1: std::marker::PhantomData {},
+                p2: std::marker::PhantomData {},
+            }
+        }
+    }
+
     pub fn get_union<'a, F: UnionFactory<'a> + 'a>(&'a self, offset: usize) -> F::Out {
         F::new_out(self, offset)
     }
@@ -1010,7 +1056,7 @@ impl Writer {
     pub fn add_f64_list<'a>(&'a self, size: usize) -> ListOut<'a, PodType<f64>, Normal> {
         self.arena.create_list::<PodType<f64>>(size)
     }
-    pub fn add_enum_list<'a, T: Enum + Copy + std::fmt::Debug + 'a>(
+    pub fn add_enum_list<'a, T: Enum + 'a>(
         &'a self,
         size: usize,
     ) -> ListOut<'a, EnumType<T>, Normal> {
