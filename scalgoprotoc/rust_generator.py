@@ -433,7 +433,7 @@ class Generator:
                     node.has_offset,
                     node.has_bit,
                     node.struct.name,
-                    node.offset
+                    node.offset,
                 )
             )
             pass
@@ -467,27 +467,10 @@ class Generator:
             )
         elif not node.table.empty:
             self.output_doc(node, "    ")
-            self.o("    set %s(value: %sIn) {" % (lname, node.table.name))
-            self.o("        console.assert(value instanceof %sIn);" % (node.table.name))
-            self.o("        this.add%s()._copy(value);" % (ucamel(lname),))
-            self.o("    }")
-            self.o()
-            self.output_doc(node, "    ")
             self.o(
-                "    add%s() : %sOut<'a, scalgo_proto::Inplace> {"
-                % (ucamel(lname), node.table.name)
+                "    pub fn add_%s(&mut self) -> %sOut<'a, scalgo_proto::Inplace> {self._slice.add_table_inplace::<%s>(%d)}"
+                % (lname, node.table.name, node.table.name, node.offset)
             )
-            self.o(
-                "        console.assert(this._writer._size == this._offset + %s);"
-                % 4242
-            )
-            self.o(
-                "        this._setUint48(%d, %d);"
-                % (node.offset, len(node.table.default))
-            )
-            self.o("        return new %sOut(this._writer, false);" % node.table.name)
-            self.o("    }")
-            self.o()
         else:
             self.output_doc(node, "    ")
             self.o("    add%s(&mut self) {" % (ucamel(lname)))
@@ -595,7 +578,9 @@ class Generator:
     ) -> None:
         self.output_doc(node, "        ")
         if inplace:
-            self.o("    pub fn add_%s(&mut self, v: &[u8]) {}" % (lname))  # TODO(jakobt)
+            self.o(
+                "    pub fn add_%s(&mut self, v: &[u8]) {}" % (lname)
+            )  # TODO(jakobt)
         else:
             self.o(
                 "    pub fn set_%s(&mut self, v: &scalgo_proto::BytesOut<'a>) {self._slice.set_pod::<u16>(0, &%d); self._slice.set_bytes(2, Some(v));}"
@@ -771,6 +756,7 @@ class Generator:
         self.o("}")
         # TODO(jakobt) copy union inplace
 
+        self.o("#[derive(Copy, Clone)]")
         self.o("pub struct %s {}" % union.name)
         self.o("impl<'a> scalgo_proto::UnionFactory<'a> for %s {" % union.name)
         self.o("    type In = %sIn<'a>;" % union.name)
@@ -807,12 +793,8 @@ class Generator:
         self.o("        _ => Ok(Self::In::NONE),")
         self.o("        }")
         self.o("    }")
-        self.o(
-            "    fn new_out(slice: scalgo_proto::ArenaSlice<'a>) -> Self::Out {"
-        )
-        self.o(
-            "        Self::Out{_slice: slice, _p: std::marker::PhantomData{}}"
-        )
+        self.o("    fn new_out(slice: scalgo_proto::ArenaSlice<'a>) -> Self::Out {")
+        self.o("        Self::Out{_slice: slice, _p: std::marker::PhantomData{}}")
         self.o("    }")
         self.o(
             "    fn new_inplace_out(slice: scalgo_proto::ArenaSlice<'a>) -> Self::InplaceOut {"
@@ -1050,7 +1032,12 @@ class Generator:
             elif v.struct:
                 self.o(
                     "    pub fn %s<'b>(&'b mut self) -> %sOut<'b> {scalgo_proto::StructOut::new(self._slice.part(%d, %d))}"
-                    % (self.value(v.identifier), v.struct.name, v.offset, v.struct.bytes)
+                    % (
+                        self.value(v.identifier),
+                        v.struct.name,
+                        v.offset,
+                        v.struct.bytes,
+                    )
                 )
             elif v.enum:
                 self.o(
@@ -1092,6 +1079,7 @@ class Generator:
 
     def generate(self, ast: List[AstNode]) -> None:
         imports: Dict[int, Set[str]] = {}
+
         for node in ast:
             if node.document != 0:
                 continue
@@ -1104,9 +1092,11 @@ class Generator:
                 elif isinstance(u, Enum):
                     i.add(u.name)
                 elif isinstance(u, Table):
+                    i.add("%s" % u.name)
                     i.add("%sIn" % u.name)
                     i.add("%sOut" % u.name)
                 elif isinstance(u, Union):
+                    i.add("%s" % u.name)
                     i.add("%sIn" % u.name)
                     i.add("%sOut" % u.name)
                 else:
@@ -1114,7 +1104,8 @@ class Generator:
 
         for (d, imp) in imports.items():
             doc = self.documents.by_id[d]
-            self.o("import {%s} from '%s'" % (", ".join(imp), doc.name))
+            for i in imp:
+                self.o("use crate::%s::%s;" % (doc.name, i))
 
         for node in ast:
             if node.document != 0:

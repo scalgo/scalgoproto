@@ -83,6 +83,16 @@ impl<'a, F: StructFactory<'a>> MetaType for StructType<'a, F> {
     }
 }
 
+#[derive(Copy, Clone)]
+pub struct UnionType<'a, F: UnionFactory<'a>> {
+    p: std::marker::PhantomData<&'a F>,
+}
+impl<'a, F: UnionFactory<'a>> MetaType for UnionType<'a, F> {
+    fn list_bytes(len: usize) -> usize {
+        len * 8
+    }
+}
+
 pub trait Enum: Copy + std::fmt::Debug {
     fn max_value() -> u8;
 }
@@ -520,13 +530,15 @@ impl<'a, T: MetaType, P: Placement> ListOut<'a, T, P> {
     pub fn len(&self) -> usize {
         self._len
     }
-
 }
 
 impl<'a, T: Copy + std::fmt::Debug, P: Placement> ListOut<'a, PodType<T>, P> {
     pub fn set(&mut self, idx: usize, v: T) {
         assert!(idx < self._len);
-        unsafe {self.slice.set_pod_unsafe(idx * std::mem::size_of::<T>(), &v)};
+        unsafe {
+            self.slice
+                .set_pod_unsafe(idx * std::mem::size_of::<T>(), &v)
+        };
     }
 }
 impl<'a, P: Placement> ListOut<'a, BoolType, P> {
@@ -558,7 +570,7 @@ impl<'a, P: Placement> ListOut<'a, BytesType, P> {
     }
     pub fn add(&mut self, idx: usize, v: &[u8]) -> BytesOut<'a> {
         assert!(idx < self._len);
-        self.slice.add_bytes( idx * 6, v)
+        self.slice.add_bytes(idx * 6, v)
     }
 }
 impl<'a, F: TableFactory<'a>, P: Placement> ListOut<'a, TableType<'a, F>, P> {
@@ -571,10 +583,23 @@ impl<'a, F: TableFactory<'a>, P: Placement> ListOut<'a, TableType<'a, F>, P> {
         self.slice.add_table::<F>(idx * 6)
     }
 }
-impl<'a, F, P: Placement> ListOut<'a, StructType<'a, F>, P> where F: for<'b> StructFactory<'b> {
-    pub fn get<'b>(&'b mut self, idx: usize) -> <F as StructFactory<'b>>::Out { 
+impl<'a, F, P: Placement> ListOut<'a, StructType<'a, F>, P>
+where
+    F: for<'b> StructFactory<'b>,
+{
+    pub fn get<'b>(&'b mut self, idx: usize) -> <F as StructFactory<'b>>::Out {
         assert!(idx < self._len);
         StructOut::new(self.slice.part(idx * F::size(), F::size()))
+    }
+}
+
+impl<'a, F, P: Placement> ListOut<'a, UnionType<'a, F>, P>
+where
+    F: for<'b> UnionFactory<'b>,
+{
+    pub fn get<'b>(&'b mut self, idx: usize) -> <F as UnionFactory<'b>>::Out {
+        assert!(idx < self._len);
+        F::new_out(self.slice.part(idx * 8, 8))
     }
 }
 
@@ -609,7 +634,7 @@ impl<'a, T: Enum> ListAccess<'a> for EnumListAccess<'a, T> {
 pub struct StructListAccess<'a, F: StructFactory<'a> + 'a> {
     p: std::marker::PhantomData<&'a F>,
 }
-impl<'a, F: StructFactory<'a,> + 'a> ListAccess<'a> for StructListAccess<'a, F> {
+impl<'a, F: StructFactory<'a> + 'a> ListAccess<'a> for StructListAccess<'a, F> {
     type Output = F::In;
     fn bytes(size: usize) -> usize {
         size * F::size()
@@ -671,7 +696,20 @@ impl<'a> ListAccess<'a> for BoolListAccess<'a> {
     }
 }
 
-pub trait UnionFactory<'a> {
+pub struct UnionListAccess<'a, F: UnionFactory<'a> + 'a> {
+    p: std::marker::PhantomData<&'a F>,
+}
+impl<'a, F: UnionFactory<'a> + 'a> ListAccess<'a> for UnionListAccess<'a, F> {
+    type Output = Result<F::In>;
+    fn bytes(size: usize) -> usize {
+        size * 8
+    }
+    unsafe fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
+        reader.get_union::<F>(idx * 8)
+    }
+}
+
+pub trait UnionFactory<'a>: Copy {
     type In: std::fmt::Debug;
     type Out;
     type InplaceOut;
@@ -721,9 +759,9 @@ pub fn read_message<'a, F: TableFactory<'a> + 'a>(data: &'a [u8]) -> Result<F::I
 }
 
 enum ArenaState {
-    BeforeWriter, 
+    BeforeWriter,
     BeforeRoot,
-    AfterRoot
+    AfterRoot,
 }
 
 pub struct PArena {
@@ -733,7 +771,7 @@ pub struct PArena {
 
 impl PArena {
     fn allocate<'a>(&'a self, size: usize, fill: u8) -> ArenaSlice<'a> {
-        let d = unsafe {&mut *self.data.get()};
+        let d = unsafe { &mut *self.data.get() };
         let offset = d.len();
         d.resize(offset + size, fill);
         ArenaSlice {
@@ -744,7 +782,7 @@ impl PArena {
     }
 
     fn allocate_default<'a>(&'a self, head: usize, default: &[u8]) -> ArenaSlice<'a> {
-        let d = unsafe {&mut *self.data.get()};
+        let d = unsafe { &mut *self.data.get() };
         let offset = d.len();
         d.reserve(offset + head + default.len());
         d.resize(offset + head, 0);
@@ -752,7 +790,7 @@ impl PArena {
         ArenaSlice {
             arena: self,
             offset: offset,
-            length: head + default.len()
+            length: head + default.len(),
         }
     }
 
@@ -761,9 +799,7 @@ impl PArena {
         unsafe {
             slice.set_pod_unsafe(0, &F::magic());
             slice.set_u48_unsafe(4, F::size() as u64);
-            F::new_out(
-                slice.cut(10, 0)
-            )
+            F::new_out(slice.cut(10, 0))
         }
     }
 
@@ -773,9 +809,7 @@ impl PArena {
             slice.set_pod_unsafe(0, &BYTESMAGIC);
             slice.set_u48_unsafe(4, v.len() as u64);
             std::ptr::copy_nonoverlapping(v.as_ptr(), slice.data(10), v.len());
-            BytesOut {
-                slice: slice
-            }
+            BytesOut { slice: slice }
         }
     }
 
@@ -785,19 +819,13 @@ impl PArena {
             slice.set_pod_unsafe(0, &TEXTMAGIC);
             slice.set_u48_unsafe(4, v.len() as u64);
             let data = &mut *self.data.get();
-            std::ptr::copy_nonoverlapping(
-                v.as_bytes().as_ptr(),
-                slice.data(10),
-                v.len(),
-            );
-            TextOut {
-                slice: slice
-            }
+            std::ptr::copy_nonoverlapping(v.as_bytes().as_ptr(), slice.data(10), v.len());
+            TextOut { slice: slice }
         }
     }
 
     pub fn create_list<'a, T: MetaType>(&'a self, len: usize) -> ListOut<'a, T, Normal> {
-        let mut slice = self.allocate(T::list_bytes(len) + 10,  T::list_def());
+        let mut slice = self.allocate(T::list_bytes(len) + 10, T::list_def());
         unsafe {
             slice.set_pod_unsafe(0, &LISTMAGIC);
             slice.set_u48_unsafe(4, len as u64);
@@ -826,23 +854,31 @@ impl<'a> ArenaSlice<'a> {
     }
 
     pub fn part(&mut self, offset: usize, length: usize) -> ArenaSlice {
-        assert!(offset+length < self.length);
-        ArenaSlice{arena: self.arena, offset: self.offset + offset, length: length}
+        assert!(offset + length <= self.length);
+        ArenaSlice {
+            arena: self.arena,
+            offset: self.offset + offset,
+            length: length,
+        }
     }
 
     pub fn cut(self, start: usize, end: usize) -> Self {
-        assert!(start+end <= self.length);
-        ArenaSlice{arena: self.arena, offset: self.offset + start, length: self.length - end}
+        assert!(start + end <= self.length);
+        ArenaSlice {
+            arena: self.arena,
+            offset: self.offset + start,
+            length: self.length - end,
+        }
     }
 
-    unsafe fn data(&self, o: usize) -> * mut u8 {
+    unsafe fn data(&self, o: usize) -> *mut u8 {
         let data = &mut *self.arena.data.get();
         data.as_mut_ptr().add(self.offset + o)
     }
 
     fn check_offset(&self, o: usize, size: usize) {
         //TODO(jakot) fixme we should use size
-        assert!(self.offset + o < unsafe{(*self.arena.data.get()).len()});
+        assert!(self.offset + o < unsafe { (*self.arena.data.get()).len() });
     }
 
     fn check_inplace(&self, o: usize) {
@@ -863,7 +899,7 @@ impl<'a> ArenaSlice<'a> {
 
     pub fn set_pod<T: Copy + std::fmt::Debug>(&mut self, offset: usize, value: &T) {
         self.check_offset(offset, std::mem::size_of::<T>());
-        unsafe {self.set_pod_unsafe(offset, value)}
+        unsafe { self.set_pod_unsafe(offset, value) }
     }
 
     pub unsafe fn set_bit_unsafe(&mut self, offset: usize, bit: usize, value: bool) {
@@ -878,7 +914,7 @@ impl<'a> ArenaSlice<'a> {
     pub fn set_bit(&mut self, offset: usize, bit: usize, value: bool) {
         self.check_offset(offset, 1);
         assert!(bit < 8);
-        unsafe {self.set_bit_unsafe(offset, bit, value)}
+        unsafe { self.set_bit_unsafe(offset, bit, value) }
     }
 
     pub unsafe fn set_bool_unsafe(&mut self, offset: usize, value: bool) {
@@ -887,30 +923,24 @@ impl<'a> ArenaSlice<'a> {
 
     pub fn set_bool(&mut self, offset: usize, value: bool) {
         self.check_offset(offset, 1);
-        unsafe {self.set_bool_unsafe(offset, value)}
+        unsafe { self.set_bool_unsafe(offset, value) }
     }
 
     pub unsafe fn set_u48_unsafe(&mut self, offset: usize, value: u64) {
-        std::ptr::copy_nonoverlapping(
-            &value as *const u64 as *const u8,
-            self.data(offset),
-            6,
-        );
+        std::ptr::copy_nonoverlapping(&value as *const u64 as *const u8, self.data(offset), 6);
     }
 
     pub fn set_u48(&mut self, offset: usize, value: u64) {
         self.check_offset(offset, 6);
         assert!(value < 1 << 42);
-        unsafe {self.set_u48_unsafe(offset, value)}
+        unsafe { self.set_u48_unsafe(offset, value) }
     }
 
     pub unsafe fn set_enum_unsafe<T: Enum>(&mut self, offset: usize, value: Option<T>) {
         match value {
-            Some(vv) => std::ptr::copy_nonoverlapping(
-                &vv as *const T as *const u8,
-                self.data(offset),
-                1,
-            ),
+            Some(vv) => {
+                std::ptr::copy_nonoverlapping(&vv as *const T as *const u8, self.data(offset), 1)
+            }
             None => *self.data(offset) = 255,
         }
     }
@@ -918,7 +948,7 @@ impl<'a> ArenaSlice<'a> {
     pub fn set_enum<T: Enum>(&mut self, offset: usize, value: Option<T>) {
         assert!(std::mem::size_of::<T>() == 1);
         self.check_offset(offset, 1);
-        unsafe {self.set_enum_unsafe(offset, value)}
+        unsafe { self.set_enum_unsafe(offset, value) }
     }
 
     pub fn set_table<T: TableOut<Normal>>(&mut self, offset: usize, value: Option<&T>) {
@@ -938,10 +968,7 @@ impl<'a> ArenaSlice<'a> {
         a
     }
 
-    pub fn add_table_inplace<F: TableFactory<'a>>(
-        &mut self,
-        offset: usize,
-    ) -> F::InplaceOut {
+    pub fn add_table_inplace<F: TableFactory<'a>>(&mut self, offset: usize) -> F::InplaceOut {
         let slice = self.arena.allocate_default(0, F::default());
         self.check_inplace(slice.offset);
         self.set_u48(offset, F::size() as u64);
@@ -992,7 +1019,7 @@ impl<'a> ArenaSlice<'a> {
     }
 
     pub fn add_text_inplace(&mut self, offset: usize, v: &str) {
-        let slice = self.arena.allocate(1+v.len(), 0);
+        let slice = self.arena.allocate(1 + v.len(), 0);
         self.check_inplace(slice.offset);
         self.set_u48(offset, v.len() as u64);
         unsafe {
@@ -1000,11 +1027,7 @@ impl<'a> ArenaSlice<'a> {
         };
     }
 
-    pub fn set_list<T: MetaType>(
-        &mut self,
-        offset: usize,
-        v: Option<&ListOut<'a, T, Normal>>,
-    ) {
+    pub fn set_list<T: MetaType>(&mut self, offset: usize, v: Option<&ListOut<'a, T, Normal>>) {
         let o = match v {
             Some(t) => t.slice.offset,
             None => 0,
@@ -1012,11 +1035,7 @@ impl<'a> ArenaSlice<'a> {
         self.set_u48(offset, o as u64);
     }
 
-    pub fn add_list<T: MetaType>(
-        &mut self,
-        offset: usize,
-        len: usize,
-    ) -> ListOut<'a, T, Normal> {
+    pub fn add_list<T: MetaType>(&mut self, offset: usize, len: usize) -> ListOut<'a, T, Normal> {
         let ans = self.arena.create_list::<T>(len);
         self.set_list(offset, Some(&ans));
         ans
@@ -1027,7 +1046,7 @@ impl<'a> ArenaSlice<'a> {
         offset: usize,
         len: usize,
     ) -> ListOut<'a, T, Inplace> {
-        let slice = self.arena.allocate(T::list_bytes(len),  T::list_def());
+        let slice = self.arena.allocate(T::list_bytes(len), T::list_def());
         self.check_inplace(slice.offset);
         self.set_u48(offset, len as u64);
         ListOut {
@@ -1038,25 +1057,30 @@ impl<'a> ArenaSlice<'a> {
         }
     }
 
-
-    pub fn get_struct<'b, F: StructFactory<'b>>(&'b mut self, offset: usize) -> F::Out where 'a: 'b {
+    pub fn get_struct<'b, F: StructFactory<'b>>(&'b mut self, offset: usize) -> F::Out
+    where
+        'a: 'b,
+    {
         StructOut::new(self.part(offset, F::size()))
     }
 
-    pub fn get_union<'b, F: UnionFactory<'b>>(&'b mut self, offset: usize) -> F::Out where 'a : 'b {
+    pub fn get_union<'b, F: UnionFactory<'b>>(&'b mut self, offset: usize) -> F::Out
+    where
+        'a: 'b,
+    {
         F::new_out(self.part(offset, 10))
     }
 
-    pub fn get_union_inplace<'b, F: UnionFactory<'b>>(
-        &'b mut self,
-        offset: usize,
-    ) -> F::InplaceOut where 'a : 'b{
+    pub fn get_union_inplace<'b, F: UnionFactory<'b>>(&'b mut self, offset: usize) -> F::InplaceOut
+    where
+        'a: 'b,
+    {
         F::new_inplace_out(self.part(offset, 10))
     }
 }
 
 pub struct Arena {
-    arena: PArena
+    arena: PArena,
 }
 
 impl Arena {
@@ -1065,11 +1089,11 @@ impl Arena {
             arena: PArena {
                 data: std::cell::UnsafeCell::new(data),
                 state: std::cell::UnsafeCell::<ArenaState>::new(ArenaState::BeforeWriter),
-            }
+            },
         }
     }
     pub fn finalize(self) -> Vec<u8> {
-        unsafe{
+        unsafe {
             if let ArenaState::AfterRoot = *self.arena.state.get() {
             } else {
                 panic!("A root should be set before finalize is called")
@@ -1108,7 +1132,7 @@ impl<'a> Writer<'a> {
             self.slice.set_pod(0, &ROOTMAGIC);
             self.slice.set_u48(4, (root.offset() - 10) as u64);
             root
-       }
+        }
     }
 
     pub fn add_table<F: TableFactory<'a> + 'a>(&mut self) -> F::Out {
@@ -1153,10 +1177,7 @@ impl<'a> Writer<'a> {
     pub fn add_f64_list(&mut self, size: usize) -> ListOut<'a, PodType<f64>, Normal> {
         self.slice.arena.create_list::<PodType<f64>>(size)
     }
-    pub fn add_enum_list<T: Enum + 'a>(
-        &mut self,
-        size: usize,
-    ) -> ListOut<'a, EnumType<T>, Normal> {
+    pub fn add_enum_list<T: Enum + 'a>(&mut self, size: usize) -> ListOut<'a, EnumType<T>, Normal> {
         self.slice.arena.create_list::<EnumType<T>>(size)
     }
     pub fn add_table_list<F: TableFactory<'a> + 'a>(
@@ -1171,6 +1192,12 @@ impl<'a> Writer<'a> {
     ) -> ListOut<'a, StructType<'a, F>, Normal> {
         self.slice.arena.create_list::<StructType<F>>(size)
     }
+    pub fn add_union_list<F: UnionFactory<'a> + 'a>(
+        &mut self,
+        size: usize,
+    ) -> ListOut<'a, UnionType<'a, F>, Normal> {
+        self.slice.arena.create_list::<UnionType<F>>(size)
+    }
     pub fn add_text_list(&mut self, size: usize) -> ListOut<'a, TextType, Normal> {
         self.slice.arena.create_list::<TextType>(size)
     }
@@ -1183,9 +1210,9 @@ impl<'a> Writer<'a> {
 }
 
 pub struct TextOut<'a> {
-    slice: ArenaSlice<'a>
+    slice: ArenaSlice<'a>,
 }
 
 pub struct BytesOut<'a> {
-    slice: ArenaSlice<'a>
+    slice: ArenaSlice<'a>,
 }

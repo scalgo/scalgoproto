@@ -1,5 +1,7 @@
+mod base;
+mod complex2;
 mod scalgo_proto;
-mod simple;
+mod union;
 
 macro_rules! require {
     ( $x:expr, $y:expr ) => {{
@@ -149,18 +151,18 @@ fn validate_out(data: &[u8], path: &str) -> bool {
 }
 
 fn test_out_default(path: &str) -> bool {
-    let arena = scalgo_proto::Arena::new(vec!());
+    let arena = scalgo_proto::Arena::new(vec![]);
     let mut writer = scalgo_proto::Writer::new(&arena);
-    writer.add_root::<simple::Simple>();
+    writer.add_root::<base::Simple>();
     let data = arena.finalize();
     return validate_out(&data, path);
 }
 
 fn test_in_default(path: &str) -> scalgo_proto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
-    let s = scalgo_proto::read_message::<simple::Simple>(&data)?;
+    let s = scalgo_proto::read_message::<base::Simple>(&data)?;
     require!(s.e(), None);
-    require!(s.s().e(), Some(simple::MyEnum::A));
+    require!(s.s().e(), Some(base::MyEnum::A));
     require!(s.s().s().x(), 0);
     require!(s.s().s().x(), 0);
     require!(s.s().s().y(), 0.0);
@@ -216,12 +218,12 @@ fn test_in_default(path: &str) -> scalgo_proto::Result<()> {
 }
 
 fn test_out(path: &str) -> bool {
-    let arena = scalgo_proto::Arena::new(vec!());
+    let arena = scalgo_proto::Arena::new(vec![]);
     let mut writer = scalgo_proto::Writer::new(&arena);
-    let mut s = writer.add_root::<simple::Simple>();
-    s.e(Some(simple::MyEnum::C));
+    let mut s = writer.add_root::<base::Simple>();
+    s.e(Some(base::MyEnum::C));
     let mut ss = s.s();
-    ss.e(Some(simple::MyEnum::D));
+    ss.e(Some(base::MyEnum::D));
     let mut sss = ss.s();
     sss.x(42);
     sss.y(27.0);
@@ -269,9 +271,9 @@ fn test_out(path: &str) -> bool {
 
 fn test_in(path: &str) -> scalgo_proto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
-    let s = scalgo_proto::read_message::<simple::Simple>(&data)?;
-    require!(s.e(), Some(simple::MyEnum::C));
-    require!(s.s().e(), Some(simple::MyEnum::D));
+    let s = scalgo_proto::read_message::<base::Simple>(&data)?;
+    require!(s.e(), Some(base::MyEnum::C));
+    require!(s.s().e(), Some(base::MyEnum::D));
     require!(s.s().s().x(), 42);
     require!(s.s().s().y(), 27.0);
     require!(s.s().s().z(), true);
@@ -329,10 +331,10 @@ fn test_in(path: &str) -> scalgo_proto::Result<()> {
 }
 
 fn test_out_complex(path: &str) -> bool {
-    let arena = scalgo_proto::Arena::new(vec!());
+    let arena = scalgo_proto::Arena::new(vec![]);
     let mut writer = scalgo_proto::Writer::new(&arena);
 
-    let mut m = writer.add_table::<simple::Member>();
+    let mut m = writer.add_table::<base::Member>();
     m.id(42);
 
     let mut l = writer.add_i32_list(31);
@@ -340,10 +342,10 @@ fn test_out_complex(path: &str) -> bool {
         l.set(i, 100 - 2 * (i) as i32);
     }
 
-    let mut l2 = writer.add_enum_list::<simple::MyEnum>(2);
-    l2.set(0, Some(simple::MyEnum::A));
+    let mut l2 = writer.add_enum_list::<base::MyEnum>(2);
+    l2.set(0, Some(base::MyEnum::A));
 
-    let l3 = writer.add_struct_list::<simple::MyStruct>(1);
+    let l3 = writer.add_struct_list::<base::MyStruct>(1);
 
     let b = writer.add_bytes(b"bytes");
     let t = writer.add_text("text");
@@ -356,7 +358,7 @@ fn test_out_complex(path: &str) -> bool {
     let mut l5 = writer.add_bytes_list(1);
     l5.set(0, Some(&b));
 
-    let mut l6 = writer.add_table_list::<simple::Member>(3);
+    let mut l6 = writer.add_table_list::<base::Member>(3);
     l6.set(0, Some(&m));
     l6.set(2, Some(&m));
 
@@ -374,7 +376,7 @@ fn test_out_complex(path: &str) -> bool {
     l10.set(2, true);
     l10.set(8, true);
 
-    let mut s = writer.add_root::<simple::Complex>();
+    let mut s = writer.add_root::<base::Complex>();
     s.set_member(Some(&m));
     s.set_text(Some(&t));
     s.set_my_bytes(Some(&b));
@@ -394,7 +396,7 @@ fn test_out_complex(path: &str) -> bool {
 
 fn test_in_complex(path: &str) -> scalgo_proto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
-    let s = scalgo_proto::read_message::<simple::Complex>(&data)?;
+    let s = scalgo_proto::read_message::<base::Complex>(&data)?;
     require_none!(ce!(s.nmember()));
     require_none!(ce!(s.ntext()));
     require_none!(ce!(s.nbytes()));
@@ -410,7 +412,7 @@ fn test_in_complex(path: &str) -> scalgo_proto::Result<()> {
     }
     let l = require_some!(ce!(s.enum_list()));
     require!(l.len(), 2);
-    require!(l.get(0), Some(simple::MyEnum::A));
+    require!(l.get(0), Some(base::MyEnum::A));
     require!(l.get(1), None);
     let l = require_some!(ce!(s.struct_list()));
     require!(l.len(), 1);
@@ -454,121 +456,97 @@ fn test_in_complex(path: &str) -> scalgo_proto::Result<()> {
 }
 
 fn test_out_complex2(path: &str) -> bool {
-    let arena = scalgo_proto::Arena::new(vec!());
+    let arena = scalgo_proto::Arena::new(vec![]);
     let mut writer = scalgo_proto::Writer::new(&arena);
 
-    let mut m = writer.add_table::<simple::Member>();
+    let mut m = writer.add_table::<base::Member>();
     m.id(42);
     let b = writer.add_bytes(b"bytes");
     let t = writer.add_text("text");
-    /*
-    l = w.construct_enum_list(base.NamedUnionEnumList, 2)
-    l[0] = base.NamedUnionEnumList.x
-    l[1] = base.NamedUnionEnumList.z
 
-    l2 = w.construct_struct_list(complex2.Complex2L, 1)
-    l2[0] = complex2.Complex2L(2, True)
+    let mut l = writer.add_enum_list::<base::NamedUnionEnumList>(2);
+    l.set(0, Some(base::NamedUnionEnumList::X));
+    l.set(1, Some(base::NamedUnionEnumList::Z));
 
-    l3 = w.construct_union_list(base.NamedUnionOut, 2)
-    l3[0].text = t
-    l3[1].my_bytes = b
+    let mut l2 = writer.add_struct_list::<complex2::Complex2L>(1);
+    let mut c = l2.get(0);
+    c.a(2);
+    c.b(true);
 
-    r = w.construct_table(complex2.Complex2Out)
-    r.u1.member = m
-    r.u2.text = t
-    r.u3.my_bytes = b
-    r.u4.enum_list = l
-    r.u5.add_a()
+    let mut l3 = writer.add_union_list::<base::NamedUnion>(2);
+    l3.get(0).set_text(&t);
+    l3.get(1).set_my_bytes(&b);
 
-    m2 = r.add_hat()
-    m2.id = 43
-
-    r.l = l2
-    r.s = complex2.Complex2S(complex2.Complex2SX.p, complex2.Complex2SY(8))
-    r.l2 = l3
-    data = w.finalize(r)*/
-
-    false
+    let mut r = writer.add_root::<complex2::Complex2>();
+    r.u1().set_member(&m);
+    r.u2().set_text(&t);
+    r.u3().set_my_bytes(&b);
+    r.u4().set_enum_list(&l);
+    r.u5().add_a();
+    r.add_hat().id(43);
+    r.set_l(Some(&l2));
+    r.s().x(Some(complex2::Complex2SX::P));
+    r.s().y().z(8);
+    r.set_l2(Some(&l3));
+    let data = arena.finalize();
+    return validate_out(&data, path);
 }
 
 fn test_in_complex2(path: &str) -> scalgo_proto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
-    /*let s = scalgo_proto::read_message::<simple::Complex2>(&data)?;
-        let m = match s.u1() {
-
-        };
-
-        s = r.root(complex2.Complex2In)
-        if require(s.u1.is_member, True):
-            return False
-        if require(s.u1.member.id, 42):
-            return False
-        if require(s.u2.is_text, True):
-            return False
-        if require(s.u2.text, "text"):
-            return False
-        if require(s.u3.is_my_bytes, True):
-            return False
-        if require(s.u3.my_bytes, b"bytes"):
-            return False
-        if require(s.u4.is_enum_list, True):
-            return False
-        l = s.u4.enum_list
-        if require(len(l), 2):
-            return False
-        if require(l[0], base.NamedUnionEnumList.x):
-            return False
-        if require(l[1], base.NamedUnionEnumList.z):
-            return False
-        if require(s.u5.is_a, True):
-            return False
-        if require(s.has_hat, True):
-            return False
-        if require(s.hat.id, 43):
-            return False
-        if require(s.has_l, True):
-            return False
-        l2 = s.l
-        if require(len(l2), 1):
-            return False
-        if require(l2[0].a, 2):
-            return False
-        if require(l2[0].b, True):
-            return False
-        if require(s.s.x, complex2.Complex2SX.p):
-            return False
-        if require(s.s.y.z, 8):
-            return False
-    */
+    let s = scalgo_proto::read_message::<complex2::Complex2>(&data)?;
+    require!(
+        require_enum!(ce!(s.u1()), base::NamedUnionIn::MEMBER(v), v).id(),
+        42
+    );
+    require!(
+        require_enum!(ce!(s.u2()), base::NamedUnionIn::TEXT(v), v),
+        "text"
+    );
+    require!(
+        require_enum!(ce!(s.u3()), base::NamedUnionIn::MYBYTES(v), v),
+        b"bytes"
+    );
+    let l = require_enum!(ce!(s.u4()), base::NamedUnionIn::ENUMLIST(v), v);
+    require!(l.len(), 2);
+    require!(l.get(0), Some(base::NamedUnionEnumList::X));
+    require!(l.get(1), Some(base::NamedUnionEnumList::Z));
+    require_enum!(ce!(s.u5()), complex2::Complex2U5In::A(v), v);
+    require!(require_some!(ce!(s.hat())).id(), 43);
+    let i = require_one_list!(require_some!(ce!(s.l())));
+    require!(i.a(), 2);
+    require!(i.b(), true);
+    require!(s.s().x(), Some(complex2::Complex2SX::P));
+    require!(s.s().y().z(), 8);
     Ok(())
 }
 
 fn test_out_inplace(path: &str) -> bool {
-    let arena = scalgo_proto::Arena::new(vec!());
+    let arena = scalgo_proto::Arena::new(vec![]);
     let mut writer = scalgo_proto::Writer::new(&arena);
 
     let name = writer.add_text("nilson");
-    let mut u = writer.add_table::<simple::InplaceUnion>();
+    let mut u = writer.add_table::<base::InplaceUnion>();
     u.u().add_monkey().set_name(Some(&name));
 
-    let mut u2 = writer.add_table::<simple::InplaceUnion>();
+    let mut u2 = writer.add_table::<base::InplaceUnion>();
     u2.u().add_text().add_t("foobar");
 
-    let mut t = writer.add_table::<simple::InplaceText>();
+    let mut t = writer.add_table::<base::InplaceText>();
     t.id(45);
     t.add_t("cake");
 
-    let mut b = writer.add_table::<simple::InplaceBytes>();
+    let mut b = writer.add_table::<base::InplaceBytes>();
     b.id(46);
     b.add_b(b"hi");
 
-    let mut l = writer.add_table::<simple::InplaceList>();
+    let mut l = writer.add_table::<base::InplaceList>();
     l.id(47);
     let mut ll = l.add_l(2);
     ll.set(0, 24);
     ll.set(1, 99);
 
-    let mut root = writer.add_root::<simple::InplaceRoot>();
+    let mut root = writer.add_root::<base::InplaceRoot>();
     root.set_u(Some(&u));
     root.set_u2(Some(&u2));
     root.set_t(Some(&t));
@@ -580,13 +558,13 @@ fn test_out_inplace(path: &str) -> bool {
 
 fn test_in_inplace(path: &str) -> scalgo_proto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
-    let s = scalgo_proto::read_message::<simple::InplaceRoot>(&data)?;
+    let s = scalgo_proto::read_message::<base::InplaceRoot>(&data)?;
 
     let u = require_some!(ce!(s.u()));
-    let v = require_enum!(ce!(u.u()), simple::InplaceUnionUIn::MONKEY(v), v);
+    let v = require_enum!(ce!(u.u()), base::InplaceUnionUIn::MONKEY(v), v);
     require!(ce!(v.name()), Some("nilson"));
     let u = require_some!(ce!(s.u2()));
-    let v = require_enum!(ce!(u.u()), simple::InplaceUnionUIn::TEXT(v), v);
+    let v = require_enum!(ce!(u.u()), base::InplaceUnionUIn::TEXT(v), v);
     require!(ce!(v.t()), Some("foobar"));
     let u = require_some!(ce!(s.t()));
     require!(ce!(u.t()), Some("cake"));
@@ -603,9 +581,9 @@ fn test_in_inplace(path: &str) -> scalgo_proto::Result<()> {
 }
 
 fn test_out_extend1(path: &str) -> bool {
-    let arena = scalgo_proto::Arena::new(vec!());
+    let arena = scalgo_proto::Arena::new(vec![]);
     let mut writer = scalgo_proto::Writer::new(&arena);
-    let mut o = writer.add_root::<simple::Gen1>();
+    let mut o = writer.add_root::<base::Gen1>();
     o.aa(77);
     let data = arena.finalize();
     return validate_out(&data, path);
@@ -613,17 +591,17 @@ fn test_out_extend1(path: &str) -> bool {
 
 fn test_in_extend1(path: &str) -> scalgo_proto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
-    let s = scalgo_proto::read_message::<simple::Gen2>(&data)?;
+    let s = scalgo_proto::read_message::<base::Gen2>(&data)?;
     require!(s.aa(), 77);
     require!(s.bb(), 42);
-    require_enum!(ce!(s.u()), simple::Gen2UIn::NONE, ());
+    require_enum!(ce!(s.u()), base::Gen2UIn::NONE, ());
     Ok(())
 }
 
 fn test_out_extend2(path: &str) -> bool {
-    let arena = scalgo_proto::Arena::new(vec!());
+    let arena = scalgo_proto::Arena::new(vec![]);
     let mut writer = scalgo_proto::Writer::new(&arena);
-    let mut o = writer.add_root::<simple::Gen2>();
+    let mut o = writer.add_root::<base::Gen2>();
     o.aa(80);
     o.bb(81);
     let mut cake = o.u().add_cake();
@@ -634,14 +612,14 @@ fn test_out_extend2(path: &str) -> bool {
 
 fn test_in_extend2(path: &str) -> scalgo_proto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
-    let s = scalgo_proto::read_message::<simple::Gen3>(&data)?;
+    let s = scalgo_proto::read_message::<base::Gen3>(&data)?;
     require!(s.aa(), 80);
     require!(s.bb(), 81);
     require!(
-        require_enum!(ce!(s.u()), simple::Gen3UIn::CAKE(cake), cake).v(),
+        require_enum!(ce!(s.u()), base::Gen3UIn::CAKE(cake), cake).v(),
         45
     );
-    require!(s.e(), Some(simple::MyEnum::C));
+    require!(s.e(), Some(base::MyEnum::C));
     require!(s.s().x(), 0);
     require!(s.s().y(), 0.0);
     require!(s.s().z(), false);
@@ -680,11 +658,9 @@ fn test_in_extend2(path: &str) -> scalgo_proto::Result<()> {
     Ok(())
 }
 
-mod union;
-
 fn test_out_union(path: &str) -> bool {
     // i = for_copy()
-    let arena = scalgo_proto::Arena::new(vec!());
+    let arena = scalgo_proto::Arena::new(vec![]);
     let mut writer = scalgo_proto::Writer::new(&arena);
     let mut root = writer.add_root::<union::Table3>();
 
@@ -784,74 +760,296 @@ fn test_in_union(path: &str) -> scalgo_proto::Result<()> {
     let i = scalgo_proto::read_message::<union::Table3>(&data)?;
 
     let v1 = require_some!(ce!(i.v1()));
-    require!(require_enum!(ce!(v1.a()), union::Union1In::V1(s), s), "text1");
-    require!(require_enum!(ce!(v1.b()), union::Union1In::V1(s), s), "text2");
-    require!(require_enum!(ce!(v1.c()), union::Union1In::V1(s), s), "text3");
-    require!(require_enum!(ce!(v1.d()), union::Union1In::V1(s), s), "ctext1");
-    require!(require_enum!(ce!(v1.e()), union::Union1In::V1(s), s), "ctext2");
+    require!(
+        require_enum!(ce!(v1.a()), union::Union1In::V1(s), s),
+        "text1"
+    );
+    require!(
+        require_enum!(ce!(v1.b()), union::Union1In::V1(s), s),
+        "text2"
+    );
+    require!(
+        require_enum!(ce!(v1.c()), union::Union1In::V1(s), s),
+        "text3"
+    );
+    require!(
+        require_enum!(ce!(v1.d()), union::Union1In::V1(s), s),
+        "ctext1"
+    );
+    require!(
+        require_enum!(ce!(v1.e()), union::Union1In::V1(s), s),
+        "ctext2"
+    );
 
     let v2 = require_some!(ce!(i.v2()));
-    require!(require_enum!(ce!(v2.a()), union::Union1In::V2(b), b), b"bytes1");
-    require!(require_enum!(ce!(v2.b()), union::Union1In::V2(b), b), b"bytes2");
-    require!(require_enum!(ce!(v2.c()), union::Union1In::V2(b), b), b"bytes3");
-    require!(require_enum!(ce!(v2.d()), union::Union1In::V2(b), b), b"cbytes1");
-    require!(require_enum!(ce!(v2.e()), union::Union1In::V2(b), b), b"cbytes2");
+    require!(
+        require_enum!(ce!(v2.a()), union::Union1In::V2(b), b),
+        b"bytes1"
+    );
+    require!(
+        require_enum!(ce!(v2.b()), union::Union1In::V2(b), b),
+        b"bytes2"
+    );
+    require!(
+        require_enum!(ce!(v2.c()), union::Union1In::V2(b), b),
+        b"bytes3"
+    );
+    require!(
+        require_enum!(ce!(v2.d()), union::Union1In::V2(b), b),
+        b"cbytes1"
+    );
+    require!(
+        require_enum!(ce!(v2.e()), union::Union1In::V2(b), b),
+        b"cbytes2"
+    );
 
     let v3 = require_some!(ce!(i.v3()));
     require!(require_enum!(ce!(v3.a()), union::Union1In::V3(v), v).a(), 1);
     require!(require_enum!(ce!(v3.b()), union::Union1In::V3(v), v).a(), 2);
     require!(require_enum!(ce!(v3.c()), union::Union1In::V3(v), v).a(), 3);
-    require!(require_enum!(ce!(v3.d()), union::Union1In::V3(v), v).a(), 101);
-    require!(require_enum!(ce!(v3.e()), union::Union1In::V3(v), v).a(), 102);
+    require!(
+        require_enum!(ce!(v3.d()), union::Union1In::V3(v), v).a(),
+        101
+    );
+    require!(
+        require_enum!(ce!(v3.e()), union::Union1In::V3(v), v).a(),
+        102
+    );
 
     let v4 = require_some!(ce!(i.v4()));
     require!(require_enum!(ce!(v4.a()), union::Union1In::V4(v), v).a(), 4);
     require!(require_enum!(ce!(v4.b()), union::Union1In::V4(v), v).a(), 5);
     require!(require_enum!(ce!(v4.c()), union::Union1In::V4(v), v).a(), 6);
-    require!(require_enum!(ce!(v4.d()), union::Union1In::V4(v), v).a(), 103);
-    require!(require_enum!(ce!(v4.e()), union::Union1In::V4(v), v).a(), 104);
+    require!(
+        require_enum!(ce!(v4.d()), union::Union1In::V4(v), v).a(),
+        103
+    );
+    require!(
+        require_enum!(ce!(v4.e()), union::Union1In::V4(v), v).a(),
+        104
+    );
 
     let v5 = require_some!(ce!(i.v5()));
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v5.a()), union::Union1In::V5(v), v)))), "text4");
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v5.b()), union::Union1In::V5(v), v)))), "text5");
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v5.c()), union::Union1In::V5(v), v)))), "text6");
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v5.d()), union::Union1In::V5(v), v)))), "ctext3");
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v5.e()), union::Union1In::V5(v), v)))), "ctext4");
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v5.a()),
+            union::Union1In::V5(v),
+            v
+        )))),
+        "text4"
+    );
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v5.b()),
+            union::Union1In::V5(v),
+            v
+        )))),
+        "text5"
+    );
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v5.c()),
+            union::Union1In::V5(v),
+            v
+        )))),
+        "text6"
+    );
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v5.d()),
+            union::Union1In::V5(v),
+            v
+        )))),
+        "ctext3"
+    );
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v5.e()),
+            union::Union1In::V5(v),
+            v
+        )))),
+        "ctext4"
+    );
 
     let v6 = require_some!(ce!(i.v6()));
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v6.a()), union::Union1In::V6(v), v)))), b"bytes4");
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v6.b()), union::Union1In::V6(v), v)))), b"bytes5");
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v6.c()), union::Union1In::V6(v), v)))), b"bytes6");
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v6.d()), union::Union1In::V6(v), v)))), b"cbytes3");
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v6.e()), union::Union1In::V6(v), v)))), b"cbytes4");
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v6.a()),
+            union::Union1In::V6(v),
+            v
+        )))),
+        b"bytes4"
+    );
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v6.b()),
+            union::Union1In::V6(v),
+            v
+        )))),
+        b"bytes5"
+    );
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v6.c()),
+            union::Union1In::V6(v),
+            v
+        )))),
+        b"bytes6"
+    );
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v6.d()),
+            union::Union1In::V6(v),
+            v
+        )))),
+        b"cbytes3"
+    );
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v6.e()),
+            union::Union1In::V6(v),
+            v
+        )))),
+        b"cbytes4"
+    );
 
     let v7 = require_some!(ce!(i.v7()));
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v7.a()), union::Union1In::V7(v), v)))).a(), 7);
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v7.b()), union::Union1In::V7(v), v)))).a(), 8);
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v7.c()), union::Union1In::V7(v), v)))).a(), 9);
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v7.d()), union::Union1In::V7(v), v)))).a(), 105);
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v7.e()), union::Union1In::V7(v), v)))).a(), 106);
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v7.a()),
+            union::Union1In::V7(v),
+            v
+        ))))
+        .a(),
+        7
+    );
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v7.b()),
+            union::Union1In::V7(v),
+            v
+        ))))
+        .a(),
+        8
+    );
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v7.c()),
+            union::Union1In::V7(v),
+            v
+        ))))
+        .a(),
+        9
+    );
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v7.d()),
+            union::Union1In::V7(v),
+            v
+        ))))
+        .a(),
+        105
+    );
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v7.e()),
+            union::Union1In::V7(v),
+            v
+        ))))
+        .a(),
+        106
+    );
 
     let v8 = require_some!(ce!(i.v8()));
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v8.a()), union::Union1In::V8(v), v)))).a(), 10);
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v8.b()), union::Union1In::V8(v), v)))).a(), 11);
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v8.c()), union::Union1In::V8(v), v)))).a(), 12);
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v8.d()), union::Union1In::V8(v), v)))).a(), 107);
-    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v8.e()), union::Union1In::V8(v), v)))).a(), 108);
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v8.a()),
+            union::Union1In::V8(v),
+            v
+        ))))
+        .a(),
+        10
+    );
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v8.b()),
+            union::Union1In::V8(v),
+            v
+        ))))
+        .a(),
+        11
+    );
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v8.c()),
+            union::Union1In::V8(v),
+            v
+        ))))
+        .a(),
+        12
+    );
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v8.d()),
+            union::Union1In::V8(v),
+            v
+        ))))
+        .a(),
+        107
+    );
+    require!(
+        require_some!(ce!(require_one_list!(require_enum!(
+            ce!(v8.e()),
+            union::Union1In::V8(v),
+            v
+        ))))
+        .a(),
+        108
+    );
 
     let v9 = require_some!(ce!(i.v9()));
-    require!(require_one_list!(require_enum!(ce!(v9.a()), union::Union1In::V9(v), v)), 13);
-    require!(require_one_list!(require_enum!(ce!(v9.b()), union::Union1In::V9(v), v)), 14);
-    require!(require_one_list!(require_enum!(ce!(v9.c()), union::Union1In::V9(v), v)), 15);
-    require!(require_one_list!(require_enum!(ce!(v9.d()), union::Union1In::V9(v), v)), 109);
-    require!(require_one_list!(require_enum!(ce!(v9.e()), union::Union1In::V9(v), v)), 110);
+    require!(
+        require_one_list!(require_enum!(ce!(v9.a()), union::Union1In::V9(v), v)),
+        13
+    );
+    require!(
+        require_one_list!(require_enum!(ce!(v9.b()), union::Union1In::V9(v), v)),
+        14
+    );
+    require!(
+        require_one_list!(require_enum!(ce!(v9.c()), union::Union1In::V9(v), v)),
+        15
+    );
+    require!(
+        require_one_list!(require_enum!(ce!(v9.d()), union::Union1In::V9(v), v)),
+        109
+    );
+    require!(
+        require_one_list!(require_enum!(ce!(v9.e()), union::Union1In::V9(v), v)),
+        110
+    );
 
     let v10 = require_some!(ce!(i.v10()));
-    require!(require_one_list!(require_enum!(ce!(v10.a()), union::Union1In::V10(v), v)), true);
-    require!(require_one_list!(require_enum!(ce!(v10.b()), union::Union1In::V10(v), v)), false);
-    require!(require_one_list!(require_enum!(ce!(v10.c()), union::Union1In::V10(v), v)), true);
-    require!(require_one_list!(require_enum!(ce!(v10.d()), union::Union1In::V10(v), v)), true);
-    require!(require_one_list!(require_enum!(ce!(v10.e()), union::Union1In::V10(v), v)), true);
+    require!(
+        require_one_list!(require_enum!(ce!(v10.a()), union::Union1In::V10(v), v)),
+        true
+    );
+    require!(
+        require_one_list!(require_enum!(ce!(v10.b()), union::Union1In::V10(v), v)),
+        false
+    );
+    require!(
+        require_one_list!(require_enum!(ce!(v10.c()), union::Union1In::V10(v), v)),
+        true
+    );
+    require!(
+        require_one_list!(require_enum!(ce!(v10.d()), union::Union1In::V10(v), v)),
+        true
+    );
+    require!(
+        require_one_list!(require_enum!(ce!(v10.e()), union::Union1In::V10(v), v)),
+        true
+    );
 
     Ok(())
 }
