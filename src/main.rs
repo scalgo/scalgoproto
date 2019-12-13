@@ -52,6 +52,16 @@ macro_rules! require_enum {
     }};
 }
 
+macro_rules! require_one_list {
+    ( $x:expr) => {{
+        if $x.len() != 1 {
+            println!("Error {} should have length 1", stringify!($x),);
+            return Err(scalgo_proto::Error::InvalidPointer());
+        }
+        $x.get(0)
+    }};
+}
+
 macro_rules! ce {
     ( $x: expr ) => {{
         match $x {
@@ -139,10 +149,11 @@ fn validate_out(data: &[u8], path: &str) -> bool {
 }
 
 fn test_out_default(path: &str) -> bool {
-    let mut writer = scalgo_proto::Writer::new(1024);
-    let mut o = writer.add_table::<simple::Simple>();
-    let data = writer.finalize(o);
-    return validate_out(data, path);
+    let arena = scalgo_proto::Arena::new(vec!());
+    let mut writer = scalgo_proto::Writer::new(&arena);
+    writer.add_root::<simple::Simple>();
+    let data = arena.finalize();
+    return validate_out(&data, path);
 }
 
 fn test_in_default(path: &str) -> scalgo_proto::Result<()> {
@@ -205,8 +216,9 @@ fn test_in_default(path: &str) -> scalgo_proto::Result<()> {
 }
 
 fn test_out(path: &str) -> bool {
-    let mut writer = scalgo_proto::Writer::new(1024);
-    let mut s = writer.add_table::<simple::Simple>();
+    let arena = scalgo_proto::Arena::new(vec!());
+    let mut writer = scalgo_proto::Writer::new(&arena);
+    let mut s = writer.add_root::<simple::Simple>();
     s.e(Some(simple::MyEnum::C));
     let mut ss = s.s();
     ss.e(Some(simple::MyEnum::D));
@@ -251,8 +263,8 @@ fn test_out(path: &str) -> bool {
     s.oi64(Some(5465729));
     s.of(Some(5.0));
     s.od(Some(6.4));
-    let data = writer.finalize(s);
-    return validate_out(data, path);
+    let data = arena.finalize();
+    return validate_out(&data, path);
 }
 
 fn test_in(path: &str) -> scalgo_proto::Result<()> {
@@ -317,7 +329,8 @@ fn test_in(path: &str) -> scalgo_proto::Result<()> {
 }
 
 fn test_out_complex(path: &str) -> bool {
-    let mut writer = scalgo_proto::Writer::new(1024);
+    let arena = scalgo_proto::Arena::new(vec!());
+    let mut writer = scalgo_proto::Writer::new(&arena);
 
     let mut m = writer.add_table::<simple::Member>();
     m.id(42);
@@ -330,7 +343,7 @@ fn test_out_complex(path: &str) -> bool {
     let mut l2 = writer.add_enum_list::<simple::MyEnum>(2);
     l2.set(0, Some(simple::MyEnum::A));
 
-    let mut l3 = writer.add_struct_list::<simple::MyStruct>(1);
+    let l3 = writer.add_struct_list::<simple::MyStruct>(1);
 
     let b = writer.add_bytes(b"bytes");
     let t = writer.add_text("text");
@@ -341,11 +354,11 @@ fn test_out_complex(path: &str) -> bool {
     }
 
     let mut l5 = writer.add_bytes_list(1);
-    l5.set(0, Some(b));
+    l5.set(0, Some(&b));
 
     let mut l6 = writer.add_table_list::<simple::Member>(3);
-    l6.set(0, Some(m));
-    l6.set(2, Some(m));
+    l6.set(0, Some(&m));
+    l6.set(2, Some(&m));
 
     let mut l7 = writer.add_f32_list(2);
     l7.set(1, 98.0);
@@ -361,22 +374,22 @@ fn test_out_complex(path: &str) -> bool {
     l10.set(2, true);
     l10.set(8, true);
 
-    let mut s = writer.add_table::<simple::Complex>();
-    s.set_member(Some(m));
-    s.set_text(Some(t));
-    s.set_my_bytes(Some(b));
-    s.set_int_list(Some(l));
-    s.set_struct_list(Some(l3));
-    s.set_enum_list(Some(l2));
-    s.set_text_list(Some(l4));
-    s.set_bytes_list(Some(l5));
-    s.set_member_list(Some(l6));
-    s.set_f32list(Some(l7));
-    s.set_f64list(Some(l8));
-    s.set_u8list(Some(l9));
-    s.set_blist(Some(l10));
-    let data = writer.finalize(s);
-    return validate_out(data, path);
+    let mut s = writer.add_root::<simple::Complex>();
+    s.set_member(Some(&m));
+    s.set_text(Some(&t));
+    s.set_my_bytes(Some(&b));
+    s.set_int_list(Some(&l));
+    s.set_struct_list(Some(&l3));
+    s.set_enum_list(Some(&l2));
+    s.set_text_list(Some(&l4));
+    s.set_bytes_list(Some(&l5));
+    s.set_member_list(Some(&l6));
+    s.set_f32list(Some(&l7));
+    s.set_f64list(Some(&l8));
+    s.set_u8list(Some(&l9));
+    s.set_blist(Some(&l10));
+    let data = arena.finalize();
+    return validate_out(&data, path);
 }
 
 fn test_in_complex(path: &str) -> scalgo_proto::Result<()> {
@@ -441,7 +454,9 @@ fn test_in_complex(path: &str) -> scalgo_proto::Result<()> {
 }
 
 fn test_out_complex2(path: &str) -> bool {
-    let mut writer = scalgo_proto::Writer::new(1024);
+    let arena = scalgo_proto::Arena::new(vec!());
+    let mut writer = scalgo_proto::Writer::new(&arena);
+
     let mut m = writer.add_table::<simple::Member>();
     m.id(42);
     let b = writer.add_bytes(b"bytes");
@@ -529,20 +544,21 @@ fn test_in_complex2(path: &str) -> scalgo_proto::Result<()> {
 }
 
 fn test_out_inplace(path: &str) -> bool {
-    let mut writer = scalgo_proto::Writer::new(1024);
+    let arena = scalgo_proto::Arena::new(vec!());
+    let mut writer = scalgo_proto::Writer::new(&arena);
 
     let name = writer.add_text("nilson");
-    let u = writer.add_table::<simple::InplaceUnion>();
-    u.u().add_monkey().set_name(Some(name));
+    let mut u = writer.add_table::<simple::InplaceUnion>();
+    u.u().add_monkey().set_name(Some(&name));
 
-    let u2 = writer.add_table::<simple::InplaceUnion>();
+    let mut u2 = writer.add_table::<simple::InplaceUnion>();
     u2.u().add_text().add_t("foobar");
 
-    let t = writer.add_table::<simple::InplaceText>();
+    let mut t = writer.add_table::<simple::InplaceText>();
     t.id(45);
     t.add_t("cake");
 
-    let b = writer.add_table::<simple::InplaceBytes>();
+    let mut b = writer.add_table::<simple::InplaceBytes>();
     b.id(46);
     b.add_b(b"hi");
 
@@ -552,14 +568,14 @@ fn test_out_inplace(path: &str) -> bool {
     ll.set(0, 24);
     ll.set(1, 99);
 
-    let mut root = writer.add_table::<simple::InplaceRoot>();
-    root.set_u(Some(u));
-    root.set_u2(Some(u2));
-    root.set_t(Some(t));
-    root.set_b(Some(b));
-    root.set_l(Some(l));
-    let data = writer.finalize(root);
-    return validate_out(data, path);
+    let mut root = writer.add_root::<simple::InplaceRoot>();
+    root.set_u(Some(&u));
+    root.set_u2(Some(&u2));
+    root.set_t(Some(&t));
+    root.set_b(Some(&b));
+    root.set_l(Some(&l));
+    let data = arena.finalize();
+    return validate_out(&data, path);
 }
 
 fn test_in_inplace(path: &str) -> scalgo_proto::Result<()> {
@@ -587,11 +603,12 @@ fn test_in_inplace(path: &str) -> scalgo_proto::Result<()> {
 }
 
 fn test_out_extend1(path: &str) -> bool {
-    let mut writer = scalgo_proto::Writer::new(1024);
-    let mut o = writer.add_table::<simple::Gen1>();
+    let arena = scalgo_proto::Arena::new(vec!());
+    let mut writer = scalgo_proto::Writer::new(&arena);
+    let mut o = writer.add_root::<simple::Gen1>();
     o.aa(77);
-    let data = writer.finalize(o);
-    return validate_out(data, path);
+    let data = arena.finalize();
+    return validate_out(&data, path);
 }
 
 fn test_in_extend1(path: &str) -> scalgo_proto::Result<()> {
@@ -604,14 +621,15 @@ fn test_in_extend1(path: &str) -> scalgo_proto::Result<()> {
 }
 
 fn test_out_extend2(path: &str) -> bool {
-    let mut writer = scalgo_proto::Writer::new(1024);
-    let mut o = writer.add_table::<simple::Gen2>();
+    let arena = scalgo_proto::Arena::new(vec!());
+    let mut writer = scalgo_proto::Writer::new(&arena);
+    let mut o = writer.add_root::<simple::Gen2>();
     o.aa(80);
     o.bb(81);
     let mut cake = o.u().add_cake();
     cake.v(45);
-    let data = writer.finalize(o);
-    return validate_out(data, path);
+    let data = arena.finalize();
+    return validate_out(&data, path);
 }
 
 fn test_in_extend2(path: &str) -> scalgo_proto::Result<()> {
@@ -666,20 +684,21 @@ mod union;
 
 fn test_out_union(path: &str) -> bool {
     // i = for_copy()
-    let mut writer = scalgo_proto::Writer::new(1024);
-    let mut root = writer.add_table::<union::Table3>();
+    let arena = scalgo_proto::Arena::new(vec!());
+    let mut writer = scalgo_proto::Writer::new(&arena);
+    let mut root = writer.add_root::<union::Table3>();
 
     let mut v1 = root.add_v1();
     v1.a().add_v1("text1");
     v1.b().add_v1("text2");
-    v1.c().set_v1(writer.add_text("text3"));
+    v1.c().set_v1(&writer.add_text("text3"));
     // v1.d.v1 = i.v1.a.v1
     // v1.e.v1 = i.v1.b.v1
 
     let mut v2 = root.add_v2();
     v2.a().add_v2(b"bytes1");
     v2.b().add_v2(b"bytes2");
-    v2.c().set_v2(writer.add_bytes(b"bytes3"));
+    v2.c().set_v2(&writer.add_bytes(b"bytes3"));
     // v2.d().v2 = i.v2.a.v2
     // v2.e().v2 = i.v2.b.v2
 
@@ -688,7 +707,7 @@ fn test_out_union(path: &str) -> bool {
     v3.b().add_v3().a(2);
     let mut t3 = writer.add_table::<union::Table1>();
     t3.a(3);
-    v3.c().set_v3(t3);
+    v3.c().set_v3(&t3);
     // v3.d.v3 = i.v3.a.v3
     // v3.e.v3 = i.v3.b.v3
 
@@ -697,7 +716,7 @@ fn test_out_union(path: &str) -> bool {
     v4.b().add_v4().a(5);
     let mut t4 = writer.add_table::<union::Union1V4>();
     t4.a(6);
-    v4.c().set_v4(t4);
+    v4.c().set_v4(&t4);
     // v4.d().v4 = i.v4.a.v4
     // v4.e().v4 = i.v4.b.v4
 
@@ -706,17 +725,17 @@ fn test_out_union(path: &str) -> bool {
     v5.b().add_v5(1).add(0, "text5");
     let mut t5 = writer.add_text_list(1);
     t5.add(0, "text6");
-    v5.c().set_v5(t5);
+    v5.c().set_v5(&t5);
     // v5.d.v5 = i.v5.a.v5
     // v5.e.v5 = i.v5.b.v5
 
     let mut v6 = root.add_v6();
     v6.a().add_v6(1).add(0, b"bytes4");
     let mut tt6 = v6.b().add_v6(1);
-    tt6.set(0, Some(writer.add_bytes(b"bytes5")));
+    tt6.set(0, Some(&writer.add_bytes(b"bytes5")));
     let mut t6 = writer.add_bytes_list(1);
-    t6.set(0, Some(writer.add_bytes(b"bytes6")));
-    v6.c().set_v6(t6);
+    t6.set(0, Some(&writer.add_bytes(b"bytes6")));
+    v6.c().set_v6(&t6);
     // v6.d.v6 = i.v6.a.v6
     // v6.e.v6 = i.v6.b.v6
 
@@ -725,7 +744,7 @@ fn test_out_union(path: &str) -> bool {
     v7.b().add_v7(1).add(0).a(8);
     let mut t7 = writer.add_table_list::<union::Table1>(1);
     t7.add(0).a(9);
-    v7.c().set_v7(t7);
+    v7.c().set_v7(&t7);
     // v7.d.v7 = i.v7.a.v7
     // v7.e.v7 = i.v7.b.v7
 
@@ -734,7 +753,7 @@ fn test_out_union(path: &str) -> bool {
     v8.b().add_v8(1).add(0).a(11);
     let mut t8 = writer.add_table_list::<union::Union1V8>(1);
     t8.add(0).a(12);
-    v8.c().set_v8(t8);
+    v8.c().set_v8(&t8);
     // v8.d.v8 = i.v8.a.v8
     // v8.e.v8 = i.v8.b.v8
 
@@ -743,7 +762,7 @@ fn test_out_union(path: &str) -> bool {
     v9.b().add_v9(1).set(0, 14);
     let mut t9 = writer.add_u32_list(1);
     t9.set(0, 15);
-    v9.c().set_v9(t9);
+    v9.c().set_v9(&t9);
     // v9.d.v9 = i.v9.a.v9
     // v9.e.v9 = i.v9.b.v9
 
@@ -752,163 +771,88 @@ fn test_out_union(path: &str) -> bool {
     v10.b().add_v10(1).set(0, false);
     let mut t10 = writer.add_bool_list(1);
     t10.set(0, true);
-    v10.c().set_v10(t10);
+    v10.c().set_v10(&t10);
     // v10.d.v10 = i.v10.a.v10
     // v10.e.v10 = i.v10.b.v10
 
-    let data = writer.finalize(root);
-    return validate_out(data, path);
+    let data = arena.finalize();
+    return validate_out(&data, path);
 }
 
 fn test_in_union(path: &str) -> scalgo_proto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
-    let s = scalgo_proto::read_message::<simple::Gen3>(&data)?;
+    let i = scalgo_proto::read_message::<union::Table3>(&data)?;
 
-    /*
-           if require(i.has_v1, True):
-            return False
-        if require(i.has_v1, True):
-            return False
-        v1 = i.v1
-        if require2(v1.has_a and v1.a.is_v1, v1.a.v1, "text1"):
-            return False
-        if require2(v1.has_b and v1.b.is_v1, v1.b.v1, "text2"):
-            return False
-        if require2(v1.has_c and v1.c.is_v1, v1.c.v1, "text3"):
-            return False
-        if require2(v1.has_d and v1.d.is_v1, v1.d.v1, "ctext1"):
-            return False
-        if require2(v1.has_e and v1.e.is_v1, v1.e.v1, "ctext2"):
-            return False
+    let v1 = require_some!(ce!(i.v1()));
+    require!(require_enum!(ce!(v1.a()), union::Union1In::V1(s), s), "text1");
+    require!(require_enum!(ce!(v1.b()), union::Union1In::V1(s), s), "text2");
+    require!(require_enum!(ce!(v1.c()), union::Union1In::V1(s), s), "text3");
+    require!(require_enum!(ce!(v1.d()), union::Union1In::V1(s), s), "ctext1");
+    require!(require_enum!(ce!(v1.e()), union::Union1In::V1(s), s), "ctext2");
 
-        if require(i.has_v2, True):
-            return False
-        v2 = i.v2
-        if require2(v2.has_a and v2.a.is_v2, v2.a.v2, b"bytes1"):
-            return False
-        if require2(v2.has_b and v2.b.is_v2, v2.b.v2, b"bytes2"):
-            return False
-        if require2(v2.has_c and v2.c.is_v2, v2.c.v2, b"bytes3"):
-            return False
-        if require2(v2.has_d and v2.d.is_v2, v2.d.v2, b"cbytes1"):
-            return False
-        if require2(v2.has_e and v2.e.is_v2, v2.e.v2, b"cbytes2"):
-            return False
+    let v2 = require_some!(ce!(i.v2()));
+    require!(require_enum!(ce!(v2.a()), union::Union1In::V2(b), b), b"bytes1");
+    require!(require_enum!(ce!(v2.b()), union::Union1In::V2(b), b), b"bytes2");
+    require!(require_enum!(ce!(v2.c()), union::Union1In::V2(b), b), b"bytes3");
+    require!(require_enum!(ce!(v2.d()), union::Union1In::V2(b), b), b"cbytes1");
+    require!(require_enum!(ce!(v2.e()), union::Union1In::V2(b), b), b"cbytes2");
 
-        if require(i.has_v3, True):
-            return False
-        v3 = i.v3
-        if require2(v3.has_a and v3.a.is_v3, v3.a.v3.a, 1):
-            return False
-        if require2(v3.has_b and v3.b.is_v3, v3.b.v3.a, 2):
-            return False
-        if require2(v3.has_c and v3.c.is_v3, v3.c.v3.a, 3):
-            return False
-        if require2(v3.has_d and v3.d.is_v3, v3.d.v3.a, 101):
-            return False
-        if require2(v3.has_e and v3.e.is_v3, v3.e.v3.a, 102):
-            return False
+    let v3 = require_some!(ce!(i.v3()));
+    require!(require_enum!(ce!(v3.a()), union::Union1In::V3(v), v).a(), 1);
+    require!(require_enum!(ce!(v3.b()), union::Union1In::V3(v), v).a(), 2);
+    require!(require_enum!(ce!(v3.c()), union::Union1In::V3(v), v).a(), 3);
+    require!(require_enum!(ce!(v3.d()), union::Union1In::V3(v), v).a(), 101);
+    require!(require_enum!(ce!(v3.e()), union::Union1In::V3(v), v).a(), 102);
 
-        if require(i.has_v4, True):
-            return False
-        v4 = i.v4
-        if require2(v4.has_a and v4.a.is_v4, v4.a.v4.a, 4):
-            return False
-        if require2(v4.has_b and v4.b.is_v4, v4.b.v4.a, 5):
-            return False
-        if require2(v4.has_c and v4.c.is_v4, v4.c.v4.a, 6):
-            return False
-        if require2(v4.has_d and v4.d.is_v4, v4.d.v4.a, 103):
-            return False
-        if require2(v4.has_e and v4.e.is_v4, v4.e.v4.a, 104):
-            return False
+    let v4 = require_some!(ce!(i.v4()));
+    require!(require_enum!(ce!(v4.a()), union::Union1In::V4(v), v).a(), 4);
+    require!(require_enum!(ce!(v4.b()), union::Union1In::V4(v), v).a(), 5);
+    require!(require_enum!(ce!(v4.c()), union::Union1In::V4(v), v).a(), 6);
+    require!(require_enum!(ce!(v4.d()), union::Union1In::V4(v), v).a(), 103);
+    require!(require_enum!(ce!(v4.e()), union::Union1In::V4(v), v).a(), 104);
 
-        if require(i.has_v5, True):
-            return False
-        v5 = i.v5
-        if require2(v5.has_a and v5.a.is_v5 and len(v5.a.v5) == 1, v5.a.v5[0], "text4"):
-            return False
-        if require2(v5.has_b and v5.b.is_v5 and len(v5.b.v5) == 1, v5.b.v5[0], "text5"):
-            return False
-        if require2(v5.has_c and v5.c.is_v5 and len(v5.c.v5) == 1, v5.c.v5[0], "text6"):
-            return False
-        if require2(v5.has_d and v5.d.is_v5 and len(v5.d.v5) == 1, v5.d.v5[0], "ctext3"):
-            return False
-        if require2(v5.has_e and v5.e.is_v5 and len(v5.e.v5) == 1, v5.e.v5[0], "ctext4"):
-            return False
+    let v5 = require_some!(ce!(i.v5()));
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v5.a()), union::Union1In::V5(v), v)))), "text4");
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v5.b()), union::Union1In::V5(v), v)))), "text5");
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v5.c()), union::Union1In::V5(v), v)))), "text6");
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v5.d()), union::Union1In::V5(v), v)))), "ctext3");
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v5.e()), union::Union1In::V5(v), v)))), "ctext4");
 
-        if require(i.has_v6, True):
-            return False
-        v6 = i.v6
-        if require2(v6.has_a and v6.a.is_v6 and len(v6.a.v6) == 1, v6.a.v6[0], b"bytes4"):
-            return False
-        if require2(v6.has_b and v6.b.is_v6 and len(v6.b.v6) == 1, v6.b.v6[0], b"bytes5"):
-            return False
-        if require2(v6.has_c and v6.c.is_v6 and len(v6.c.v6) == 1, v6.c.v6[0], b"bytes6"):
-            return False
-        if require2(v6.has_d and v6.d.is_v6 and len(v6.d.v6) == 1, v6.d.v6[0], b"cbytes3"):
-            return False
-        if require2(v6.has_e and v6.e.is_v6 and len(v6.e.v6) == 1, v6.e.v6[0], b"cbytes4"):
-            return False
+    let v6 = require_some!(ce!(i.v6()));
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v6.a()), union::Union1In::V6(v), v)))), b"bytes4");
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v6.b()), union::Union1In::V6(v), v)))), b"bytes5");
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v6.c()), union::Union1In::V6(v), v)))), b"bytes6");
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v6.d()), union::Union1In::V6(v), v)))), b"cbytes3");
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v6.e()), union::Union1In::V6(v), v)))), b"cbytes4");
 
-        if require(i.has_v7, True):
-            return False
-        v7 = i.v7
-        if require2(v7.has_a and v7.a.is_v7 and len(v7.a.v7) == 1, v7.a.v7[0].a, 7):
-            return False
-        if require2(v7.has_b and v7.b.is_v7 and len(v7.b.v7) == 1, v7.b.v7[0].a, 8):
-            return False
-        if require2(v7.has_c and v7.c.is_v7 and len(v7.c.v7) == 1, v7.c.v7[0].a, 9):
-            return False
-        if require2(v7.has_d and v7.d.is_v7 and len(v7.d.v7) == 1, v7.d.v7[0].a, 105):
-            return False
-        if require2(v7.has_e and v7.e.is_v7 and len(v7.e.v7) == 1, v7.e.v7[0].a, 106):
-            return False
+    let v7 = require_some!(ce!(i.v7()));
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v7.a()), union::Union1In::V7(v), v)))).a(), 7);
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v7.b()), union::Union1In::V7(v), v)))).a(), 8);
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v7.c()), union::Union1In::V7(v), v)))).a(), 9);
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v7.d()), union::Union1In::V7(v), v)))).a(), 105);
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v7.e()), union::Union1In::V7(v), v)))).a(), 106);
 
-        if require(i.has_v8, True):
-            return False
-        v8 = i.v8
-        if require2(v8.has_a and v8.a.is_v8 and len(v8.a.v8) == 1, v8.a.v8[0].a, 10):
-            return False
-        if require2(v8.has_b and v8.b.is_v8 and len(v8.b.v8) == 1, v8.b.v8[0].a, 11):
-            return False
-        if require2(v8.has_c and v8.c.is_v8 and len(v8.c.v8) == 1, v8.c.v8[0].a, 12):
-            return False
-        if require2(v8.has_d and v8.d.is_v8 and len(v8.d.v8) == 1, v8.d.v8[0].a, 107):
-            return False
-        if require2(v8.has_e and v8.e.is_v8 and len(v8.e.v8) == 1, v8.e.v8[0].a, 108):
-            return False
+    let v8 = require_some!(ce!(i.v8()));
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v8.a()), union::Union1In::V8(v), v)))).a(), 10);
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v8.b()), union::Union1In::V8(v), v)))).a(), 11);
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v8.c()), union::Union1In::V8(v), v)))).a(), 12);
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v8.d()), union::Union1In::V8(v), v)))).a(), 107);
+    require!(require_some!(ce!(require_one_list!(require_enum!(ce!(v8.e()), union::Union1In::V8(v), v)))).a(), 108);
 
-        if require(i.has_v9, True):
-            return False
-        v9 = i.v9
-        if require2(v9.has_a and v9.a.is_v9 and len(v9.a.v9) == 1, v9.a.v9[0], 13):
-            return False
-        if require2(v9.has_b and v9.b.is_v9 and len(v9.b.v9) == 1, v9.b.v9[0], 14):
-            return False
-        if require2(v9.has_c and v9.c.is_v9 and len(v9.c.v9) == 1, v9.c.v9[0], 15):
-            return False
-        if require2(v9.has_d and v9.d.is_v9 and len(v9.d.v9) == 1, v9.d.v9[0], 109):
-            return False
-        if require2(v9.has_e and v9.e.is_v9 and len(v9.e.v9) == 1, v9.e.v9[0], 110):
-            return False
+    let v9 = require_some!(ce!(i.v9()));
+    require!(require_one_list!(require_enum!(ce!(v9.a()), union::Union1In::V9(v), v)), 13);
+    require!(require_one_list!(require_enum!(ce!(v9.b()), union::Union1In::V9(v), v)), 14);
+    require!(require_one_list!(require_enum!(ce!(v9.c()), union::Union1In::V9(v), v)), 15);
+    require!(require_one_list!(require_enum!(ce!(v9.d()), union::Union1In::V9(v), v)), 109);
+    require!(require_one_list!(require_enum!(ce!(v9.e()), union::Union1In::V9(v), v)), 110);
 
-        if require(i.has_v10, True):
-            return False
-        v10 = i.v10
-        if require2(v10.has_a and v10.a.is_v10 and len(v10.a.v10) == 1, v10.a.v10[0], True):
-            return False
-        if require2(
-            v10.has_b and v10.b.is_v10 and len(v10.b.v10) == 1, v10.b.v10[0], False
-        ):
-            return False
-        if require2(v10.has_c and v10.c.is_v10 and len(v10.c.v10) == 1, v10.c.v10[0], True):
-            return False
-        if require2(v10.has_d and v10.d.is_v10 and len(v10.d.v10) == 1, v10.d.v10[0], True):
-            return False
-        if require2(v10.has_e and v10.e.is_v10 and len(v10.e.v10) == 1, v10.e.v10[0], True):
-            return False
-    */
+    let v10 = require_some!(ce!(i.v10()));
+    require!(require_one_list!(require_enum!(ce!(v10.a()), union::Union1In::V10(v), v)), true);
+    require!(require_one_list!(require_enum!(ce!(v10.b()), union::Union1In::V10(v), v)), false);
+    require!(require_one_list!(require_enum!(ce!(v10.c()), union::Union1In::V10(v), v)), true);
+    require!(require_one_list!(require_enum!(ce!(v10.d()), union::Union1In::V10(v), v)), true);
+    require!(require_one_list!(require_enum!(ce!(v10.e()), union::Union1In::V10(v), v)), true);
+
     Ok(())
 }
 
@@ -919,7 +863,6 @@ fn main() {
     if let Err(_) = test_in_default("test/simple_default.bin") {
         println!("test_in_default failed");
     }
-
     if !test_out("test/simple.bin") {
         println!("test_out failed");
     }
