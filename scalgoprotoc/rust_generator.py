@@ -444,10 +444,16 @@ class Generator:
             )
 
     def generate_table_in(self, node: Value, lname: str) -> None:
-        if not node.table.empty:
+        if not node.inplace:
             self.output_doc(node, "    ")
             self.o(
                 "    pub fn %s(&self) -> scalgo_proto::Result<Option<%sIn>> {self._reader.get_table::<%s>(%d)}"
+                % (lname, node.table.name, node.table.name, node.offset)
+            )
+        else:
+            self.output_doc(node, "    ")
+            self.o(
+                "    pub fn %s(&self) -> scalgo_proto::Result<Option<%sIn>> {self._reader.get_table_inplace::<%s>(%d)}"
                 % (lname, node.table.name, node.table.name, node.offset)
             )
 
