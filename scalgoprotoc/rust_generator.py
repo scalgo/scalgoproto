@@ -259,7 +259,7 @@ class Generator:
         else:
             self.output_doc(node, "    ")
             self.o(
-                "    pub fn add_%s(&mut self, len: usize) -> scalgo_proto::ListOut::<'a, %s, scalgo_proto::Inplace> { self._slice.add_list_inplace::<%s>(%d, len)}"
+                "    pub fn add_%s(&mut self, len: usize) -> scalgo_proto::ListOut::<'a, %s, scalgo_proto::Inplace> { self._slice.add_list_inplace::<%s>(%d, len, None)}"
                 % (lname, ot, ot, node.offset)
             )
 
@@ -281,7 +281,7 @@ class Generator:
         else:
             self.output_doc(node, "    ")
             self.o(
-                "    pub fn add_%s(&mut self, len: usize) -> scalgo_proto::ListOut::<'a, %s, scalgo_proto::Inplace> { self._slice.set_pod::<u16>(0, &%d); self._slice.add_list_inplace::<%s>(2, len)}"
+                "    pub fn add_%s(&mut self, len: usize) -> scalgo_proto::ListOut::<'a, %s, scalgo_proto::Inplace> { self._slice.set_pod::<u16>(0, &%d); self._slice.add_list_inplace::<%s>(2, len, Some(self._container_end))}"
                 % (lname, ot, idx, ot)
             )
 
@@ -474,7 +474,7 @@ class Generator:
         elif not node.table.empty:
             self.output_doc(node, "    ")
             self.o(
-                "    pub fn add_%s(&mut self) -> %sOut<'a, scalgo_proto::Inplace> {self._slice.add_table_inplace::<%s>(%d)}"
+                "    pub fn add_%s(&mut self) -> %sOut<'a, scalgo_proto::Inplace> {self._slice.add_table_inplace::<%s>(%d, None)}"
                 % (lname, node.table.name, node.table.name, node.offset)
             )
         else:
@@ -508,7 +508,7 @@ class Generator:
         else:
             self.output_doc(node, "    ")
             self.o(
-                "    pub fn add_%s(&mut self) -> %sOut<'a, scalgo_proto::Inplace> {self._slice.set_pod::<u16>(0, &%d); self._slice.add_table_inplace::<%s>(2)}"
+                "    pub fn add_%s(&mut self) -> %sOut<'a, scalgo_proto::Inplace> {self._slice.set_pod::<u16>(0, &%d); self._slice.add_table_inplace::<%s>(2, Some(self._container_end))}"
                 % (lname, table.name, idx, table.name)
             )
 
@@ -535,7 +535,7 @@ class Generator:
         else:
             self.output_doc(node, "    ")
             self.o(
-                "    pub fn add_%s(&mut self, v: & str) {self._slice.add_text_inplace(%d, v)}"
+                "    pub fn add_%s(&mut self, v: & str) {self._slice.add_text_inplace(%d, v, None)}"
                 % (lname, node.offset)
             )
 
@@ -544,7 +544,9 @@ class Generator:
     ) -> None:
         self.output_doc(node, "    ")
         if inplace:
-            self.o("    pub fn add_%s(&mut self, v: &str) {}" % (lname))  # TODO(jakobt)
+            self.o(
+                "    pub fn add_%s(&mut self, v: &str) {}" % (lname)
+            )  # TODO(jakobt) , Some(self._container_end)
         else:
             self.o(
                 "    pub fn set_%s(&mut self, v: &scalgo_proto::TextOut<'a>) {self._slice.set_pod::<u16>(0, &%d); self._slice.set_text(2, Some(v));}"
@@ -575,7 +577,7 @@ class Generator:
             )
         else:
             self.o(
-                "    pub fn add_%s(&mut self, bytes: &[u8]) {self._slice.add_bytes_inplace(%d, bytes)}"
+                "    pub fn add_%s(&mut self, bytes: &[u8]) {self._slice.add_bytes_inplace(%d, bytes, None)}"
                 % (lname, node.offset)
             )
 
@@ -586,7 +588,7 @@ class Generator:
         if inplace:
             self.o(
                 "    pub fn add_%s(&mut self, v: &[u8]) {}" % (lname)
-            )  # TODO(jakobt)
+            )  # TODO(jakobt) , Some(self._container_end)
         else:
             self.o(
                 "    pub fn set_%s(&mut self, v: &scalgo_proto::BytesOut<'a>) {self._slice.set_pod::<u16>(0, &%d); self._slice.set_bytes(2, Some(v));}"
@@ -722,6 +724,7 @@ class Generator:
         self.output_doc(union, "    ")
         self.o("pub struct %sOut<'a, P: scalgo_proto::Placement> {" % (union.name))
         self.o("    _slice: scalgo_proto::ArenaSlice<'a>,")
+        self.o("    _container_end: usize,")
         self.o("    _p: std::marker::PhantomData<P>,")
         self.o("}")
         self.o("impl<'a> %sOut<'a, scalgo_proto::Normal> {" % (union.name))
@@ -800,13 +803,15 @@ class Generator:
         self.o("        }")
         self.o("    }")
         self.o("    fn new_out(slice: scalgo_proto::ArenaSlice<'a>) -> Self::Out {")
-        self.o("        Self::Out{_slice: slice, _p: std::marker::PhantomData{}}")
+        self.o(
+            "        Self::Out{_slice: slice, _container_end: 0, _p: std::marker::PhantomData{}}"
+        )
         self.o("    }")
         self.o(
-            "    fn new_inplace_out(slice: scalgo_proto::ArenaSlice<'a>) -> Self::InplaceOut {"
+            "    fn new_inplace_out(slice: scalgo_proto::ArenaSlice<'a>, container_end: usize) -> Self::InplaceOut {"
         )
         self.o(
-            "        Self::InplaceOut{_slice: slice, _p: std::marker::PhantomData{}}"
+            "        Self::InplaceOut{_slice: slice, _container_end: container_end, _p: std::marker::PhantomData{}}"
         )
         self.o("    }")
         self.o("}")

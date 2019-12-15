@@ -724,7 +724,7 @@ pub trait UnionFactory<'a>: Copy {
 
     fn new_out(slice: ArenaSlice<'a>) -> Self::Out;
 
-    fn new_inplace_out(slice: ArenaSlice<'a>) -> Self::InplaceOut;
+    fn new_inplace_out(slice: ArenaSlice<'a>, container_end: usize) -> Self::InplaceOut;
 }
 
 pub trait TableOut<P: Placement> {
@@ -867,7 +867,7 @@ impl<'a> ArenaSlice<'a> {
         ArenaSlice {
             arena: self.arena,
             offset: self.offset + start,
-            length: self.length - end,
+            length: self.length - end - start,
         }
     }
 
@@ -877,15 +877,16 @@ impl<'a> ArenaSlice<'a> {
     }
 
     fn check_offset(&self, o: usize, size: usize) {
-        //TODO(jakot) fixme we should use size
-        assert!(self.offset + o < unsafe { (*self.arena.data.get()).len() });
+        assert!(self.offset + o + size <= unsafe { (*self.arena.data.get()).len() });
     }
 
-    fn check_inplace(&self, o: usize) {
-        if self.offset + self.length == o {
-            //TODO(jakobt) fixme
-            //panic!("Inplace members must be constructed directly after their container, {} bytes allocated in between", o- self.offset + self.length)
-            print!("Inplace members must be constructed directly after their container, {} bytes allocated in between", o- self.offset + self.length)
+    fn check_inplace(&self, o: usize, container_end: Option<usize>) {
+        let end = match container_end {
+            Some(v) => v,
+            _ => self.offset + self.length,
+        };
+        if end != o {
+            panic!("Inplace members must be constructed directly after their container")
         }
     }
 
@@ -968,9 +969,13 @@ impl<'a> ArenaSlice<'a> {
         a
     }
 
-    pub fn add_table_inplace<F: TableFactory<'a>>(&mut self, offset: usize) -> F::InplaceOut {
+    pub fn add_table_inplace<F: TableFactory<'a>>(
+        &mut self,
+        offset: usize,
+        container_end: Option<usize>,
+    ) -> F::InplaceOut {
         let slice = self.arena.allocate_default(0, F::default());
-        self.check_inplace(slice.offset);
+        self.check_inplace(slice.offset, container_end);
         self.set_u48(offset, F::size() as u64);
         F::new_inplace_out(slice)
     }
@@ -992,9 +997,9 @@ impl<'a> ArenaSlice<'a> {
         ans
     }
 
-    pub fn add_bytes_inplace(&mut self, offset: usize, v: &[u8]) {
+    pub fn add_bytes_inplace(&mut self, offset: usize, v: &[u8], container_end: Option<usize>) {
         let slice = self.arena.allocate(v.len(), 0);
-        self.check_inplace(slice.offset);
+        self.check_inplace(slice.offset, container_end);
         self.set_u48(offset, v.len() as u64);
         unsafe {
             std::ptr::copy_nonoverlapping(v.as_ptr(), slice.data(0), v.len());
@@ -1018,9 +1023,9 @@ impl<'a> ArenaSlice<'a> {
         ans
     }
 
-    pub fn add_text_inplace(&mut self, offset: usize, v: &str) {
+    pub fn add_text_inplace(&mut self, offset: usize, v: &str, container_end: Option<usize>) {
         let slice = self.arena.allocate(1 + v.len(), 0);
-        self.check_inplace(slice.offset);
+        self.check_inplace(slice.offset, container_end);
         self.set_u48(offset, v.len() as u64);
         unsafe {
             std::ptr::copy_nonoverlapping(v.as_bytes().as_ptr(), slice.data(0), v.len());
@@ -1045,9 +1050,10 @@ impl<'a> ArenaSlice<'a> {
         &mut self,
         offset: usize,
         len: usize,
+        container_end: Option<usize>,
     ) -> ListOut<'a, T, Inplace> {
         let slice = self.arena.allocate(T::list_bytes(len), T::list_def());
-        self.check_inplace(slice.offset);
+        self.check_inplace(slice.offset, container_end);
         self.set_u48(offset, len as u64);
         ListOut {
             slice: slice,
@@ -1068,14 +1074,15 @@ impl<'a> ArenaSlice<'a> {
     where
         'a: 'b,
     {
-        F::new_out(self.part(offset, 10))
+        F::new_out(self.part(offset, 8))
     }
 
     pub fn get_union_inplace<'b, F: UnionFactory<'b>>(&'b mut self, offset: usize) -> F::InplaceOut
     where
         'a: 'b,
     {
-        F::new_inplace_out(self.part(offset, 10))
+        let end = self.offset + self.length;
+        F::new_inplace_out(self.part(offset, 8), end)
     }
 }
 
