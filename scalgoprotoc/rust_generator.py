@@ -926,6 +926,7 @@ class Generator:
             % table.name
         )
         self.o("    fn offset(&self) -> usize {self._slice.get_offset()}")
+        self.o("    fn arena(&self) -> usize {self._slice.arena_id()}")
         self.o("}")
         self.output_doc(table, "")
         self.o("#[derive(Copy, Clone)]")

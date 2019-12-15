@@ -729,6 +729,7 @@ pub trait UnionFactory<'a>: Copy {
 
 pub trait TableOut<P: Placement> {
     fn offset(&self) -> usize;
+    fn arena(&self) -> usize;
 }
 
 pub trait TableFactory<'a>: Copy {
@@ -849,6 +850,10 @@ pub struct ArenaSlice<'a> {
 }
 
 impl<'a> ArenaSlice<'a> {
+    pub fn arena_id(&self) -> usize {
+        self.arena as * const _ as usize
+    }
+
     pub fn get_offset(&self) -> usize {
         self.offset
     }
@@ -955,7 +960,9 @@ impl<'a> ArenaSlice<'a> {
     pub fn set_table<T: TableOut<Normal>>(&mut self, offset: usize, value: Option<&T>) {
         let o = match value {
             Some(t) => {
-                // Todo check arena is the same
+                if t.arena() != self.arena_id() {
+                    panic!("Table not allocated in the same arena")
+                }
                 t.offset()
             }
             None => 0,
@@ -983,7 +990,9 @@ impl<'a> ArenaSlice<'a> {
     pub fn set_bytes(&mut self, offset: usize, v: Option<&BytesOut<'a>>) {
         let o = match v {
             Some(b) => {
-                // TODO check that the arenas are the same
+                if b.slice.arena_id() != self.arena_id() {
+                    panic!("Bytes not allocated in the same arena")
+                }
                 b.slice.offset
             }
             None => 0,
@@ -1009,7 +1018,9 @@ impl<'a> ArenaSlice<'a> {
     pub fn set_text(&mut self, offset: usize, v: Option<&TextOut<'a>>) {
         let o = match v {
             Some(b) => {
-                // TODO check that the arenas are the same
+                if b.slice.arena_id() != self.arena_id() {
+                    panic!("Text not allocated in the same arena")
+                }
                 b.slice.offset
             }
             None => 0,
@@ -1034,7 +1045,12 @@ impl<'a> ArenaSlice<'a> {
 
     pub fn set_list<T: MetaType>(&mut self, offset: usize, v: Option<&ListOut<'a, T, Normal>>) {
         let o = match v {
-            Some(t) => t.slice.offset,
+            Some(t) => {
+                if t.slice.arena_id() != self.arena_id() {
+                    panic!("List not allocated in the same arena")
+                };
+                t.slice.offset
+            },
             None => 0,
         } - 10;
         self.set_u48(offset, o as u64);
