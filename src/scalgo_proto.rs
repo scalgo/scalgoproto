@@ -732,6 +732,11 @@ pub trait TableOut<P: Placement> {
     fn arena(&self) -> usize;
 }
 
+pub trait TableCopy<'a, 'b> {
+    type In;
+    fn copy(&mut self, input: Self::In) -> Result<()>;
+}
+
 pub trait TableFactory<'a>: Copy {
     type In: std::fmt::Debug;
     type Out: TableOut<Normal>;
@@ -851,7 +856,7 @@ pub struct ArenaSlice<'a> {
 
 impl<'a> ArenaSlice<'a> {
     pub fn arena_id(&self) -> usize {
-        self.arena as * const _ as usize
+        self.arena as *const _ as usize
     }
 
     pub fn get_offset(&self) -> usize {
@@ -1050,7 +1055,7 @@ impl<'a> ArenaSlice<'a> {
                     panic!("List not allocated in the same arena")
                 };
                 t.slice.offset
-            },
+            }
             None => 0,
         } - 10;
         self.set_u48(offset, o as u64);

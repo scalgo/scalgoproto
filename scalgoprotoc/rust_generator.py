@@ -818,51 +818,42 @@ class Generator:
         self.o()
 
     def generate_table_copy(self, table: Table) -> None:
-        self.o("    _copy(i:%sIn) {" % table.name)
+        # self.o("    _copy(i:%sIn) {" % table.name)
         for ip in (True, False):
             for node in table.members:
-                lname = lcamel(self.value(node.identifier))
-                uname = ucamel(lname)
+                lname = snake(self.value(node.identifier))
                 if bool(node.inplace) != ip:
                     continue
                 if node.list_:
-                    self.o(
-                        "        if (i.%s !== null) this.add%s(i.%s.length)._copy(i.%s);"
-                        % (lname, uname, lname, lname)
-                    )
-                elif (
-                    node.optional
-                    or node.enum
-                    or node.type_.type == TokenType.TEXT
-                    or node.type_.type == TokenType.BYTES
-                ):
-                    self.o(
-                        "        if (i.%s !== null) this.%s = i.%s;"
-                        % (lname, lname, lname)
-                    )
+                    # self.o("        if let Some(v) = i.%s()? {let mut w = self.add_%s(v.len()); w.copy(v);}"%(lname, lname))
+                    pass
                 elif (
                     node.type_.type in typeMap
                     or node.type_.type == TokenType.BOOL
                     or node.enum
-                    or node.struct
                 ):
-                    self.o("        this.%s = i.%s;" % (lname, lname))
+                    self.o("        self.%s(i.%s());" % (lname, lname))
+                elif node.type_.type in (TokenType.TEXT, TokenType.BYTES):
+                    self.o(
+                        "        if let Some(v) = i.%s()? {self.add_%s(v);};"
+                        % (lname, lname)
+                    )
+                elif node.struct:
+                    # TODO (jakobt)
+                    pass
                 elif node.table:
-                    if node.table.empty:
-                        self.o(
-                            "         if (i.%s !== null) this.add%s();" % (lname, uname)
-                        )
-                    else:
-                        self.o(
-                            "         if (i.%s !== null) this.add%s()._copy(i.%s);"
-                            % (lname, uname, lname)
-                        )
+                    self.o(
+                        "        if let Some(v) = i.%s()? {let mut w = self.add_%s(); w.copy(v);}"
+                        % (lname, lname)
+                    )
                 elif node.union:
-                    self.o("        this.%s._copy(i.%s);" % (lname, lname))
+                    # TODO (jakobt)
+                    # self.o("        this.%s._copy(i.%s);" % (lname, lname))
+                    pass
                 else:
                     raise ICE()
-        self.o("    }")
-        self.o()
+        # self.o("    }")
+        # self.o()
 
     def generate_table(self, table: Table) -> None:
         # Recursively generate direct contained members
@@ -919,15 +910,34 @@ class Generator:
         self.o("impl<'a, P: scalgo_proto::Placement> %sOut<'a, P> {" % table.name)
         for node in table.members:
             self.generate_value_out(table, node)
-        # self.generate_table_copy(table)
         self.o("}")
         self.o(
-            "impl<'a, P: scalgo_proto::Placement> scalgo_proto::TableOut<P> for %sOut<'a, P> {"
+            "impl<'a, P: scalgo_proto::Placement> scalgo_proto::TableOut<P> for %sOut<'a, P>  {"
             % table.name
         )
         self.o("    fn offset(&self) -> usize {self._slice.get_offset()}")
         self.o("    fn arena(&self) -> usize {self._slice.arena_id()}")
         self.o("}")
+        # self.o(
+        #     "impl<'a, P: scalgo_proto::Placement, I> scalgo_proto::TableCopy<I> for %sOut<'a, P> where for<'b> I: %sIn<'b> {"
+
+        #     % (table.name, table.name)
+        #  )
+        # self.o("    fn copy(&mut self, input: I) {()}")
+        # self.o("}")
+        self.o(
+            "impl<'a, 'b, P: scalgo_proto::Placement> scalgo_proto::TableCopy<'a, 'b> for %sOut<'a, P> {"
+            % (table.name)
+        )
+        self.o("    type In = %sIn<'b>;" % table.name)
+        self.o("    fn copy(&mut self, i: Self::In) -> scalgo_proto::Result<()> {")
+        self.generate_table_copy(table)
+        self.o("        Ok(())")
+        self.o("    }")
+        self.o("}")
+
+        #     % (table.name, table.name)
+        #  )
         self.output_doc(table, "")
         self.o("#[derive(Copy, Clone)]")
         self.o("pub struct %s {}" % table.name)
