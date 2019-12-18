@@ -81,7 +81,7 @@ pub unsafe fn to_struct<'a, S: StructIn<'a> + 'a>(s: &[u8]) -> S {
 }
 
 pub fn to_bool(v: u8) -> bool {
-    !v == 0
+    v != 0
 }
 
 // This method is safe as long as v has length at least 6
