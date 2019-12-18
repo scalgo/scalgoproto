@@ -171,41 +171,41 @@ class Generator:
 
     def list_access_type_lt(self, node: Value) -> str:
         if node.type_.type == TokenType.BOOL:
-            return "scalgo_proto::BoolListAccess<'a>"
+            return "scalgo_proto::BoolListRead<'a>"
         elif node.type_.type in typeMap:
-            return "scalgo_proto::PodListAccess<'a, %s>" % (typeMap[node.type_.type].p)
+            return "scalgo_proto::PodListRead<'a, %s>" % (typeMap[node.type_.type].p)
         elif node.struct:
-            return "scalgo_proto::StructListAccess<'a, %sIn<'a>>" % (node.struct.name)
+            return "scalgo_proto::StructListRead<'a, %sIn<'a>>" % (node.struct.name)
         elif node.enum:
-            return "scalgo_proto::EnumListAccess<'a, %s>" % (node.enum.name)
+            return "scalgo_proto::EnumListRead<'a, %s>" % (node.enum.name)
         elif node.table:
-            return "scalgo_proto::TableListAccess<'a, %sIn<'a>>" % (node.table.name)
+            return "scalgo_proto::TableListRead<'a, %sIn<'a>>" % (node.table.name)
         elif node.union:
-            return "scalgo_proto::UnionListAccess<'a, %sIn<'a>>" % (node.union.name)
+            return "scalgo_proto::UnionListRead<'a, %sIn<'a>>" % (node.union.name)
         elif node.type_.type == TokenType.TEXT:
-            return "scalgo_proto::TextListAccess<'a>"
+            return "scalgo_proto::TextListRead<'a>"
         elif node.type_.type == TokenType.BYTES:
-            return "scalgo_proto::BytesListAccess<'a>"
+            return "scalgo_proto::BytesListRead<'a>"
         else:
             raise ICE()
 
     def list_access_type(self, node: Value) -> str:
         if node.type_.type == TokenType.BOOL:
-            return "scalgo_proto::BoolListAccess"
+            return "scalgo_proto::BoolListRead"
         elif node.type_.type in typeMap:
-            return "scalgo_proto::PodListAccess<%s>" % (typeMap[node.type_.type].p)
+            return "scalgo_proto::PodListRead<%s>" % (typeMap[node.type_.type].p)
         elif node.struct:
-            return "scalgo_proto::StructListAccess<%sIn>" % (node.struct.name)
+            return "scalgo_proto::StructListRead<%sIn>" % (node.struct.name)
         elif node.enum:
-            return "scalgo_proto::EnumListAccess<%s>" % (node.enum.name)
+            return "scalgo_proto::EnumListRead<%s>" % (node.enum.name)
         elif node.table:
-            return "scalgo_proto::TableListAccess<%sIn>" % (node.table.name)
+            return "scalgo_proto::TableListRead<%sIn>" % (node.table.name)
         elif node.union:
-            return "scalgo_proto::UnionListAccess<%sIn>" % (node.union.name)
+            return "scalgo_proto::UnionListRead<%sIn>" % (node.union.name)
         elif node.type_.type == TokenType.TEXT:
-            return "scalgo_proto::TextListAccess"
+            return "scalgo_proto::TextListRead"
         elif node.type_.type == TokenType.BYTES:
-            return "scalgo_proto::BytesListAccess"
+            return "scalgo_proto::BytesListRead"
         else:
             raise ICE()
 
@@ -1064,10 +1064,10 @@ impl<'a, 'b> scalgo_proto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
     }}
 }}
 
-impl<'a, 'b, P: Placement> CopyIn<scalgo_proto::ListIn<'b, scalgo_proto::UnionListAccess<'b, {name}In<'b>>>>
+impl<'a, 'b, P: Placement> CopyIn<scalgo_proto::ListIn<'b, scalgo_proto::UnionListRead<'b, {name}In<'b>>>>
     for scalgo_proto::ListOut<'a, scalgo_proto::UnionType<'a, {name}>, P> {{
     fn copy_in(&mut self, 
-        i: scalgo_proto::ListIn<'b, scalgo_proto::UnionListAccess<'b, {name}In<'b>>>) 
+        i: scalgo_proto::ListIn<'b, scalgo_proto::UnionListRead<'b, {name}In<'b>>>)
         -> Result<()> {{
         assert!(i.len() == self.len());
         for n in 0..i.len() {{
@@ -1409,11 +1409,11 @@ impl<'a, 'b> scalgo_proto::CopyIn<{name}In<'b> > for {name}Out<'a> {{
     }}
 }}
 
-impl<'a, 'b, P: Placement> CopyIn<scalgo_proto::ListIn<'b, scalgo_proto::StructListAccess<'b, {name}In<'b>>>>
+impl<'a, 'b, P: Placement> CopyIn<scalgo_proto::ListIn<'b, scalgo_proto::StructListRead<'b, {name}In<'b>>>>
     for scalgo_proto::ListOut<'a, scalgo_proto::StructType<'a, {name}>, P> {{
 
     fn copy_in(&mut self, 
-        i: scalgo_proto::ListIn<'b, scalgo_proto::StructListAccess<'b, {name}In<'b>>>) 
+        i: scalgo_proto::ListIn<'b, scalgo_proto::StructListRead<'b, {name}In<'b>>>)
         -> Result<()> {{
         assert!(i.len() == self.len());
         for n in 0..i.len() {{

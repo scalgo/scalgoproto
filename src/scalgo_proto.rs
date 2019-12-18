@@ -1,4 +1,7 @@
-// ================================> Basic stuff <========================================
+//============================================================================================
+//========================================> BASICS <==========================================
+//============================================================================================
+use std::marker::PhantomData;
 
 pub trait Pod: Copy + std::fmt::Debug {}
 impl Pod for u8 {}
@@ -38,7 +41,9 @@ const LISTMAGIC: u32 = 0x3400BB46;
 const TEXTMAGIC: u32 = 0xD812C8F5;
 const BYTESMAGIC: u32 = 0xDCDBBE10;
 
-// ================================> Reading <========================================
+//============================================================================================
+//========================================> READING <=========================================
+//============================================================================================
 
 pub trait StructIn<'a>: std::fmt::Debug {
     type B;
@@ -48,7 +53,7 @@ pub trait StructIn<'a>: std::fmt::Debug {
 
 //This is safe to call if T is an enum with u8 storage specifier and every integer i
 //such that 0 <= i < range, is a valid enum value
-pub unsafe fn to_enum<T: Enum + Copy>(v: u8) -> Option<T> {
+pub unsafe fn to_enum<T: Enum>(v: u8) -> Option<T> {
     if v >= T::max_value() {
         None
     } else {
@@ -60,7 +65,7 @@ pub unsafe fn to_enum<T: Enum + Copy>(v: u8) -> Option<T> {
 
 // This method is safe to call if the length of v is sizeof(T)
 // and the bit pattern described by v is a valid state for T
-pub unsafe fn to_pod<T: Copy>(v: &[u8]) -> T {
+pub unsafe fn to_pod<T: Pod>(v: &[u8]) -> T {
     let mut target: T = std::mem::MaybeUninit::uninit().assume_init();
     std::ptr::copy_nonoverlapping(
         v.as_ptr(),
@@ -289,7 +294,7 @@ impl<'a> Reader<'a> {
         }
     }
 
-    pub fn get_list_union<A: ListAccess<'a> + 'a>(
+    pub fn get_list_union<A: ListRead<'a> + 'a>(
         &self,
         magic: Option<u32>,
         offset: usize,
@@ -310,11 +315,11 @@ impl<'a> Reader<'a> {
                 part: &self.full[offset..offset + size_bytes],
             },
             _len: size,
-            phantom: std::marker::PhantomData {},
+            phantom: PhantomData,
         })
     }
 
-    pub fn get_list<A: ListAccess<'a> + 'a>(&self, offset: usize) -> Result<Option<ListIn<'a, A>>> {
+    pub fn get_list<A: ListRead<'a> + 'a>(&self, offset: usize) -> Result<Option<ListIn<'a, A>>> {
         match self.get_ptr(offset) {
             Err(e) => Err(e),
             Ok(None) => Ok(None),
@@ -322,7 +327,7 @@ impl<'a> Reader<'a> {
         }
     }
 
-    pub fn get_list_inplace<A: ListAccess<'a> + 'a>(
+    pub fn get_list_inplace<A: ListRead<'a> + 'a>(
         &self,
         offset: usize,
     ) -> Result<Option<ListIn<'a, A>>> {
@@ -350,45 +355,48 @@ impl<'a> Reader<'a> {
     }
 }
 
-pub trait ListAccess<'a> {
+pub trait ListRead<'a> {
     type Output: std::fmt::Debug;
     fn bytes(size: usize) -> usize;
     unsafe fn get(reader: &Reader<'a>, idx: usize) -> Self::Output;
 }
 
-pub struct ListIn<'a, A: ListAccess<'a>> {
+pub struct ListIn<'a, A: ListRead<'a>> {
     reader: Reader<'a>,
     _len: usize,
-    phantom: std::marker::PhantomData<A>,
+    phantom: PhantomData<A>,
 }
 
-impl<'a, A: ListAccess<'a>> ListIn<'a, A> {
+impl<'a, A: ListRead<'a>> ListIn<'a, A> {
     pub fn len(&self) -> usize {
         self._len
     }
+
     pub fn get(&self, idx: usize) -> A::Output {
         assert!(idx < self._len);
         unsafe { A::get(&self.reader, idx) }
     }
+
     pub fn iter(&self) -> ListIter<'a, A> {
         ListIter {
             reader: self.reader,
             _len: self._len,
             idx: 0,
-            phantom: std::marker::PhantomData {},
+            phantom: PhantomData,
         }
     }
 }
 
-pub struct ListIter<'a, A: ListAccess<'a>> {
+pub struct ListIter<'a, A: ListRead<'a>> {
     reader: Reader<'a>,
     _len: usize,
     idx: usize,
-    phantom: std::marker::PhantomData<A>,
+    phantom: PhantomData<A>,
 }
 
-impl<'a, A: ListAccess<'a> + 'a> std::iter::Iterator for ListIter<'a, A> {
+impl<'a, A: ListRead<'a> + 'a> std::iter::Iterator for ListIter<'a, A> {
     type Item = A::Output;
+
     fn next(&mut self) -> Option<Self::Item> {
         if self.idx >= self._len {
             return None;
@@ -397,26 +405,28 @@ impl<'a, A: ListAccess<'a> + 'a> std::iter::Iterator for ListIter<'a, A> {
         self.idx += 1;
         Some(ans)
     }
+
     fn size_hint(&self) -> (usize, Option<usize>) {
         let s = self._len - self.idx;
         (s, Some(s))
     }
 }
 
-impl<'a, A: ListAccess<'a> + 'a> std::iter::IntoIterator for ListIn<'a, A> {
+impl<'a, A: ListRead<'a> + 'a> std::iter::IntoIterator for ListIn<'a, A> {
     type Item = A::Output;
     type IntoIter = ListIter<'a, A>;
+
     fn into_iter(self) -> Self::IntoIter {
         Self::IntoIter {
             reader: self.reader,
             _len: self._len,
             idx: 0,
-            phantom: std::marker::PhantomData {},
+            phantom: PhantomData,
         }
     }
 }
 
-impl<'a, A: ListAccess<'a>> std::fmt::Debug for ListIn<'a, A> {
+impl<'a, A: ListRead<'a>> std::fmt::Debug for ListIn<'a, A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("[")?;
         let l = self.len();
@@ -431,14 +441,17 @@ impl<'a, A: ListAccess<'a>> std::fmt::Debug for ListIn<'a, A> {
     }
 }
 
-pub struct PodListAccess<'a, T: Pod> {
-    p: std::marker::PhantomData<&'a T>,
+pub struct PodListRead<'a, T: Pod> {
+    p: PhantomData<&'a T>,
 }
-impl<'a, T: Pod> ListAccess<'a> for PodListAccess<'a, T> {
+
+impl<'a, T: Pod> ListRead<'a> for PodListRead<'a, T> {
     type Output = T;
+
     fn bytes(size: usize) -> usize {
         size * std::mem::size_of::<T>()
     }
+
     unsafe fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
         reader
             .get_pod::<T>(idx * std::mem::size_of::<T>())
@@ -446,89 +459,109 @@ impl<'a, T: Pod> ListAccess<'a> for PodListAccess<'a, T> {
     }
 }
 
-pub struct EnumListAccess<'a, T: Enum> {
-    p: std::marker::PhantomData<&'a T>,
+pub struct EnumListRead<'a, T: Enum> {
+    p: PhantomData<&'a T>,
 }
-impl<'a, T: Enum> ListAccess<'a> for EnumListAccess<'a, T> {
+
+impl<'a, T: Enum> ListRead<'a> for EnumListRead<'a, T> {
     type Output = Option<T>;
+
     fn bytes(size: usize) -> usize {
         size
     }
+
     unsafe fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
         reader.get_enum::<T>(idx, 255)
     }
 }
 
-pub struct StructListAccess<'a, S: StructIn<'a> + 'a> {
-    p: std::marker::PhantomData<&'a S>,
+pub struct StructListRead<'a, S: StructIn<'a> + 'a> {
+    p: PhantomData<&'a S>,
 }
-impl<'a, S: StructIn<'a> + 'a> ListAccess<'a> for StructListAccess<'a, S> {
+
+impl<'a, S: StructIn<'a> + 'a> ListRead<'a> for StructListRead<'a, S> {
     type Output = S;
+
     fn bytes(size: usize) -> usize {
         size * S::size()
     }
+
     unsafe fn get(reader: &Reader<'a>, idx: usize) -> S {
         reader.get_struct::<S>(idx * S::size())
     }
 }
 
-pub struct TextListAccess<'a> {
-    p: std::marker::PhantomData<&'a u8>,
+pub struct TextListRead<'a> {
+    p: PhantomData<&'a u8>,
 }
-impl<'a> ListAccess<'a> for TextListAccess<'a> {
+
+impl<'a> ListRead<'a> for TextListRead<'a> {
     type Output = Result<Option<&'a str>>;
+
     fn bytes(size: usize) -> usize {
         size * 6
     }
+
     unsafe fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
         reader.get_text(idx * 6)
     }
 }
 
-pub struct BytesListAccess<'a> {
-    p: std::marker::PhantomData<&'a u8>,
+pub struct BytesListRead<'a> {
+    p: PhantomData<&'a u8>,
 }
-impl<'a> ListAccess<'a> for BytesListAccess<'a> {
+
+impl<'a> ListRead<'a> for BytesListRead<'a> {
     type Output = Result<Option<&'a [u8]>>;
+
     fn bytes(size: usize) -> usize {
         size * 6
     }
+
     unsafe fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
         reader.get_bytes(idx * 6)
     }
 }
 
-pub struct TableListAccess<'a, T: TableIn<'a> + 'a> {
-    p: std::marker::PhantomData<&'a T>,
+pub struct TableListRead<'a, T: TableIn<'a> + 'a> {
+    p: PhantomData<&'a T>,
 }
-impl<'a, T: TableIn<'a> + 'a> ListAccess<'a> for TableListAccess<'a, T> {
+
+impl<'a, T: TableIn<'a> + 'a> ListRead<'a> for TableListRead<'a, T> {
     type Output = Result<Option<T>>;
+
     fn bytes(size: usize) -> usize {
         size * 6
     }
+
     unsafe fn get(reader: &Reader<'a>, idx: usize) -> Self::Output {
         reader.get_table::<T>(idx * 6)
     }
 }
 
-pub struct BoolListAccess<'a> {
-    p: std::marker::PhantomData<&'a bool>,
+pub struct BoolListRead<'a> {
+    p: PhantomData<&'a bool>,
 }
-impl<'a> ListAccess<'a> for BoolListAccess<'a> {
+
+impl<'a> ListRead<'a> for BoolListRead<'a> {
     type Output = bool;
+
     fn bytes(size: usize) -> usize {
         (size + 7) >> 3
     }
+
     unsafe fn get(reader: &Reader<'a>, idx: usize) -> bool {
         reader.get_bit(idx >> 3, idx & 7)
     }
 }
 
-pub struct UnionListAccess<'a, U: UnionIn<'a> + 'a> {
-    p: std::marker::PhantomData<&'a U>,
+pub struct UnionListRead<'a, U: UnionIn<'a> + 'a> {
+    p: PhantomData<&'a U>,
 }
-impl<'a, U: UnionIn<'a> + 'a> ListAccess<'a> for UnionListAccess<'a, U> {
+
+impl<'a, U: UnionIn<'a> + 'a> ListRead<'a> for UnionListRead<'a, U> {
     type Output = Result<U>;
+
     fn bytes(size: usize) -> usize {
         size * 8
     }
@@ -552,9 +585,13 @@ pub trait TableIn<'a>: std::fmt::Debug {
     fn new(reader: Reader<'a>) -> Self;
 }
 
-// ================================> Writing <========================================
+//============================================================================================
+//========================================> WRITING <=========================================
+//============================================================================================
 
-/* Trait used to describe the placment of lists, tabels and unions. There should only be two implementations: Normal and Inplace */
+/// Trait used to describe the placment of lists, tabels and unions.
+/// There should only be two implementations: Normal and Inplace .
+/// This is an internal trait, it should not be used or implemented in user code.
 pub trait Placement {}
 
 pub struct Inplace {}
@@ -574,9 +611,8 @@ pub struct PArena {
     state: std::cell::UnsafeCell<ArenaState>,
 }
 
-/**
- * Represents disjoint slice of the arena
- */
+/// Represents disjoint slice of the arena
+/// Note that this is an internal struct, it should not be used from user code
 pub struct ArenaSlice<'a> {
     pub arena: &'a PArena,
     offset: usize,
@@ -625,7 +661,7 @@ pub trait MetaType {
 }
 
 pub struct PodType<T: Pod> {
-    p: std::marker::PhantomData<T>,
+    p: PhantomData<T>,
 }
 impl<T: Pod> MetaType for PodType<T> {
     fn list_bytes(len: usize) -> usize {
@@ -641,12 +677,13 @@ impl MetaType for BoolType {
 }
 
 pub struct EnumType<T: Enum> {
-    p: std::marker::PhantomData<T>,
+    p: PhantomData<T>,
 }
 impl<T: Enum> MetaType for EnumType<T> {
     fn list_bytes(len: usize) -> usize {
         len
     }
+
     fn list_def() -> u8 {
         255
     }
@@ -667,7 +704,7 @@ impl MetaType for BytesType {
 }
 
 pub struct TableType<'a, T> {
-    p: std::marker::PhantomData<&'a T>,
+    p: PhantomData<&'a T>,
 }
 impl<'a, T> MetaType for TableType<'a, T> {
     fn list_bytes(len: usize) -> usize {
@@ -676,7 +713,7 @@ impl<'a, T> MetaType for TableType<'a, T> {
 }
 
 pub struct StructType<'a, F: Struct<'a>> {
-    p: std::marker::PhantomData<&'a F>,
+    p: PhantomData<&'a F>,
 }
 impl<'a, F: Struct<'a>> MetaType for StructType<'a, F> {
     fn list_bytes(len: usize) -> usize {
@@ -685,7 +722,7 @@ impl<'a, F: Struct<'a>> MetaType for StructType<'a, F> {
 }
 
 pub struct UnionType<'a, F: Union<'a>> {
-    p: std::marker::PhantomData<&'a F>,
+    p: PhantomData<&'a F>,
 }
 impl<'a, F: Union<'a>> MetaType for UnionType<'a, F> {
     fn list_bytes(len: usize) -> usize {
@@ -696,8 +733,8 @@ impl<'a, F: Union<'a>> MetaType for UnionType<'a, F> {
 pub struct ListOut<'a, T: MetaType, P: Placement> {
     slice: ArenaSlice<'a>,
     _len: usize,
-    p1: std::marker::PhantomData<T>,
-    p2: std::marker::PhantomData<P>,
+    p1: PhantomData<T>,
+    p2: PhantomData<P>,
 }
 impl<'a, T: MetaType, P: Placement> ListOut<'a, T, P> {
     pub fn len(&self) -> usize {
@@ -714,18 +751,21 @@ impl<'a, T: Pod, P: Placement> ListOut<'a, PodType<T>, P> {
         };
     }
 }
+
 impl<'a, P: Placement> ListOut<'a, BoolType, P> {
     pub fn set(&mut self, idx: usize, v: bool) {
         assert!(idx < self._len);
         unsafe { self.slice.set_bit_unsafe(idx >> 3, idx & 7, v) }
     }
 }
+
 impl<'a, T: Enum, P: Placement> ListOut<'a, EnumType<T>, P> {
     pub fn set(&mut self, idx: usize, v: Option<T>) {
         assert!(idx < self._len);
         unsafe { self.slice.set_enum_unsafe(idx, v) }
     }
 }
+
 impl<'a, P: Placement> ListOut<'a, TextType, P> {
     pub fn set(&mut self, idx: usize, v: Option<&TextOut<'a>>) {
         assert!(idx < self._len);
@@ -736,6 +776,7 @@ impl<'a, P: Placement> ListOut<'a, TextType, P> {
         self.slice.add_text(idx * 6, v)
     }
 }
+
 impl<'a, P: Placement> ListOut<'a, BytesType, P> {
     pub fn set(&mut self, idx: usize, v: Option<&BytesOut<'a>>) {
         assert!(idx < self._len);
@@ -746,6 +787,7 @@ impl<'a, P: Placement> ListOut<'a, BytesType, P> {
         self.slice.add_bytes(idx * 6, v)
     }
 }
+
 impl<'a, T: TableOut<'a, Normal> + 'a, P: Placement> ListOut<'a, TableType<'a, T>, P> {
     pub fn set(&mut self, idx: usize, v: Option<&T>) {
         assert!(idx < self._len);
@@ -756,6 +798,7 @@ impl<'a, T: TableOut<'a, Normal> + 'a, P: Placement> ListOut<'a, TableType<'a, T
         self.slice.add_table::<T>(idx * 6)
     }
 }
+
 impl<'a, F, P: Placement> ListOut<'a, StructType<'a, F>, P>
 where
     F: for<'b> Struct<'b>,
@@ -838,8 +881,8 @@ impl PArena {
             ListOut {
                 slice: slice.cut(10, 0),
                 _len: len,
-                p1: std::marker::PhantomData {},
-                p2: std::marker::PhantomData {},
+                p1: PhantomData,
+                p2: PhantomData,
             }
         }
     }
@@ -1070,8 +1113,8 @@ impl<'a> ArenaSlice<'a> {
         ListOut {
             slice: slice,
             _len: len,
-            p1: std::marker::PhantomData {},
-            p2: std::marker::PhantomData {},
+            p1: PhantomData,
+            p2: PhantomData,
         }
     }
 
@@ -1105,16 +1148,20 @@ impl<'a> ArenaSlice<'a> {
     }
 }
 
-// =============================> CopyIn <===========================================
+//============================================================================================
+//========================================> COPYIN <==========================================
+//============================================================================================
 
+/// Internal trait used for copying from intput to output
+/// This should not be used or implemented in user code.
 pub trait CopyIn<In> {
     fn copy_in(&mut self, i: In) -> Result<()>;
 }
 
-impl<'a, 'b, T: Pod + 'b, P: Placement> CopyIn<ListIn<'b, PodListAccess<'b, T>>>
+impl<'a, 'b, T: Pod + 'b, P: Placement> CopyIn<ListIn<'b, PodListRead<'b, T>>>
     for ListOut<'a, PodType<T>, P>
 {
-    fn copy_in(&mut self, i: ListIn<'b, PodListAccess<'b, T>>) -> Result<()> {
+    fn copy_in(&mut self, i: ListIn<'b, PodListRead<'b, T>>) -> Result<()> {
         assert!(i.len() == self.len());
         for n in 0..i.len() {
             self.set(n, i.get(n));
@@ -1123,8 +1170,8 @@ impl<'a, 'b, T: Pod + 'b, P: Placement> CopyIn<ListIn<'b, PodListAccess<'b, T>>>
     }
 }
 
-impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, BoolListAccess<'b>>> for ListOut<'a, BoolType, P> {
-    fn copy_in(&mut self, i: ListIn<'b, BoolListAccess<'b>>) -> Result<()> {
+impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, BoolListRead<'b>>> for ListOut<'a, BoolType, P> {
+    fn copy_in(&mut self, i: ListIn<'b, BoolListRead<'b>>) -> Result<()> {
         assert!(i.len() == self.len());
         for n in 0..i.len() {
             self.set(n, i.get(n));
@@ -1133,10 +1180,10 @@ impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, BoolListAccess<'b>>> for ListOut<'a
     }
 }
 
-impl<'a, 'b, T: Enum + 'b, P: Placement> CopyIn<ListIn<'b, EnumListAccess<'b, T>>>
+impl<'a, 'b, T: Enum + 'b, P: Placement> CopyIn<ListIn<'b, EnumListRead<'b, T>>>
     for ListOut<'a, EnumType<T>, P>
 {
-    fn copy_in(&mut self, i: ListIn<'b, EnumListAccess<'b, T>>) -> Result<()> {
+    fn copy_in(&mut self, i: ListIn<'b, EnumListRead<'b, T>>) -> Result<()> {
         assert!(i.len() == self.len());
         for n in 0..i.len() {
             self.set(n, i.get(n));
@@ -1145,8 +1192,8 @@ impl<'a, 'b, T: Enum + 'b, P: Placement> CopyIn<ListIn<'b, EnumListAccess<'b, T>
     }
 }
 
-impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, TextListAccess<'b>>> for ListOut<'a, TextType, P> {
-    fn copy_in(&mut self, i: ListIn<'b, TextListAccess<'b>>) -> Result<()> {
+impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, TextListRead<'b>>> for ListOut<'a, TextType, P> {
+    fn copy_in(&mut self, i: ListIn<'b, TextListRead<'b>>) -> Result<()> {
         assert!(i.len() == self.len());
         for n in 0..i.len() {
             if let Some(v) = i.get(n)? {
@@ -1157,8 +1204,8 @@ impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, TextListAccess<'b>>> for ListOut<'a
     }
 }
 
-impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, BytesListAccess<'b>>> for ListOut<'a, BytesType, P> {
-    fn copy_in(&mut self, i: ListIn<'b, BytesListAccess<'b>>) -> Result<()> {
+impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, BytesListRead<'b>>> for ListOut<'a, BytesType, P> {
+    fn copy_in(&mut self, i: ListIn<'b, BytesListRead<'b>>) -> Result<()> {
         assert!(i.len() == self.len());
         for n in 0..i.len() {
             if let Some(v) = i.get(n)? {
@@ -1170,9 +1217,9 @@ impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, BytesListAccess<'b>>> for ListOut<'
 }
 
 impl<'a, 'b, Out: TableOut<'a, Normal> + 'a + CopyIn<In>, P: Placement, In: TableIn<'b> + 'b>
-    CopyIn<ListIn<'b, TableListAccess<'b, In>>> for ListOut<'a, TableType<'a, Out>, P>
+    CopyIn<ListIn<'b, TableListRead<'b, In>>> for ListOut<'a, TableType<'a, Out>, P>
 {
-    fn copy_in(&mut self, i: ListIn<'b, TableListAccess<'b, In>>) -> Result<()> {
+    fn copy_in(&mut self, i: ListIn<'b, TableListRead<'b, In>>) -> Result<()> {
         assert!(i.len() == self.len());
         for n in 0..i.len() {
             if let Some(v) = i.get(n)? {
@@ -1184,14 +1231,17 @@ impl<'a, 'b, Out: TableOut<'a, Normal> + 'a + CopyIn<In>, P: Placement, In: Tabl
     }
 }
 
-// =============================> User facing reading and writing <===========================================
+//============================================================================================
+//============================> USER FACING READING AND WRITING <=============================
+//============================================================================================
 
-// Trait implemented for every tabel, so we can talk about it without specfying In, Out or Placement
+/// Trait implemented for every tabel, so we can talk about it without specfying In, Out or Placement
 pub trait Table<'a> {
     type In: TableIn<'a>;
     type Out: TableOut<'a, Normal>;
 }
 
+/// Read a table from the given data
 pub fn read_message<'a, F: Table<'a> + 'a>(data: &'a [u8]) -> Result<F::In> {
     if data.len() < 10 {
         return Err(Error::InvalidPointer());
@@ -1207,16 +1257,21 @@ pub fn read_message<'a, F: Table<'a> + 'a>(data: &'a [u8]) -> Result<F::In> {
     }
 }
 
+/// Writer used to write message
 pub struct Writer<'a> {
     slice: ArenaSlice<'a>,
 }
 
+/// Arena a message is written in
 pub struct Arena {
     arena: PArena,
 }
 
 impl Arena {
-    pub fn new(data: Vec<u8>) -> Self {
+    /// Construct an arena storing data in the given Vec
+    /// the data currently in the Vec is discarded
+    pub fn new(mut data: Vec<u8>) -> Self {
+        data.clear();
         Self {
             arena: PArena {
                 data: std::cell::UnsafeCell::new(data),
@@ -1224,6 +1279,10 @@ impl Arena {
             },
         }
     }
+
+    /// Get finalized message, note that a writer must have been constructed
+    /// for the arena and a root added before this method may be called.
+    /// The Vec returned is the one given to new, but now with the constructed message
     pub fn finalize(self) -> Vec<u8> {
         unsafe {
             if let ArenaState::AfterRoot = *self.arena.state.get() {
@@ -1236,6 +1295,8 @@ impl Arena {
 }
 
 impl<'a> Writer<'a> {
+    /// Construct a new writer for the given arena
+    /// Note that exactly one writer must be allocated for an arena
     pub fn new(arena: &'a Arena) -> Self {
         unsafe {
             if let ArenaState::BeforeWriter = *arena.arena.state.get() {
@@ -1249,6 +1310,8 @@ impl<'a> Writer<'a> {
         }
     }
 
+    /// Add a root table to the message
+    /// Note that exactly one root must be added to a message
     pub fn add_root<F: Table<'a> + 'a>(&mut self) -> F::Out {
         unsafe {
             if let ArenaState::BeforeRoot = *self.slice.arena.state.get() {
@@ -1318,6 +1381,7 @@ impl<'a> Writer<'a> {
     pub fn add_enum_list<T: Enum + 'a>(&mut self, size: usize) -> ListOut<'a, EnumType<T>, Normal> {
         self.slice.arena.create_list::<EnumType<T>>(size)
     }
+
     pub fn add_table_list<F: Table<'a> + 'a>(
         &mut self,
         size: usize,
