@@ -61,11 +61,11 @@ def byte_encode(b: bytes) -> str:
     return "".join(x)
 
 
-def add_lifetime(t: str) -> str:
+def add_lifetime(t: str, lt="a") -> str:
     if not "<" in t:
         t = t + "<>"
     l, r = t.split("<", 1)
-    return "%s<'a, %s" % (l, r)
+    return "%s<'%s, %s" % (l, lt, r)
 
 
 class Generator:
@@ -83,7 +83,9 @@ class Generator:
         elif node.enum:
             return "scalgo_proto::EnumType<%s>" % (node.enum.name)
         elif node.table:
-            return "scalgo_proto::TableType<%s>" % (node.table.name)
+            return "scalgo_proto::TableType<%sOut<'a, scalgo_proto::Normal>>" % (
+                node.table.name
+            )
         elif node.union:
             return "scalgo_proto::UnionType<%s>" % (node.union.name)
         elif node.type_.type == TokenType.TEXT:
@@ -169,19 +171,39 @@ class Generator:
         else:
             raise ICE()
 
-    def list_access_type(self, node: Value) -> Tuple[str]:
+    def list_access_type_lt(self, node: Value) -> str:
+        if node.type_.type == TokenType.BOOL:
+            return "scalgo_proto::BoolListAccess<'a>"
+        elif node.type_.type in typeMap:
+            return "scalgo_proto::PodListAccess<'a, %s>" % (typeMap[node.type_.type].p)
+        elif node.struct:
+            return "scalgo_proto::StructListAccess<'a, %sIn<'a>>" % (node.struct.name)
+        elif node.enum:
+            return "scalgo_proto::EnumListAccess<'a, %s>" % (node.enum.name)
+        elif node.table:
+            return "scalgo_proto::TableListAccess<'a, %sIn<'a>>" % (node.table.name)
+        elif node.union:
+            return "scalgo_proto::UnionListAccess<'a, %sIn<'a>>" % (node.union.name)
+        elif node.type_.type == TokenType.TEXT:
+            return "scalgo_proto::TextListAccess<'a>"
+        elif node.type_.type == TokenType.BYTES:
+            return "scalgo_proto::BytesListAccess<'a>"
+        else:
+            raise ICE()
+
+    def list_access_type(self, node: Value) -> str:
         if node.type_.type == TokenType.BOOL:
             return "scalgo_proto::BoolListAccess"
         elif node.type_.type in typeMap:
             return "scalgo_proto::PodListAccess<%s>" % (typeMap[node.type_.type].p)
         elif node.struct:
-            return "scalgo_proto::StructListAccess<%s>" % (node.struct.name)
+            return "scalgo_proto::StructListAccess<%sIn>" % (node.struct.name)
         elif node.enum:
             return "scalgo_proto::EnumListAccess<%s>" % (node.enum.name)
         elif node.table:
-            return "scalgo_proto::TableListAccess<%s>" % (node.table.name)
+            return "scalgo_proto::TableListAccess<%sIn>" % (node.table.name)
         elif node.union:
-            return "scalgo_proto::UnionListAccess<%s>" % (node.union.name)
+            return "scalgo_proto::UnionListAccess<%sIn>" % (node.union.name)
         elif node.type_.type == TokenType.TEXT:
             return "scalgo_proto::TextListAccess"
         elif node.type_.type == TokenType.BYTES:
@@ -231,17 +253,6 @@ class Generator:
         )
         self.o("    }")
 
-    def generate_union_list_in(self, node: Value, lname: str) -> None:
-        (tn, acc) = self.in_list_help(node, "o, s")
-        self.output_doc(node, "    ")
-        self.o("    get %s() : scalgoproto.ListIn<%s> | null {" % (lname, tn))
-        self.o("        if (!this.is%s) return null;" % (ucamel(lname)))
-        self.o("        const [o, s] = this._getPtr(scalgoproto.LIST_MAGIC)")
-        self.o("        if (o === 0) return null;")
-        self.o(acc)
-        self.o("    }")
-        self.o()
-
     def generate_list_out(self, node: Value, lname: str, size: int) -> None:
         # it = "scalgoproto.ListIn<%s>" % self.in_list_help(node, "")[0]
         ot = self.out_list_type(node)
@@ -267,6 +278,8 @@ class Generator:
         self, node: Value, lname: str, idx: int, inplace: bool
     ) -> None:
         ot = self.out_list_type(node)
+        tn = self.list_access_type_lt(node).replace("'a", "'b")
+
         if not inplace:
             self.output_doc(node, "    ")
             self.o(
@@ -278,11 +291,32 @@ class Generator:
                 "    pub fn add_%s(&mut self, len: usize) -> scalgo_proto::ListOut::<'a, %s, scalgo_proto::Normal> { self._slice.set_pod::<u16>(0, &%d); self._slice.add_list::<%s>(2, len)}"
                 % (lname, ot, idx, ot)
             )
+            self.output_doc(node, "    ")
+            # TODO We would like to return a in this method but, we cannot get the lifetimes to work out
+            self.o(
+                f"""
+    pub fn copy_{lname}<'b>(&mut self, i: scalgo_proto::ListIn<'b, {tn}>) -> scalgo_proto::Result<()> {{
+        let s: usize = i.len();
+        let mut a = self.add_{lname}(s);
+        a.copy_in(i)?;
+        Ok(())
+    }}"""
+            )
         else:
             self.output_doc(node, "    ")
             self.o(
                 "    pub fn add_%s(&mut self, len: usize) -> scalgo_proto::ListOut::<'a, %s, scalgo_proto::Inplace> { self._slice.set_pod::<u16>(0, &%d); self._slice.add_list_inplace::<%s>(2, len, Some(self._container_end))}"
                 % (lname, ot, idx, ot)
+            )
+            # TODO We would like to return a in this method but, we cannot get the lifetimes to work out
+            self.o(
+                f"""
+    pub fn copy_{lname}<'b>(&mut self, i: scalgo_proto::ListIn<'b, {tn}>) -> scalgo_proto::Result<()> {{
+        let s: usize = i.len();
+        let mut a = self.add_{lname}(s);
+        a.copy_in(i)?;
+        Ok(())
+    }}"""
             )
 
     def generate_bool_in(self, node: Value, lname: str) -> None:
@@ -403,7 +437,7 @@ class Generator:
         self.output_doc(node, "    ")
         if node.optional:
             self.o(
-                "    pub fn %s(&self) -> Option<%sIn> {if self._reader.get_bit(%d, %d) {Some(self._reader.get_struct::<%s>(%d))} else {None}}"
+                "    pub fn %s(&self) -> Option<%sIn> {if self._reader.get_bit(%d, %d) {Some(self._reader.get_struct::<%sIn>(%d))} else {None}}"
                 % (
                     lname,
                     node.struct.name,
@@ -415,7 +449,7 @@ class Generator:
             )
         else:
             self.o(
-                "    pub fn %s(&self) -> %sIn {self._reader.get_struct::<%s>(%d)}"
+                "    pub fn %s(&self) -> %sIn {self._reader.get_struct::<%sIn>(%d)}"
                 % (lname, node.struct.name, node.struct.name, node.offset)
             )
 
@@ -447,13 +481,13 @@ class Generator:
         if not node.inplace:
             self.output_doc(node, "    ")
             self.o(
-                "    pub fn %s(&self) -> scalgo_proto::Result<Option<%sIn>> {self._reader.get_table::<%s>(%d)}"
+                "    pub fn %s(&self) -> scalgo_proto::Result<Option<%sIn>> {self._reader.get_table::<%sIn>(%d)}"
                 % (lname, node.table.name, node.table.name, node.offset)
             )
         else:
             self.output_doc(node, "    ")
             self.o(
-                "    pub fn %s(&self) -> scalgo_proto::Result<Option<%sIn>> {self._reader.get_table_inplace::<%s>(%d)}"
+                "    pub fn %s(&self) -> scalgo_proto::Result<Option<%sIn>> {self._reader.get_table_inplace::<%sIn>(%d)}"
                 % (lname, node.table.name, node.table.name, node.offset)
             )
 
@@ -468,13 +502,13 @@ class Generator:
 
             self.output_doc(node, "    ")
             self.o(
-                "    pub fn add_%s(&mut self) -> %sOut<'a, scalgo_proto::Normal> {self._slice.add_table::<%s>(%d)}"
+                "    pub fn add_%s(&mut self) -> %sOut<'a, scalgo_proto::Normal> {self._slice.add_table::<%sOut<scalgo_proto::Normal>>(%d)}"
                 % (lname, node.table.name, node.table.name, node.offset)
             )
         elif not node.table.empty:
             self.output_doc(node, "    ")
             self.o(
-                "    pub fn add_%s(&mut self) -> %sOut<'a, scalgo_proto::Inplace> {self._slice.add_table_inplace::<%s>(%d, None)}"
+                "    pub fn add_%s(&mut self) -> %sOut<'a, scalgo_proto::Inplace> {self._slice.add_table_inplace::<%sOut<scalgo_proto::Inplace>>(%d, None)}"
                 % (lname, node.table.name, node.table.name, node.offset)
             )
         else:
@@ -502,14 +536,30 @@ class Generator:
             )
             self.output_doc(node, "    ")
             self.o(
-                "    pub fn add_%s(&mut self) -> %sOut<'a, scalgo_proto::Normal> {let a = self._slice.arena.create_table::<%s>(); self.set_%s(&a); a}"
-                % (lname, table.name, table.name, lname)
+                "    pub fn add_%s(&mut self) -> %sOut<'a, scalgo_proto::Normal> {let a = self._slice.arena.create_table(); self.set_%s(&a); a}"
+                % (lname, table.name, lname)
+            )
+            self.output_doc(node, "    ")
+            self.o(
+                f"""    pub fn copy_{lname}<'b>(&mut self, i: {table.name}In<'b>)
+        -> scalgo_proto::Result<{table.name}Out<'a, scalgo_proto::Normal>> {{
+            let mut a = self.add_{lname}();
+            a.copy_in(i)?;
+            Ok(a)
+        }}"""
             )
         else:
             self.output_doc(node, "    ")
             self.o(
-                "    pub fn add_%s(&mut self) -> %sOut<'a, scalgo_proto::Inplace> {self._slice.set_pod::<u16>(0, &%d); self._slice.add_table_inplace::<%s>(2, Some(self._container_end))}"
+                "    pub fn add_%s(&mut self) -> %sOut<'a, scalgo_proto::Inplace> {self._slice.set_pod::<u16>(0, &%d); self._slice.add_table_inplace::<%sOut<scalgo_proto::Inplace>>(2, Some(self._container_end))}"
                 % (lname, table.name, idx, table.name)
+            )
+            self.output_doc(node, "    ")
+            self.o(
+                f"""    pub fn copy_{lname}<'b>(&mut self, i: {table.name}In<'b>) -> scalgo_proto::Result<()> {{
+        let mut a = self.add_{lname}();
+        a.copy_in(i)
+    }}"""
             )
 
     def generate_text_in(self, node: Value, lname: str) -> None:
@@ -545,8 +595,9 @@ class Generator:
         self.output_doc(node, "    ")
         if inplace:
             self.o(
-                "    pub fn add_%s(&mut self, v: &str) {}" % (lname)
-            )  # TODO(jakobt) , Some(self._container_end)
+                "    pub fn add_%s(&mut self, v: &str) {self._slice.set_pod::<u16>(0, &%d); self._slice.add_text_inplace(2, v, Some(self._container_end))}"
+                % (lname, idx)
+            )
         else:
             self.o(
                 "    pub fn set_%s(&mut self, v: &scalgo_proto::TextOut<'a>) {self._slice.set_pod::<u16>(0, &%d); self._slice.set_text(2, Some(v));}"
@@ -587,8 +638,9 @@ class Generator:
         self.output_doc(node, "        ")
         if inplace:
             self.o(
-                "    pub fn add_%s(&mut self, v: &[u8]) {}" % (lname)
-            )  # TODO(jakobt) , Some(self._container_end)
+                "    pub fn add_%s(&mut self, v: &[u8]) {self._slice.set_pod::<u16>(0, &%d); self._slice.add_bytes_inplace(2, v, Some(self._container_end))}"
+                % (lname, idx)
+            )
         else:
             self.o(
                 "    pub fn set_%s(&mut self, v: &scalgo_proto::BytesOut<'a>) {self._slice.set_pod::<u16>(0, &%d); self._slice.set_bytes(2, Some(v));}"
@@ -602,7 +654,7 @@ class Generator:
     def generate_union_in(self, node: Value, lname: str, table: Table) -> None:
         self.output_doc(node, "    ")
         self.o(
-            "    pub fn %s(&self) -> scalgo_proto::Result<%sIn<'a>> {self._reader.get_union%s::<%s>(%d)}"
+            "    pub fn %s(&self) -> scalgo_proto::Result<%sIn<'a>> {self._reader.get_union%s::<%sIn>(%d)}"
             % (
                 lname,
                 node.union.name,
@@ -671,21 +723,6 @@ class Generator:
         else:
             raise ICE()
 
-    def generate_union_copy(self, union: Union) -> None:
-        self.o("    _copy(i:%sIn) {" % union.name)
-        self.o("        switch(i.type) {")
-        for node in union.members:
-            lname = self.value(node.identifier)
-            self.o("        case %sType.%s:" % (union.name, lname.upper()))
-            if node.table and node.table.empty:
-                self.o("            this.add%s();" % (ucamel(lname)))
-            else:
-                self.o("            this.%s = i.%s!;" % (lname, lname))
-            self.o("            break;")
-        self.o("        }")
-        self.o("    }")
-        self.o()
-
     def generate_union(self, union: Union) -> None:
         # Recursively generate direct contained members
         for value in union.members:
@@ -697,7 +734,7 @@ class Generator:
                 self.generate_enum(value.direct_enum)
             if value.direct_struct:
                 self.generate_struct(value.direct_struct)
-
+        name = union.name
         self.output_doc(union, "    ")
         self.o("#[derive(Debug)]")
         self.o("pub enum %sIn<'a> {" % (union.name))
@@ -709,7 +746,7 @@ class Generator:
             if member.list_:
                 self.o(
                     "    %s(scalgo_proto::ListIn<'a, %s>),"
-                    % (uname, add_lifetime(self.list_access_type(member)))
+                    % (uname, self.list_access_type_lt(member))
                 )
             elif member.table:
                 self.o("    %s(%sIn<'a>)," % (uname, member.table.name))
@@ -720,6 +757,41 @@ class Generator:
             else:
                 raise ICE()
         self.o("}")
+
+        self.o("impl<'a> scalgo_proto::UnionIn<'a> for %sIn<'a> {" % union.name)
+        self.o(
+            "    fn new(t: u16, magic: Option<u32>, offset: usize, size: usize, reader: &scalgo_proto::Reader<'a>) -> scalgo_proto::Result<Self> {"
+        )
+        self.o("        match t {")
+        for i, member in enumerate(union.members):
+            uname = self.value(member.identifier).upper()
+            if member.list_:
+                self.o(
+                    "        %d => Ok(Self::%s(reader.get_list_union(magic, offset, size)?)),"
+                    % (i + 1, uname)
+                )
+            elif member.table:
+                self.o(
+                    "        %d => Ok(Self::%s(reader.get_table_union::<%sIn>(magic, offset, size)?)),"
+                    % (i + 1, uname, member.table.name)
+                )
+            elif member.type_.type == TokenType.BYTES:
+                self.o(
+                    "        %d => Ok(Self::%s(reader.get_bytes_union(magic, offset, size)?)),"
+                    % (i + 1, uname)
+                )
+            elif member.type_.type == TokenType.TEXT:
+                self.o(
+                    "        %d => Ok(Self::%s(reader.get_text_union(magic, offset, size)?)),"
+                    % (i + 1, uname)
+                )
+            else:
+                self.o("        %d => Ok(Self::NONE)," % (i + 1))
+        self.o("        _ => Ok(Self::NONE),")
+        self.o("        }")
+        self.o("    }")
+        self.o("}")
+
         self.o()
         self.output_doc(union, "    ")
         self.o("pub struct %sOut<'a, P: scalgo_proto::Placement> {" % (union.name))
@@ -745,7 +817,6 @@ class Generator:
                 raise ICE()
         self.o("}")
 
-        # TODO(jakobt) copy union
         self.o("impl<'a> %sOut<'a, scalgo_proto::Inplace> {" % (union.name))
         self.o(
             "    pub fn set_none(&mut self) {self._slice.set_pod::<u16>(0, &0); self._slice.set_u48(2, 0);}"
@@ -762,71 +833,92 @@ class Generator:
                 self.generate_union_text_out(member, llname, idx + 1, True)
             else:
                 raise ICE()
-        self.o("}")
-        # TODO(jakobt) copy union inplace
 
-        self.o("#[derive(Copy, Clone)]")
-        self.o("pub struct %s {}" % union.name)
-        self.o("impl<'a> scalgo_proto::UnionFactory<'a> for %s {" % union.name)
-        self.o("    type In = %sIn<'a>;" % union.name)
-        self.o("    type Out = %sOut<'a, scalgo_proto::Normal>;" % union.name)
-        self.o("    type InplaceOut = %sOut<'a, scalgo_proto::Inplace>;" % union.name)
         self.o(
-            "    fn new_in(t: u16, magic: Option<u32>, offset: usize, size: usize, reader: &scalgo_proto::Reader<'a>) -> scalgo_proto::Result<Self::In> {"
+            f"""}}
+
+pub struct {name} {{}}
+impl<'a> scalgo_proto::Union<'a> for {name} {{
+    type Out = {name}Out<'a, scalgo_proto::Normal>;
+    type InplaceOut = {name}Out<'a, scalgo_proto::Inplace>;
+    fn new_out(slice: scalgo_proto::ArenaSlice<'a>) -> Self::Out {{
+        Self::Out{{_slice: slice, _container_end: 0, _p: std::marker::PhantomData}}
+    }}
+    fn new_inplace_out(slice: scalgo_proto::ArenaSlice<'a>, container_end: usize) -> Self::InplaceOut {{
+        Self::InplaceOut{{_slice: slice, _container_end: container_end, _p: std::marker::PhantomData}}
+    }}
+}}
+
+impl<'a, 'b> scalgo_proto::CopyIn<{name}In<'b> > for {name}Out<'a, scalgo_proto::Normal> {{
+    fn copy_in(&mut self, i: {name}In<'b>) -> scalgo_proto::Result<()> {{
+        match i {{
+            {name}In::NONE => {{self.set_none();}},"""
         )
-        self.o("        match t {")
-        for i, member in enumerate(union.members):
+        for member in union.members:
+            lname = snake(self.value(member.identifier))
             uname = self.value(member.identifier).upper()
-            if member.list_:
+            if member.table and member.table.empty:
+                self.o(f"            {name}In::{uname}(_) => {{self.add_{lname}();}},")
+            elif member.list_ or member.table:
                 self.o(
-                    "        %d => Ok(Self::In::%s(reader.get_list_union(magic, offset, size)?)),"
-                    % (i + 1, uname)
-                )
-            elif member.table:
-                self.o(
-                    "        %d => Ok(Self::In::%s(reader.get_table_union::<%s>(magic, offset, size)?)),"
-                    % (i + 1, uname, member.table.name)
-                )
-            elif member.type_.type == TokenType.BYTES:
-                self.o(
-                    "        %d => Ok(Self::In::%s(reader.get_bytes_union(magic, offset, size)?)),"
-                    % (i + 1, uname)
-                )
-            elif member.type_.type == TokenType.TEXT:
-                self.o(
-                    "        %d => Ok(Self::In::%s(reader.get_text_union(magic, offset, size)?)),"
-                    % (i + 1, uname)
+                    f"            {name}In::{uname}(v) => {{self.copy_{lname}(v)?;}},"
                 )
             else:
-                self.o("        %d => Ok(Self::In::NONE)," % (i + 1))
-        self.o("        _ => Ok(Self::In::NONE),")
-        self.o("        }")
-        self.o("    }")
-        self.o("    fn new_out(slice: scalgo_proto::ArenaSlice<'a>) -> Self::Out {")
+                self.o(f"            {name}In::{uname}(v) => {{self.add_{lname}(v);}},")
         self.o(
-            "        Self::Out{_slice: slice, _container_end: 0, _p: std::marker::PhantomData{}}"
+            f"""        }};
+        Ok(())
+    }}
+}}
+
+impl<'a, 'b> scalgo_proto::CopyIn<{name}In<'b> > for {name}Out<'a, scalgo_proto::Inplace> {{
+    fn copy_in(&mut self, i: {name}In<'b>) -> scalgo_proto::Result<()> {{
+        match i {{
+            {name}In::NONE => {{}},"""
         )
-        self.o("    }")
+        for member in union.members:
+            lname = snake(self.value(member.identifier))
+            uname = self.value(member.identifier).upper()
+            if member.table and member.table.empty:
+                self.o(f"            {name}In::{uname}(_) => {{self.add_{lname}();}},")
+            elif member.list_ or member.table:
+                self.o(
+                    f"            {name}In::{uname}(v) => {{self.copy_{lname}(v)?;}},"
+                )
+            else:
+                self.o(f"            {name}In::{uname}(v) => {{self.add_{lname}(v);}},")
         self.o(
-            "    fn new_inplace_out(slice: scalgo_proto::ArenaSlice<'a>, container_end: usize) -> Self::InplaceOut {"
+            f"""        }};
+        Ok(())
+    }}
+}}
+
+impl<'a, 'b, P: scalgo_proto::Placement> CopyIn<scalgo_proto::ListIn<'b, scalgo_proto::UnionListAccess<'b, {name}In<'b>>>>
+    for scalgo_proto::ListOut<'a, scalgo_proto::UnionType<'a, {name}>, P> {{
+    fn copy_in(&mut self, 
+        i: scalgo_proto::ListIn<'b, scalgo_proto::UnionListAccess<'b, {name}In<'b>>>) 
+        -> scalgo_proto::Result<()> {{
+        assert!(i.len() == self.len());
+        for n in 0..i.len() {{
+            self.get(n).copy_in(i.get(n)?)?;
+        }}
+        Ok(())
+    }}
+}}
+"""
         )
-        self.o(
-            "        Self::InplaceOut{_slice: slice, _container_end: container_end, _p: std::marker::PhantomData{}}"
-        )
-        self.o("    }")
-        self.o("}")
-        self.o()
 
     def generate_table_copy(self, table: Table) -> None:
-        # self.o("    _copy(i:%sIn) {" % table.name)
         for ip in (True, False):
             for node in table.members:
                 lname = snake(self.value(node.identifier))
                 if bool(node.inplace) != ip:
                     continue
                 if node.list_:
-                    # self.o("        if let Some(v) = i.%s()? {let mut w = self.add_%s(v.len()); w.copy(v);}"%(lname, lname))
-                    pass
+                    self.o(
+                        "        if let Some(v) = i.%s()? {let mut w = self.add_%s(v.len()); w.copy_in(v)?;}"
+                        % (lname, lname)
+                    )
                 elif (
                     node.type_.type in typeMap
                     or node.type_.type == TokenType.BOOL
@@ -838,22 +930,22 @@ class Generator:
                         "        if let Some(v) = i.%s()? {self.add_%s(v);};"
                         % (lname, lname)
                     )
+                elif node.struct and node.optional:
+                    self.o(
+                        "        if let Some(v) = i.%s() {self.%s().copy_in(v)?;}"
+                        % (lname, lname)
+                    )
                 elif node.struct:
-                    # TODO (jakobt)
-                    pass
+                    self.o("        self.%s().copy_in(i.%s())?;" % (lname, lname))
                 elif node.table:
                     self.o(
-                        "        if let Some(v) = i.%s()? {let mut w = self.add_%s(); w.copy(v);}"
+                        "        if let Some(v) = i.%s()? {let mut w = self.add_%s(); w.copy_in(v)?;}"
                         % (lname, lname)
                     )
                 elif node.union:
-                    # TODO (jakobt)
-                    # self.o("        this.%s._copy(i.%s);" % (lname, lname))
-                    pass
+                    self.o("        self.%s().copy_in(i.%s()?)?;" % (lname, lname))
                 else:
                     raise ICE()
-        # self.o("    }")
-        # self.o()
 
     def generate_table(self, table: Table) -> None:
         # Recursively generate direct contained members
@@ -867,100 +959,83 @@ class Generator:
             if value.direct_struct:
                 self.generate_struct(value.direct_struct)
 
+        name = table.name
+        magic = table.magic
+
         self.output_doc(table, "")
-        self.o("pub struct %sIn<'a> {" % table.name)
-        self.o("    _reader: scalgo_proto::Reader<'a>,")
-        self.o("}")
-        self.o("impl<'a> %sIn<'a> {" % table.name)
+        self.o(
+            f"""pub struct {name}In<'a> {{
+    _reader: scalgo_proto::Reader<'a>,
+}}
+impl<'a> {name}In<'a> {{"""
+        )
         for node in table.members:
             self.generate_value_in(table, node)
-        self.o("}")
 
-        self.o("impl<'a> fmt::Debug for %sIn<'a> {" % table.name)
-        self.o("    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {")
-        self.o("        write!(")
-        self.o(
-            '            f, "%s {{ %s }}",'
-            % (
-                table.name,
-                ", ".join(
-                    [
-                        "%s: {:?}" % snake(self.value(v.identifier))
-                        for v in table.members
-                    ]
-                ),
-            )
+        format_str = ", ".join(
+            ["%s: {:?}" % snake(self.value(v.identifier)) for v in table.members]
         )
-        self.o(
-            "            %s"
-            % ", ".join(
-                ["self.%s()" % snake(self.value(v.identifier)) for v in table.members]
-            )
+        format_args = ", ".join(
+            ["self.%s()" % snake(self.value(v.identifier)) for v in table.members]
         )
-        self.o("        )")
-        self.o("    }")
-        self.o("}")
+
+        self.o(
+            f"""}}
+
+impl<'a> fmt::Debug for {name}In<'a> {{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {{
+        write!(f, "{name} {{{{ {format_str} }}}}", {format_args})
+    }}
+}}
+impl<'a> scalgo_proto::TableIn<'a> for {name}In<'a> {{
+    fn magic() -> u32 {{{magic:#010x}}}
+    fn new(reader: scalgo_proto::Reader<'a>) -> Self {{Self {{ _reader: reader }} }}
+}}"""
+        )
 
         # Generate Table writer
         self.output_doc(table, "")
-        self.o("pub struct %sOut<'a, P: scalgo_proto::Placement> {" % table.name)
-        self.o("    _slice: scalgo_proto::ArenaSlice<'a>,")
-        self.o("    _p: std::marker::PhantomData<P>,")
-        self.o("}")
-        self.o("impl<'a, P: scalgo_proto::Placement> %sOut<'a, P> {" % table.name)
+        self.o(
+            f"""pub struct {name}Out<'a, P: scalgo_proto::Placement> {{
+    _slice: scalgo_proto::ArenaSlice<'a>,
+    _p: std::marker::PhantomData<P>,
+}}
+impl<'a, P: scalgo_proto::Placement> {name}Out<'a, P> {{"""
+        )
         for node in table.members:
             self.generate_value_out(table, node)
-        self.o("}")
         self.o(
-            "impl<'a, P: scalgo_proto::Placement> scalgo_proto::TableOut<P> for %sOut<'a, P>  {"
-            % table.name
-        )
-        self.o("    fn offset(&self) -> usize {self._slice.get_offset()}")
-        self.o("    fn arena(&self) -> usize {self._slice.arena_id()}")
-        self.o("}")
-        # self.o(
-        #     "impl<'a, P: scalgo_proto::Placement, I> scalgo_proto::TableCopy<I> for %sOut<'a, P> where for<'b> I: %sIn<'b> {"
+            f"""}}
 
-        #     % (table.name, table.name)
-        #  )
-        # self.o("    fn copy(&mut self, input: I) {()}")
-        # self.o("}")
-        self.o(
-            "impl<'a, 'b, P: scalgo_proto::Placement> scalgo_proto::TableCopy<'a, 'b> for %sOut<'a, P> {"
-            % (table.name)
+impl<'a, P: scalgo_proto::Placement> scalgo_proto::TableOut<'a, P> for {name}Out<'a, P> {{
+    fn offset(&self) -> usize {{self._slice.get_offset()}}
+    fn arena(&self) -> usize {{self._slice.arena_id()}}
+    fn magic() -> u32 {{{magic:#010x}}}
+    fn size() -> usize {{{table.bytes}}}
+    fn default() -> &\'static [u8] {{b"{byte_encode(table.default)}"}}
+    fn new(slice: scalgo_proto::ArenaSlice<'a>) -> Self {{
+        Self{{_slice: slice, _p: std::marker::PhantomData}}
+    }}
+}}
+impl<'a, 'b, P: scalgo_proto::Placement> scalgo_proto::CopyIn<{name}In<'b> > for {name}Out<'a, P> {{
+    fn copy_in(&mut self, i: {name}In<'b>) -> scalgo_proto::Result<()> {{"""
         )
-        self.o("    type In = %sIn<'b>;" % table.name)
-        self.o("    fn copy(&mut self, i: Self::In) -> scalgo_proto::Result<()> {")
         self.generate_table_copy(table)
-        self.o("        Ok(())")
-        self.o("    }")
-        self.o("}")
+        self.o(
+            f"""        Ok(())
+    }}
+}}"""
+        )
 
-        #     % (table.name, table.name)
-        #  )
         self.output_doc(table, "")
-        self.o("#[derive(Copy, Clone)]")
-        self.o("pub struct %s {}" % table.name)
-        self.o("impl<'a> scalgo_proto::TableFactory<'a> for %s {" % table.name)
-        self.o("    type In = %sIn<'a>;" % table.name)
-        self.o("    type Out = %sOut<'a, scalgo_proto::Normal>;" % table.name)
-        self.o("    type InplaceOut = %sOut<'a, scalgo_proto::Inplace>;" % table.name)
-        self.o("    fn magic() -> u32 {0x%08X}" % table.magic)
-        self.o("    fn size() -> usize {%d}" % table.bytes)
         self.o(
-            '    fn default() -> &\'static [u8] {b"%s"}' % byte_encode(table.default)
+            f"""pub struct {name} {{}}
+impl<'a> scalgo_proto::Table<'a> for {name} {{
+    type In = {name}In<'a>;
+    type Out = {name}Out<'a, scalgo_proto::Normal>;
+}}
+"""
         )
-        self.o(
-            "    fn new_in(reader: scalgo_proto::Reader<'a>) -> Self::In {Self::In { _reader: reader }}"
-        )
-        self.o(
-            "    fn new_out(slice: scalgo_proto::ArenaSlice<'a>) -> Self::Out {Self::Out { _slice: slice, _p: std::marker::PhantomData}}"
-        )
-        self.o(
-            "    fn new_inplace_out(slice: scalgo_proto::ArenaSlice<'a>) -> Self::InplaceOut {Self::InplaceOut { _slice: slice, _p: std::marker::PhantomData}}"
-        )
-        self.o("}")
-        self.o()
 
     def generate_struct(self, node: Struct) -> None:
         # Recursively generate direct contained members
@@ -970,14 +1045,25 @@ class Generator:
             if value.direct_struct:
                 self.generate_struct(value.direct_struct)
 
+        name = node.name
+        size = node.bytes
+
         self.output_doc(node, "")
-        self.o("#[derive(Copy, Clone)]")
-        self.o("pub struct %s {}" % node.name)
+        self.o(f"#[derive(Copy, Clone)]" f"pub struct {name} {{}}")
         self.output_doc(node, "")
-        self.o("pub struct %sIn<'a> {" % node.name)
-        self.o("    _bytes: &'a [u8; %s]," % node.bytes)
-        self.o("}")
-        self.o("impl <'a> %sIn<'a> {" % node.name)
+        self.o(
+            f"""pub struct {name}In<'a> {{
+    _bytes: &'a [u8; {size}],
+}}
+
+impl<'a> scalgo_proto::StructIn<'a> for {name}In<'a> {{
+    type B = [u8; {size}];
+    fn size() -> usize {{{size}}}
+    fn new(bytes: &'a Self::B) -> Self {{Self{{_bytes: bytes}}}}
+}}
+
+impl <'a> {name}In<'a> {{"""
+        )
         for v in node.members:
             if not isinstance(v, Value):
                 raise ICE()
@@ -998,7 +1084,7 @@ class Generator:
                 )
             elif v.struct:
                 self.o(
-                    "    pub fn %s(&self) -> %sIn<'a> {unsafe{scalgo_proto::to_struct::<%s>(&self._bytes[%d..%d])}}"
+                    "    pub fn %s(&self) -> %sIn<'a> {unsafe{scalgo_proto::to_struct::<%sIn>(&self._bytes[%d..%d])}}"
                     % (
                         self.value(v.identifier),
                         v.struct.name,
@@ -1014,30 +1100,25 @@ class Generator:
                 )
             else:
                 raise ICE()
-        self.o("}")
-        self.o("impl<'a> fmt::Debug for %sIn<'a> {" % node.name)
-        self.o("    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {")
-        self.o("        write!(")
-        self.o(
-            '            f, "%s {{ %s }}",'
-            % (
-                node.name,
-                ", ".join(
-                    ["%s: {:?}" % self.value(v.identifier) for v in node.members]
-                ),
-            )
+        format_string = ", ".join(
+            ["%s: {:?}" % self.value(v.identifier) for v in node.members]
         )
-        self.o(
-            "            %s"
-            % ", ".join(["self.%s()" % self.value(v.identifier) for v in node.members])
+        format_args = ", ".join(
+            ["self.%s()" % self.value(v.identifier) for v in node.members]
         )
-        self.o("        )")
-        self.o("    }")
-        self.o("}")
-        self.o("pub struct %sOut<'a> {" % node.name)
-        self.o("    _slice: scalgo_proto::ArenaSlice<'a>,")
-        self.o("}")
-        self.o("impl <'a> %sOut<'a> {" % node.name)
+
+        self.o(
+            f"""}}
+impl<'a> fmt::Debug for {name}In<'a> {{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {{
+        write!(f, "{name} {{{{ {format_string} }}}}", {format_args})
+    }}
+}}
+pub struct {name}Out<'a> {{
+    _slice: scalgo_proto::ArenaSlice<'a>,
+}}
+impl <'a> {name}Out<'a> {{"""
+        )
         for v in node.members:
             if not isinstance(v, Value):
                 raise ICE()
@@ -1068,22 +1149,39 @@ class Generator:
                 )
             else:
                 raise ICE()
-        self.o("}")
-        self.o("impl<'a> scalgo_proto::StructFactory<'a> for %s {" % node.name)
-        self.o("    type In = %sIn<'a>;" % node.name)
-        self.o("    type Out = %sOut<'a>;" % node.name)
-        self.o("    type B = [u8; %s];" % node.bytes)
-        self.o("    fn size() -> usize {%d}" % node.bytes)
         self.o(
-            "    fn new_in(bytes: &'a Self::B) -> Self::In {Self::In{_bytes: bytes}}"
+            f"""}}
+
+impl<'a> scalgo_proto::Struct<'a> for {name} {{
+    type Out = {name}Out<'a>;
+    fn size() -> usize {{{size}}} 
+}}
+impl<'a> scalgo_proto::StructOut<'a> for {name}Out<'a> {{
+    fn new(slice: scalgo_proto::ArenaSlice<'a>) -> Self {{Self{{_slice: slice}}}}
+}}
+
+impl<'a, 'b> scalgo_proto::CopyIn<{name}In<'b> > for {name}Out<'a> {{
+    fn copy_in(&mut self, i: {name}In<'b>) -> scalgo_proto::Result<()> {{
+            self._slice.set_data(i._bytes);
+        Ok(())
+    }}
+}}
+
+impl<'a, 'b, P: scalgo_proto::Placement> CopyIn<scalgo_proto::ListIn<'b, scalgo_proto::StructListAccess<'b, {name}In<'b>>>>
+    for scalgo_proto::ListOut<'a, scalgo_proto::StructType<'a, {name}>, P> {{
+
+    fn copy_in(&mut self, 
+        i: scalgo_proto::ListIn<'b, scalgo_proto::StructListAccess<'b, {name}In<'b>>>) 
+        -> scalgo_proto::Result<()> {{
+        assert!(i.len() == self.len());
+        for n in 0..i.len() {{
+            self.get(n).copy_in(i.get(n))?;
+        }}
+        Ok(())
+    }}
+}}
+"""
         )
-        self.o("}")
-        self.o("impl<'a> scalgo_proto::StructOut<'a> for %sOut<'a> {" % node.name)
-        self.o(
-            "    fn new(slice: scalgo_proto::ArenaSlice<'a>) -> Self {Self{_slice: slice}}"
-        )
-        self.o("}")
-        self.o()
 
     def generate_enum(self, node: Enum) -> None:
         self.output_doc(node, "")
@@ -1157,11 +1255,15 @@ def run(args) -> int:
             print("Schema is invalid")
             return 1
         g = Generator(documents, out)
-        print("//! This file was generated by scalgoprotoc", file=out)
-        print("#![allow(dead_code)]", file=out)
-        print("use crate::scalgo_proto;", file=out)
-        print("use std::fmt;", file=out)
-        print("", file=out)
+        print(
+            """//! This file was generated by scalgoprotoc
+#![allow(dead_code)]
+use crate::scalgo_proto;
+use crate::scalgo_proto::CopyIn;
+use std::fmt;
+""",
+            file=out,
+        )
 
         g.generate(ast)
         return 0

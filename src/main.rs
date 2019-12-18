@@ -76,10 +76,10 @@ macro_rules! ce {
     }};
 }
 
-fn validate_out(data: &[u8], path: &str) -> bool {
+fn validate_out(data: &[u8], path: &str) -> scalgo_proto::Result<()> {
     let exp = std::fs::read(path).expect("Unable to read file");
     if exp == data {
-        return true;
+        return Ok(());
     }
     println!("Wrong output");
     for i in (0..usize::max(data.len(), exp.len())).step_by(16) {
@@ -147,10 +147,10 @@ fn validate_out(data: &[u8], path: &str) -> bool {
         }
         println!("\x1b[0m");
     }
-    false
+    return Err(scalgo_proto::Error::InvalidPointer());
 }
 
-fn test_out_default(path: &str) -> bool {
+fn test_out_default(path: &str) -> scalgo_proto::Result<()> {
     let arena = scalgo_proto::Arena::new(vec![]);
     let mut writer = scalgo_proto::Writer::new(&arena);
     writer.add_root::<base::Simple>();
@@ -217,7 +217,7 @@ fn test_in_default(path: &str) -> scalgo_proto::Result<()> {
     Ok(())
 }
 
-fn test_out(path: &str) -> bool {
+fn test_out(path: &str) -> scalgo_proto::Result<()> {
     let arena = scalgo_proto::Arena::new(vec![]);
     let mut writer = scalgo_proto::Writer::new(&arena);
     let mut s = writer.add_root::<base::Simple>();
@@ -330,7 +330,7 @@ fn test_in(path: &str) -> scalgo_proto::Result<()> {
     Ok(())
 }
 
-fn test_out_complex(path: &str) -> bool {
+fn test_out_complex(path: &str) -> scalgo_proto::Result<()> {
     let arena = scalgo_proto::Arena::new(vec![]);
     let mut writer = scalgo_proto::Writer::new(&arena);
 
@@ -455,7 +455,7 @@ fn test_in_complex(path: &str) -> scalgo_proto::Result<()> {
     Ok(())
 }
 
-fn test_out_complex2(path: &str) -> bool {
+fn test_out_complex2(path: &str) -> scalgo_proto::Result<()> {
     let arena = scalgo_proto::Arena::new(vec![]);
     let mut writer = scalgo_proto::Writer::new(&arena);
 
@@ -521,7 +521,7 @@ fn test_in_complex2(path: &str) -> scalgo_proto::Result<()> {
     Ok(())
 }
 
-fn test_out_inplace(path: &str) -> bool {
+fn test_out_inplace(path: &str) -> scalgo_proto::Result<()> {
     let arena = scalgo_proto::Arena::new(vec![]);
     let mut writer = scalgo_proto::Writer::new(&arena);
 
@@ -580,7 +580,7 @@ fn test_in_inplace(path: &str) -> scalgo_proto::Result<()> {
     Ok(())
 }
 
-fn test_out_extend1(path: &str) -> bool {
+fn test_out_extend1(path: &str) -> scalgo_proto::Result<()> {
     let arena = scalgo_proto::Arena::new(vec![]);
     let mut writer = scalgo_proto::Writer::new(&arena);
     let mut o = writer.add_root::<base::Gen1>();
@@ -598,7 +598,7 @@ fn test_in_extend1(path: &str) -> scalgo_proto::Result<()> {
     Ok(())
 }
 
-fn test_out_extend2(path: &str) -> bool {
+fn test_out_extend2(path: &str) -> scalgo_proto::Result<()> {
     let arena = scalgo_proto::Arena::new(vec![]);
     let mut writer = scalgo_proto::Writer::new(&arena);
     let mut o = writer.add_root::<base::Gen2>();
@@ -658,98 +658,191 @@ fn test_in_extend2(path: &str) -> scalgo_proto::Result<()> {
     Ok(())
 }
 
-fn test_out_union(path: &str) -> bool {
-    // i = for_copy()
+fn test_out_union(path: &str) -> scalgo_proto::Result<()> {
+    let data = {
+        let arena = scalgo_proto::Arena::new(vec![]);
+        let mut writer = scalgo_proto::Writer::new(&arena);
+        let mut root = writer.add_root::<union::Table3>();
+
+        let mut v1 = root.add_v1();
+        v1.a().add_v1("ctext1");
+        v1.b().add_v1("ctext2");
+
+        let mut v2 = root.add_v2();
+        v2.a().add_v2(b"cbytes1");
+        v2.b().add_v2(b"cbytes2");
+
+        let mut v3 = root.add_v3();
+        v3.a().add_v3().a(101);
+        v3.b().add_v3().a(102);
+
+        let mut v4 = root.add_v4();
+        v4.a().add_v4().a(103);
+        v4.b().add_v4().a(104);
+
+        let mut v5 = root.add_v5();
+        v5.a().add_v5(1).add(0, "ctext3");
+        v5.b().add_v5(1).add(0, "ctext4");
+
+        let mut v6 = root.add_v6();
+        v6.a().add_v6(1).add(0, b"cbytes3");
+        v6.b().add_v6(1).add(0, b"cbytes4");
+
+        let mut v7 = root.add_v7();
+        v7.a().add_v7(1).add(0).a(105);
+        v7.b().add_v7(1).add(0).a(106);
+
+        let mut v8 = root.add_v8();
+        v8.a().add_v8(1).add(0).a(107);
+        v8.b().add_v8(1).add(0).a(108);
+
+        let mut v9 = root.add_v9();
+        v9.a().add_v9(1).set(0, 109);
+        v9.b().add_v9(1).set(0, 110);
+
+        let mut v10 = root.add_v10();
+        v10.a().add_v10(1).set(0, true);
+        v10.b().add_v10(1).set(0, true);
+        arena.finalize()
+    };
+    let s = scalgo_proto::read_message::<union::Table3>(&data)?;
+
     let arena = scalgo_proto::Arena::new(vec![]);
     let mut writer = scalgo_proto::Writer::new(&arena);
     let mut root = writer.add_root::<union::Table3>();
 
     let mut v1 = root.add_v1();
+    let iv1 = require_some!(ce!(s.v1()));
     v1.a().add_v1("text1");
     v1.b().add_v1("text2");
     v1.c().set_v1(&writer.add_text("text3"));
-    // v1.d.v1 = i.v1.a.v1
-    // v1.e.v1 = i.v1.b.v1
+    v1.d()
+        .add_v1(require_enum!(ce!(iv1.a()), union::Union1In::V1(v), v));
+    v1.e()
+        .add_v1(require_enum!(ce!(iv1.b()), union::Union1In::V1(v), v));
 
     let mut v2 = root.add_v2();
+    let iv2 = require_some!(ce!(s.v2()));
     v2.a().add_v2(b"bytes1");
     v2.b().add_v2(b"bytes2");
     v2.c().set_v2(&writer.add_bytes(b"bytes3"));
-    // v2.d().v2 = i.v2.a.v2
-    // v2.e().v2 = i.v2.b.v2
+    v2.d()
+        .add_v2(require_enum!(ce!(iv2.a()), union::Union1In::V2(v), v));
+    v2.e()
+        .add_v2(require_enum!(ce!(iv2.b()), union::Union1In::V2(v), v));
 
     let mut v3 = root.add_v3();
+    let iv3 = require_some!(ce!(s.v3()));
     v3.a().add_v3().a(1);
     v3.b().add_v3().a(2);
     let mut t3 = writer.add_table::<union::Table1>();
     t3.a(3);
     v3.c().set_v3(&t3);
-    // v3.d.v3 = i.v3.a.v3
-    // v3.e.v3 = i.v3.b.v3
+    ce!(v3
+        .d()
+        .copy_v3(require_enum!(ce!(iv3.a()), union::Union1In::V3(v), v)));
+    ce!(v3
+        .e()
+        .copy_v3(require_enum!(ce!(iv3.b()), union::Union1In::V3(v), v)));
 
     let mut v4 = root.add_v4();
+    let iv4 = require_some!(ce!(s.v4()));
     v4.a().add_v4().a(4);
     v4.b().add_v4().a(5);
     let mut t4 = writer.add_table::<union::Union1V4>();
     t4.a(6);
     v4.c().set_v4(&t4);
-    // v4.d().v4 = i.v4.a.v4
-    // v4.e().v4 = i.v4.b.v4
+    ce!(v4
+        .d()
+        .copy_v4(require_enum!(ce!(iv4.a()), union::Union1In::V4(v), v)));
+    ce!(v4
+        .e()
+        .copy_v4(require_enum!(ce!(iv4.b()), union::Union1In::V4(v), v)));
 
     let mut v5 = root.add_v5();
+    let iv5 = require_some!(ce!(s.v5()));
     v5.a().add_v5(1).add(0, "text4");
     v5.b().add_v5(1).add(0, "text5");
     let mut t5 = writer.add_text_list(1);
     t5.add(0, "text6");
     v5.c().set_v5(&t5);
-    // v5.d.v5 = i.v5.a.v5
-    // v5.e.v5 = i.v5.b.v5
+    ce!(v5
+        .d()
+        .copy_v5(require_enum!(ce!(iv5.a()), union::Union1In::V5(v), v)));
+    ce!(v5
+        .e()
+        .copy_v5(require_enum!(ce!(iv5.b()), union::Union1In::V5(v), v)));
 
     let mut v6 = root.add_v6();
+    let iv6 = require_some!(ce!(s.v6()));
     v6.a().add_v6(1).add(0, b"bytes4");
     let mut tt6 = v6.b().add_v6(1);
     tt6.set(0, Some(&writer.add_bytes(b"bytes5")));
     let mut t6 = writer.add_bytes_list(1);
     t6.set(0, Some(&writer.add_bytes(b"bytes6")));
     v6.c().set_v6(&t6);
-    // v6.d.v6 = i.v6.a.v6
-    // v6.e.v6 = i.v6.b.v6
+    ce!(v6
+        .d()
+        .copy_v6(require_enum!(ce!(iv6.a()), union::Union1In::V6(v), v)));
+    ce!(v6
+        .e()
+        .copy_v6(require_enum!(ce!(iv6.b()), union::Union1In::V6(v), v)));
 
     let mut v7 = root.add_v7();
+    let iv7 = require_some!(ce!(s.v7()));
     v7.a().add_v7(1).add(0).a(7);
     v7.b().add_v7(1).add(0).a(8);
     let mut t7 = writer.add_table_list::<union::Table1>(1);
     t7.add(0).a(9);
     v7.c().set_v7(&t7);
-    // v7.d.v7 = i.v7.a.v7
-    // v7.e.v7 = i.v7.b.v7
+    ce!(v7
+        .d()
+        .copy_v7(require_enum!(ce!(iv7.a()), union::Union1In::V7(v), v)));
+    ce!(v7
+        .e()
+        .copy_v7(require_enum!(ce!(iv7.b()), union::Union1In::V7(v), v)));
 
     let mut v8 = root.add_v8();
+    let iv8 = require_some!(ce!(s.v8()));
     v8.a().add_v8(1).add(0).a(10);
     v8.b().add_v8(1).add(0).a(11);
     let mut t8 = writer.add_table_list::<union::Union1V8>(1);
     t8.add(0).a(12);
     v8.c().set_v8(&t8);
-    // v8.d.v8 = i.v8.a.v8
-    // v8.e.v8 = i.v8.b.v8
+    ce!(v8
+        .d()
+        .copy_v8(require_enum!(ce!(iv8.a()), union::Union1In::V8(v), v)));
+    ce!(v8
+        .e()
+        .copy_v8(require_enum!(ce!(iv8.b()), union::Union1In::V8(v), v)));
 
     let mut v9 = root.add_v9();
+    let iv9 = require_some!(ce!(s.v9()));
     v9.a().add_v9(1).set(0, 13);
     v9.b().add_v9(1).set(0, 14);
     let mut t9 = writer.add_u32_list(1);
     t9.set(0, 15);
     v9.c().set_v9(&t9);
-    // v9.d.v9 = i.v9.a.v9
-    // v9.e.v9 = i.v9.b.v9
+    ce!(v9
+        .d()
+        .copy_v9(require_enum!(ce!(iv9.a()), union::Union1In::V9(v), v)));
+    ce!(v9
+        .e()
+        .copy_v9(require_enum!(ce!(iv9.b()), union::Union1In::V9(v), v)));
 
     let mut v10 = root.add_v10();
+    let iv10 = require_some!(ce!(s.v10()));
     v10.a().add_v10(1).set(0, true);
     v10.b().add_v10(1).set(0, false);
     let mut t10 = writer.add_bool_list(1);
     t10.set(0, true);
     v10.c().set_v10(&t10);
-    // v10.d.v10 = i.v10.a.v10
-    // v10.e.v10 = i.v10.b.v10
+    ce!(v10
+        .d()
+        .copy_v10(require_enum!(ce!(iv10.a()), union::Union1In::V10(v), v)));
+    ce!(v10
+        .e()
+        .copy_v10(require_enum!(ce!(iv10.b()), union::Union1In::V10(v), v)));
 
     let data = arena.finalize();
     return validate_out(&data, path);
@@ -1055,55 +1148,55 @@ fn test_in_union(path: &str) -> scalgo_proto::Result<()> {
 }
 
 fn main() {
-    if !test_out_default("test/simple_default.bin") {
+    if let Err(_) = test_out_default("test/simple_default.bin") {
         println!("test_out_default failed");
     }
     if let Err(_) = test_in_default("test/simple_default.bin") {
         println!("test_in_default failed");
     }
-    if !test_out("test/simple.bin") {
+    if let Err(_) = test_out("test/simple.bin") {
         println!("test_out failed");
     }
     if let Err(_) = test_in("test/simple.bin") {
         println!("test_in_failed");
     }
 
-    if !test_out_complex("test/complex.bin") {
+    if let Err(_) = test_out_complex("test/complex.bin") {
         println!("test_out_complex failed");
     }
     if let Err(_) = test_in_complex("test/complex.bin") {
         println!("test_in_complex failed");
     }
 
-    if !test_out_complex2("test/complex2.bin") {
+    if let Err(_) = test_out_complex2("test/complex2.bin") {
         println!("test_out_complex2 failed");
     }
     if let Err(_) = test_in_complex2("test/complex2.bin") {
         println!("test_in_complex2 failed");
     }
 
-    if !test_out_inplace("test/inplace.bin") {
+    if let Err(_) = test_out_inplace("test/inplace.bin") {
         println!("test_out_inplace failed");
     }
     if let Err(_) = test_in_inplace("test/inplace.bin") {
         println!("test_in_inplace failed");
     }
 
-    if !test_out_extend1("test/extend1.bin") {
+    if let Err(_) = test_out_extend1("test/extend1.bin") {
         println!("test_out_extend1 failed");
     }
     if let Err(_) = test_in_extend1("test/extend1.bin") {
         println!("test_in_extend1 failed");
     }
 
-    if !test_out_extend2("test/extend2.bin") {
+    if let Err(_) = test_out_extend2("test/extend2.bin") {
         println!("test_out_extend2 failed");
     }
     if let Err(_) = test_in_extend2("test/extend2.bin") {
         println!("test_in_extend2 failed");
     }
 
-    if !test_out_union("test/union.bin") {
+    if let Err(_) = test_out_union("test/union.bin") {
         println!("test_out_union failed");
     }
     if let Err(_) = test_in_union("test/union.bin") {
