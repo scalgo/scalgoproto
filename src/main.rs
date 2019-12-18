@@ -1,3 +1,7 @@
+#![allow(clippy::unreadable_literal)]
+#![allow(clippy::float_cmp)]
+#![allow(clippy::many_single_char_names)]
+
 mod base;
 mod complex2;
 mod scalgo_proto;
@@ -22,7 +26,7 @@ macro_rules! require {
 
 macro_rules! require_none {
     ( $x:expr ) => {{
-        if let Some(_) = $x {
+        if $x.is_some() {
             println!("Error {} should yield None", stringify!($x),);
             return Err(scalgo_proto::Error::InvalidPointer());
         }
@@ -147,7 +151,7 @@ fn validate_out(data: &[u8], path: &str) -> scalgo_proto::Result<()> {
         }
         println!("\x1b[0m");
     }
-    return Err(scalgo_proto::Error::InvalidPointer());
+    Err(scalgo_proto::Error::InvalidPointer())
 }
 
 fn test_out_default(path: &str) -> scalgo_proto::Result<()> {
@@ -155,7 +159,7 @@ fn test_out_default(path: &str) -> scalgo_proto::Result<()> {
     let mut writer = scalgo_proto::Writer::new(&arena);
     writer.add_root::<base::Simple>();
     let data = arena.finalize();
-    return validate_out(&data, path);
+    validate_out(&data, path)
 }
 
 fn test_in_default(path: &str) -> scalgo_proto::Result<()> {
@@ -266,7 +270,7 @@ fn test_out(path: &str) -> scalgo_proto::Result<()> {
     s.of(Some(5.0));
     s.od(Some(6.4));
     let data = arena.finalize();
-    return validate_out(&data, path);
+    validate_out(&data, path)
 }
 
 fn test_in(path: &str) -> scalgo_proto::Result<()> {
@@ -391,7 +395,7 @@ fn test_out_complex(path: &str) -> scalgo_proto::Result<()> {
     s.set_u8list(Some(&l9));
     s.set_blist(Some(&l10));
     let data = arena.finalize();
-    return validate_out(&data, path);
+    validate_out(&data, path)
 }
 
 fn test_in_complex(path: &str) -> scalgo_proto::Result<()> {
@@ -489,7 +493,7 @@ fn test_out_complex2(path: &str) -> scalgo_proto::Result<()> {
     r.s().y().z(8);
     r.set_l2(Some(&l3));
     let data = arena.finalize();
-    return validate_out(&data, path);
+    validate_out(&data, path)
 }
 
 fn test_in_complex2(path: &str) -> scalgo_proto::Result<()> {
@@ -553,7 +557,7 @@ fn test_out_inplace(path: &str) -> scalgo_proto::Result<()> {
     root.set_b(Some(&b));
     root.set_l(Some(&l));
     let data = arena.finalize();
-    return validate_out(&data, path);
+    validate_out(&data, path)
 }
 
 fn test_in_inplace(path: &str) -> scalgo_proto::Result<()> {
@@ -586,7 +590,7 @@ fn test_out_extend1(path: &str) -> scalgo_proto::Result<()> {
     let mut o = writer.add_root::<base::Gen1>();
     o.aa(77);
     let data = arena.finalize();
-    return validate_out(&data, path);
+    validate_out(&data, path)
 }
 
 fn test_in_extend1(path: &str) -> scalgo_proto::Result<()> {
@@ -607,7 +611,7 @@ fn test_out_extend2(path: &str) -> scalgo_proto::Result<()> {
     let mut cake = o.u().add_cake();
     cake.v(45);
     let data = arena.finalize();
-    return validate_out(&data, path);
+    validate_out(&data, path)
 }
 
 fn test_in_extend2(path: &str) -> scalgo_proto::Result<()> {
@@ -845,7 +849,7 @@ fn test_out_union(path: &str) -> scalgo_proto::Result<()> {
         .copy_v10(require_enum!(ce!(iv10.b()), union::Union1In::V10(v), v)));
 
     let data = arena.finalize();
-    return validate_out(&data, path);
+    validate_out(&data, path)
 }
 
 fn test_in_union(path: &str) -> scalgo_proto::Result<()> {
@@ -1148,58 +1152,58 @@ fn test_in_union(path: &str) -> scalgo_proto::Result<()> {
 }
 
 fn main() {
-    if let Err(_) = test_out_default("test/simple_default.bin") {
+    if test_out_default("test/simple_default.bin").is_err() {
         println!("test_out_default failed");
     }
-    if let Err(_) = test_in_default("test/simple_default.bin") {
+    if test_in_default("test/simple_default.bin").is_err() {
         println!("test_in_default failed");
     }
-    if let Err(_) = test_out("test/simple.bin") {
+    if test_out("test/simple.bin").is_err() {
         println!("test_out failed");
     }
-    if let Err(_) = test_in("test/simple.bin") {
+    if test_in("test/simple.bin").is_err() {
         println!("test_in_failed");
     }
 
-    if let Err(_) = test_out_complex("test/complex.bin") {
+    if test_out_complex("test/complex.bin").is_err() {
         println!("test_out_complex failed");
     }
-    if let Err(_) = test_in_complex("test/complex.bin") {
+    if test_in_complex("test/complex.bin").is_err() {
         println!("test_in_complex failed");
     }
 
-    if let Err(_) = test_out_complex2("test/complex2.bin") {
+    if test_out_complex2("test/complex2.bin").is_err() {
         println!("test_out_complex2 failed");
     }
-    if let Err(_) = test_in_complex2("test/complex2.bin") {
+    if test_in_complex2("test/complex2.bin").is_err() {
         println!("test_in_complex2 failed");
     }
 
-    if let Err(_) = test_out_inplace("test/inplace.bin") {
+    if test_out_inplace("test/inplace.bin").is_err() {
         println!("test_out_inplace failed");
     }
-    if let Err(_) = test_in_inplace("test/inplace.bin") {
+    if test_in_inplace("test/inplace.bin").is_err() {
         println!("test_in_inplace failed");
     }
 
-    if let Err(_) = test_out_extend1("test/extend1.bin") {
+    if test_out_extend1("test/extend1.bin").is_err() {
         println!("test_out_extend1 failed");
     }
-    if let Err(_) = test_in_extend1("test/extend1.bin") {
+    if test_in_extend1("test/extend1.bin").is_err() {
         println!("test_in_extend1 failed");
     }
 
-    if let Err(_) = test_out_extend2("test/extend2.bin") {
+    if test_out_extend2("test/extend2.bin").is_err() {
         println!("test_out_extend2 failed");
     }
-    if let Err(_) = test_in_extend2("test/extend2.bin") {
+    if test_in_extend2("test/extend2.bin").is_err() {
         println!("test_in_extend2 failed");
     }
 
-    if let Err(_) = test_out_union("test/union.bin") {
+    if test_out_union("test/union.bin").is_err() {
         println!("test_out_union failed");
     }
-    if let Err(_) = test_in_union("test/union.bin") {
+    if test_in_union("test/union.bin").is_err() {
         println!("test_in_union failed");
     }
 

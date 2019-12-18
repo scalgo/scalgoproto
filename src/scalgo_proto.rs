@@ -81,11 +81,7 @@ pub unsafe fn to_struct<'a, S: StructIn<'a> + 'a>(s: &[u8]) -> S {
 }
 
 pub fn to_bool(v: u8) -> bool {
-    if v == 0 {
-        false
-    } else {
-        true
-    }
+    !v == 0
 }
 
 // This method is safe as long as v has length at least 6
@@ -180,7 +176,7 @@ impl<'a> Reader<'a> {
         }
         let magic: u32 = unsafe { to_pod(&self.full[o..o + 4]) };
         let size = unsafe { to_u48_usize(&self.full[o + 4..o + 10]) }?;
-        return Ok(Some((o + 10, magic, size)));
+        Ok(Some((o + 10, magic, size)))
     }
 
     pub fn get_ptr_inplace(&self, offset: usize) -> Result<Option<(usize, usize)>> {
@@ -189,7 +185,7 @@ impl<'a> Reader<'a> {
             None => return Ok(None),
         };
         let o = self.part.as_ptr() as usize - self.full.as_ptr() as usize + self.part.len();
-        return Ok(Some((o, size)));
+        Ok(Some((o, size)))
     }
 
     pub fn get_table_union<T: TableIn<'a> + 'a>(
@@ -653,33 +649,33 @@ pub trait TableOut<'a, P: Placement> {
 }
 
 /* The meta types describes types of members */
-pub trait MetaType {
+pub trait ListWrite {
     fn list_bytes(len: usize) -> usize;
     fn list_def() -> u8 {
         0
     }
 }
 
-pub struct PodType<T: Pod> {
+pub struct PodListWrite<T: Pod> {
     p: PhantomData<T>,
 }
-impl<T: Pod> MetaType for PodType<T> {
+impl<T: Pod> ListWrite for PodListWrite<T> {
     fn list_bytes(len: usize) -> usize {
         len * std::mem::size_of::<T>()
     }
 }
 
-pub struct BoolType {}
-impl MetaType for BoolType {
+pub struct BoolListWrite {}
+impl ListWrite for BoolListWrite {
     fn list_bytes(len: usize) -> usize {
         (len + 7) >> 3
     }
 }
 
-pub struct EnumType<T: Enum> {
+pub struct EnumListWrite<T: Enum> {
     p: PhantomData<T>,
 }
-impl<T: Enum> MetaType for EnumType<T> {
+impl<T: Enum> ListWrite for EnumListWrite<T> {
     fn list_bytes(len: usize) -> usize {
         len
     }
@@ -689,60 +685,60 @@ impl<T: Enum> MetaType for EnumType<T> {
     }
 }
 
-pub struct TextType {}
-impl MetaType for TextType {
+pub struct TextListWrite {}
+impl ListWrite for TextListWrite {
     fn list_bytes(len: usize) -> usize {
         len * 6
     }
 }
 
-pub struct BytesType {}
-impl MetaType for BytesType {
+pub struct BytesListWrite {}
+impl ListWrite for BytesListWrite {
     fn list_bytes(len: usize) -> usize {
         len * 6
     }
 }
 
-pub struct TableType<'a, T> {
+pub struct TableListWrite<'a, T> {
     p: PhantomData<&'a T>,
 }
-impl<'a, T> MetaType for TableType<'a, T> {
+impl<'a, T> ListWrite for TableListWrite<'a, T> {
     fn list_bytes(len: usize) -> usize {
         len * 6
     }
 }
 
-pub struct StructType<'a, F: Struct<'a>> {
+pub struct StructListWrite<'a, F: Struct<'a>> {
     p: PhantomData<&'a F>,
 }
-impl<'a, F: Struct<'a>> MetaType for StructType<'a, F> {
+impl<'a, F: Struct<'a>> ListWrite for StructListWrite<'a, F> {
     fn list_bytes(len: usize) -> usize {
         len * F::size()
     }
 }
 
-pub struct UnionType<'a, F: Union<'a>> {
+pub struct UnionListWrite<'a, F: Union<'a>> {
     p: PhantomData<&'a F>,
 }
-impl<'a, F: Union<'a>> MetaType for UnionType<'a, F> {
+impl<'a, F: Union<'a>> ListWrite for UnionListWrite<'a, F> {
     fn list_bytes(len: usize) -> usize {
         len * 8
     }
 }
 
-pub struct ListOut<'a, T: MetaType, P: Placement> {
+pub struct ListOut<'a, T: ListWrite, P: Placement> {
     slice: ArenaSlice<'a>,
     _len: usize,
     p1: PhantomData<T>,
     p2: PhantomData<P>,
 }
-impl<'a, T: MetaType, P: Placement> ListOut<'a, T, P> {
+impl<'a, T: ListWrite, P: Placement> ListOut<'a, T, P> {
     pub fn len(&self) -> usize {
         self._len
     }
 }
 
-impl<'a, T: Pod, P: Placement> ListOut<'a, PodType<T>, P> {
+impl<'a, T: Pod, P: Placement> ListOut<'a, PodListWrite<T>, P> {
     pub fn set(&mut self, idx: usize, v: T) {
         assert!(idx < self._len);
         unsafe {
@@ -752,21 +748,21 @@ impl<'a, T: Pod, P: Placement> ListOut<'a, PodType<T>, P> {
     }
 }
 
-impl<'a, P: Placement> ListOut<'a, BoolType, P> {
+impl<'a, P: Placement> ListOut<'a, BoolListWrite, P> {
     pub fn set(&mut self, idx: usize, v: bool) {
         assert!(idx < self._len);
         unsafe { self.slice.set_bit_unsafe(idx >> 3, idx & 7, v) }
     }
 }
 
-impl<'a, T: Enum, P: Placement> ListOut<'a, EnumType<T>, P> {
+impl<'a, T: Enum, P: Placement> ListOut<'a, EnumListWrite<T>, P> {
     pub fn set(&mut self, idx: usize, v: Option<T>) {
         assert!(idx < self._len);
         unsafe { self.slice.set_enum_unsafe(idx, v) }
     }
 }
 
-impl<'a, P: Placement> ListOut<'a, TextType, P> {
+impl<'a, P: Placement> ListOut<'a, TextListWrite, P> {
     pub fn set(&mut self, idx: usize, v: Option<&TextOut<'a>>) {
         assert!(idx < self._len);
         self.slice.set_text(idx * 6, v)
@@ -777,7 +773,7 @@ impl<'a, P: Placement> ListOut<'a, TextType, P> {
     }
 }
 
-impl<'a, P: Placement> ListOut<'a, BytesType, P> {
+impl<'a, P: Placement> ListOut<'a, BytesListWrite, P> {
     pub fn set(&mut self, idx: usize, v: Option<&BytesOut<'a>>) {
         assert!(idx < self._len);
         self.slice.set_bytes(idx * 6, v)
@@ -788,7 +784,7 @@ impl<'a, P: Placement> ListOut<'a, BytesType, P> {
     }
 }
 
-impl<'a, T: TableOut<'a, Normal> + 'a, P: Placement> ListOut<'a, TableType<'a, T>, P> {
+impl<'a, T: TableOut<'a, Normal> + 'a, P: Placement> ListOut<'a, TableListWrite<'a, T>, P> {
     pub fn set(&mut self, idx: usize, v: Option<&T>) {
         assert!(idx < self._len);
         self.slice.set_table(idx * 6, v)
@@ -799,39 +795,39 @@ impl<'a, T: TableOut<'a, Normal> + 'a, P: Placement> ListOut<'a, TableType<'a, T
     }
 }
 
-impl<'a, F, P: Placement> ListOut<'a, StructType<'a, F>, P>
+impl<'a, F, P: Placement> ListOut<'a, StructListWrite<'a, F>, P>
 where
     F: for<'b> Struct<'b>,
 {
-    pub fn get<'b>(&'b mut self, idx: usize) -> <F as Struct<'b>>::Out {
+    pub fn get(&mut self, idx: usize) -> <F as Struct>::Out {
         assert!(idx < self._len);
         StructOut::new(self.slice.part(idx * F::size(), F::size()))
     }
 }
 
-impl<'a, F, P: Placement> ListOut<'a, UnionType<'a, F>, P>
+impl<'a, F, P: Placement> ListOut<'a, UnionListWrite<'a, F>, P>
 where
     F: for<'b> Union<'b>,
 {
-    pub fn get<'b>(&'b mut self, idx: usize) -> <F as Union<'b>>::Out {
+    pub fn get(&mut self, idx: usize) -> <F as Union>::Out {
         assert!(idx < self._len);
         F::new_out(self.slice.part(idx * 8, 8))
     }
 }
 
 impl PArena {
-    fn allocate<'a>(&'a self, size: usize, fill: u8) -> ArenaSlice<'a> {
+    fn allocate(&self, size: usize, fill: u8) -> ArenaSlice {
         let d = unsafe { &mut *self.data.get() };
         let offset = d.len();
         d.resize(offset + size, fill);
         ArenaSlice {
             arena: self,
-            offset: offset,
+            offset,
             length: size,
         }
     }
 
-    fn allocate_default<'a>(&'a self, head: usize, default: &[u8]) -> ArenaSlice<'a> {
+    fn allocate_default(&self, head: usize, default: &[u8]) -> ArenaSlice {
         let d = unsafe { &mut *self.data.get() };
         let offset = d.len();
         d.reserve(offset + head + default.len());
@@ -839,7 +835,7 @@ impl PArena {
         d.extend_from_slice(default);
         ArenaSlice {
             arena: self,
-            offset: offset,
+            offset,
             length: head + default.len(),
         }
     }
@@ -859,7 +855,7 @@ impl PArena {
             slice.set_pod_unsafe(0, &BYTESMAGIC);
             slice.set_u48_unsafe(4, v.len() as u64);
             std::ptr::copy_nonoverlapping(v.as_ptr(), slice.data(10), v.len());
-            BytesOut { slice: slice }
+            BytesOut { slice }
         }
     }
 
@@ -869,11 +865,11 @@ impl PArena {
             slice.set_pod_unsafe(0, &TEXTMAGIC);
             slice.set_u48_unsafe(4, v.len() as u64);
             std::ptr::copy_nonoverlapping(v.as_bytes().as_ptr(), slice.data(10), v.len());
-            TextOut { slice: slice }
+            TextOut { slice }
         }
     }
 
-    pub fn create_list<'a, T: MetaType>(&'a self, len: usize) -> ListOut<'a, T, Normal> {
+    pub fn create_list<T: ListWrite>(&self, len: usize) -> ListOut<T, Normal> {
         let mut slice = self.allocate(T::list_bytes(len) + 10, T::list_def());
         unsafe {
             slice.set_pod_unsafe(0, &LISTMAGIC);
@@ -902,7 +898,7 @@ impl<'a> ArenaSlice<'a> {
         ArenaSlice {
             arena: self.arena,
             offset: self.offset + offset,
-            length: length,
+            length,
         }
     }
 
@@ -950,9 +946,9 @@ impl<'a> ArenaSlice<'a> {
     pub unsafe fn set_bit_unsafe(&mut self, offset: usize, bit: usize, value: bool) {
         let d = self.data(offset);
         if value {
-            *d = *d | (1 << bit);
+            *d |= 1 << bit;
         } else {
-            *d = *d & !(1 << bit);
+            *d &= !(1 << bit);
         }
     }
 
@@ -1082,7 +1078,7 @@ impl<'a> ArenaSlice<'a> {
         };
     }
 
-    pub fn set_list<T: MetaType>(&mut self, offset: usize, v: Option<&ListOut<'a, T, Normal>>) {
+    pub fn set_list<T: ListWrite>(&mut self, offset: usize, v: Option<&ListOut<'a, T, Normal>>) {
         let o = match v {
             Some(t) => {
                 if t.slice.arena_id() != self.arena_id() {
@@ -1095,13 +1091,13 @@ impl<'a> ArenaSlice<'a> {
         self.set_u48(offset, o as u64);
     }
 
-    pub fn add_list<T: MetaType>(&mut self, offset: usize, len: usize) -> ListOut<'a, T, Normal> {
+    pub fn add_list<T: ListWrite>(&mut self, offset: usize, len: usize) -> ListOut<'a, T, Normal> {
         let ans = self.arena.create_list::<T>(len);
         self.set_list(offset, Some(&ans));
         ans
     }
 
-    pub fn add_list_inplace<T: MetaType>(
+    pub fn add_list_inplace<T: ListWrite>(
         &mut self,
         offset: usize,
         len: usize,
@@ -1111,7 +1107,7 @@ impl<'a> ArenaSlice<'a> {
         self.check_inplace(slice.offset, container_end);
         self.set_u48(offset, len as u64);
         ListOut {
-            slice: slice,
+            slice,
             _len: len,
             p1: PhantomData,
             p2: PhantomData,
@@ -1159,7 +1155,7 @@ pub trait CopyIn<In> {
 }
 
 impl<'a, 'b, T: Pod + 'b, P: Placement> CopyIn<ListIn<'b, PodListRead<'b, T>>>
-    for ListOut<'a, PodType<T>, P>
+    for ListOut<'a, PodListWrite<T>, P>
 {
     fn copy_in(&mut self, i: ListIn<'b, PodListRead<'b, T>>) -> Result<()> {
         assert!(i.len() == self.len());
@@ -1170,7 +1166,7 @@ impl<'a, 'b, T: Pod + 'b, P: Placement> CopyIn<ListIn<'b, PodListRead<'b, T>>>
     }
 }
 
-impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, BoolListRead<'b>>> for ListOut<'a, BoolType, P> {
+impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, BoolListRead<'b>>> for ListOut<'a, BoolListWrite, P> {
     fn copy_in(&mut self, i: ListIn<'b, BoolListRead<'b>>) -> Result<()> {
         assert!(i.len() == self.len());
         for n in 0..i.len() {
@@ -1181,7 +1177,7 @@ impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, BoolListRead<'b>>> for ListOut<'a, 
 }
 
 impl<'a, 'b, T: Enum + 'b, P: Placement> CopyIn<ListIn<'b, EnumListRead<'b, T>>>
-    for ListOut<'a, EnumType<T>, P>
+    for ListOut<'a, EnumListWrite<T>, P>
 {
     fn copy_in(&mut self, i: ListIn<'b, EnumListRead<'b, T>>) -> Result<()> {
         assert!(i.len() == self.len());
@@ -1192,7 +1188,7 @@ impl<'a, 'b, T: Enum + 'b, P: Placement> CopyIn<ListIn<'b, EnumListRead<'b, T>>>
     }
 }
 
-impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, TextListRead<'b>>> for ListOut<'a, TextType, P> {
+impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, TextListRead<'b>>> for ListOut<'a, TextListWrite, P> {
     fn copy_in(&mut self, i: ListIn<'b, TextListRead<'b>>) -> Result<()> {
         assert!(i.len() == self.len());
         for n in 0..i.len() {
@@ -1204,7 +1200,9 @@ impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, TextListRead<'b>>> for ListOut<'a, 
     }
 }
 
-impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, BytesListRead<'b>>> for ListOut<'a, BytesType, P> {
+impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, BytesListRead<'b>>>
+    for ListOut<'a, BytesListWrite, P>
+{
     fn copy_in(&mut self, i: ListIn<'b, BytesListRead<'b>>) -> Result<()> {
         assert!(i.len() == self.len());
         for n in 0..i.len() {
@@ -1217,7 +1215,7 @@ impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, BytesListRead<'b>>> for ListOut<'a,
 }
 
 impl<'a, 'b, Out: TableOut<'a, Normal> + 'a + CopyIn<In>, P: Placement, In: TableIn<'b> + 'b>
-    CopyIn<ListIn<'b, TableListRead<'b, In>>> for ListOut<'a, TableType<'a, Out>, P>
+    CopyIn<ListIn<'b, TableListRead<'b, In>>> for ListOut<'a, TableListWrite<'a, Out>, P>
 {
     fn copy_in(&mut self, i: ListIn<'b, TableListRead<'b, In>>) -> Result<()> {
         assert!(i.len() == self.len());
@@ -1338,80 +1336,85 @@ impl<'a> Writer<'a> {
         self.slice.arena.create_bytes(bytes)
     }
 
-    pub fn add_u8_list(&mut self, size: usize) -> ListOut<'a, PodType<u8>, Normal> {
-        self.slice.arena.create_list::<PodType<u8>>(size)
+    pub fn add_u8_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<u8>, Normal> {
+        self.slice.arena.create_list::<PodListWrite<u8>>(size)
     }
 
-    pub fn add_u16_list(&mut self, size: usize) -> ListOut<'a, PodType<u16>, Normal> {
-        self.slice.arena.create_list::<PodType<u16>>(size)
+    pub fn add_u16_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<u16>, Normal> {
+        self.slice.arena.create_list::<PodListWrite<u16>>(size)
     }
 
-    pub fn add_u32_list(&mut self, size: usize) -> ListOut<'a, PodType<u32>, Normal> {
-        self.slice.arena.create_list::<PodType<u32>>(size)
+    pub fn add_u32_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<u32>, Normal> {
+        self.slice.arena.create_list::<PodListWrite<u32>>(size)
     }
 
-    pub fn add_u64_list(&mut self, size: usize) -> ListOut<'a, PodType<u64>, Normal> {
-        self.slice.arena.create_list::<PodType<u64>>(size)
+    pub fn add_u64_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<u64>, Normal> {
+        self.slice.arena.create_list::<PodListWrite<u64>>(size)
     }
 
-    pub fn add_i8_list(&mut self, size: usize) -> ListOut<'a, PodType<i8>, Normal> {
-        self.slice.arena.create_list::<PodType<i8>>(size)
+    pub fn add_i8_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<i8>, Normal> {
+        self.slice.arena.create_list::<PodListWrite<i8>>(size)
     }
 
-    pub fn add_i16_list(&mut self, size: usize) -> ListOut<'a, PodType<i16>, Normal> {
-        self.slice.arena.create_list::<PodType<i16>>(size)
+    pub fn add_i16_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<i16>, Normal> {
+        self.slice.arena.create_list::<PodListWrite<i16>>(size)
     }
 
-    pub fn add_i32_list(&mut self, size: usize) -> ListOut<'a, PodType<i32>, Normal> {
-        self.slice.arena.create_list::<PodType<i32>>(size)
+    pub fn add_i32_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<i32>, Normal> {
+        self.slice.arena.create_list::<PodListWrite<i32>>(size)
     }
 
-    pub fn add_i64_list(&mut self, size: usize) -> ListOut<'a, PodType<i64>, Normal> {
-        self.slice.arena.create_list::<PodType<i64>>(size)
+    pub fn add_i64_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<i64>, Normal> {
+        self.slice.arena.create_list::<PodListWrite<i64>>(size)
     }
 
-    pub fn add_f32_list(&mut self, size: usize) -> ListOut<'a, PodType<f32>, Normal> {
-        self.slice.arena.create_list::<PodType<f32>>(size)
+    pub fn add_f32_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<f32>, Normal> {
+        self.slice.arena.create_list::<PodListWrite<f32>>(size)
     }
 
-    pub fn add_f64_list(&mut self, size: usize) -> ListOut<'a, PodType<f64>, Normal> {
-        self.slice.arena.create_list::<PodType<f64>>(size)
+    pub fn add_f64_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<f64>, Normal> {
+        self.slice.arena.create_list::<PodListWrite<f64>>(size)
     }
 
-    pub fn add_enum_list<T: Enum + 'a>(&mut self, size: usize) -> ListOut<'a, EnumType<T>, Normal> {
-        self.slice.arena.create_list::<EnumType<T>>(size)
+    pub fn add_enum_list<T: Enum + 'a>(
+        &mut self,
+        size: usize,
+    ) -> ListOut<'a, EnumListWrite<T>, Normal> {
+        self.slice.arena.create_list::<EnumListWrite<T>>(size)
     }
 
     pub fn add_table_list<F: Table<'a> + 'a>(
         &mut self,
         size: usize,
-    ) -> ListOut<'a, TableType<'a, F::Out>, Normal> {
-        self.slice.arena.create_list::<TableType<'a, F::Out>>(size)
+    ) -> ListOut<'a, TableListWrite<'a, F::Out>, Normal> {
+        self.slice
+            .arena
+            .create_list::<TableListWrite<'a, F::Out>>(size)
     }
 
     pub fn add_struct_list<F: Struct<'a> + 'a>(
         &mut self,
         size: usize,
-    ) -> ListOut<'a, StructType<'a, F>, Normal> {
-        self.slice.arena.create_list::<StructType<F>>(size)
+    ) -> ListOut<'a, StructListWrite<'a, F>, Normal> {
+        self.slice.arena.create_list::<StructListWrite<F>>(size)
     }
 
     pub fn add_union_list<F: Union<'a> + 'a>(
         &mut self,
         size: usize,
-    ) -> ListOut<'a, UnionType<'a, F>, Normal> {
-        self.slice.arena.create_list::<UnionType<F>>(size)
+    ) -> ListOut<'a, UnionListWrite<'a, F>, Normal> {
+        self.slice.arena.create_list::<UnionListWrite<F>>(size)
     }
 
-    pub fn add_text_list(&mut self, size: usize) -> ListOut<'a, TextType, Normal> {
-        self.slice.arena.create_list::<TextType>(size)
+    pub fn add_text_list(&mut self, size: usize) -> ListOut<'a, TextListWrite, Normal> {
+        self.slice.arena.create_list::<TextListWrite>(size)
     }
 
-    pub fn add_bytes_list(&mut self, size: usize) -> ListOut<'a, BytesType, Normal> {
-        self.slice.arena.create_list::<BytesType>(size)
+    pub fn add_bytes_list(&mut self, size: usize) -> ListOut<'a, BytesListWrite, Normal> {
+        self.slice.arena.create_list::<BytesListWrite>(size)
     }
 
-    pub fn add_bool_list(&mut self, size: usize) -> ListOut<'a, BoolType, Normal> {
-        self.slice.arena.create_list::<BoolType>(size)
+    pub fn add_bool_list(&mut self, size: usize) -> ListOut<'a, BoolListWrite, Normal> {
+        self.slice.arena.create_list::<BoolListWrite>(size)
     }
 }
