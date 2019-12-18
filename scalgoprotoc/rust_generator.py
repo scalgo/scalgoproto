@@ -75,21 +75,21 @@ class Generator:
 
     def out_list_type(self, node: Value) -> str:
         if node.type_.type == TokenType.BOOL:
-            return "scalgo_proto::BoolListWrite"
+            return "scalgoproto::BoolListWrite"
         elif node.type_.type in typeMap:
-            return "scalgo_proto::PodListWrite<%s>" % (typeMap[node.type_.type].p)
+            return "scalgoproto::PodListWrite<%s>" % (typeMap[node.type_.type].p)
         elif node.struct:
-            return "scalgo_proto::StructListWrite<%s>" % (node.struct.name)
+            return "scalgoproto::StructListWrite<%s>" % (node.struct.name)
         elif node.enum:
-            return "scalgo_proto::EnumListWrite<%s>" % (node.enum.name)
+            return "scalgoproto::EnumListWrite<%s>" % (node.enum.name)
         elif node.table:
-            return "scalgo_proto::TableListWrite<%sOut<'a, Normal>>" % (node.table.name)
+            return "scalgoproto::TableListWrite<%sOut<'a, Normal>>" % (node.table.name)
         elif node.union:
-            return "scalgo_proto::UnionListWrite<%s>" % (node.union.name)
+            return "scalgoproto::UnionListWrite<%s>" % (node.union.name)
         elif node.type_.type == TokenType.TEXT:
-            return "scalgo_proto::TextListWrite"
+            return "scalgoproto::TextListWrite"
         elif node.type_.type == TokenType.BYTES:
-            return "scalgo_proto::BytesListWrite"
+            return "scalgoproto::BytesListWrite"
         else:
             raise ICE()
 
@@ -171,41 +171,41 @@ class Generator:
 
     def list_access_type_lt(self, node: Value) -> str:
         if node.type_.type == TokenType.BOOL:
-            return "scalgo_proto::BoolListRead<'a>"
+            return "scalgoproto::BoolListRead<'a>"
         elif node.type_.type in typeMap:
-            return "scalgo_proto::PodListRead<'a, %s>" % (typeMap[node.type_.type].p)
+            return "scalgoproto::PodListRead<'a, %s>" % (typeMap[node.type_.type].p)
         elif node.struct:
-            return "scalgo_proto::StructListRead<'a, %sIn<'a>>" % (node.struct.name)
+            return "scalgoproto::StructListRead<'a, %sIn<'a>>" % (node.struct.name)
         elif node.enum:
-            return "scalgo_proto::EnumListRead<'a, %s>" % (node.enum.name)
+            return "scalgoproto::EnumListRead<'a, %s>" % (node.enum.name)
         elif node.table:
-            return "scalgo_proto::TableListRead<'a, %sIn<'a>>" % (node.table.name)
+            return "scalgoproto::TableListRead<'a, %sIn<'a>>" % (node.table.name)
         elif node.union:
-            return "scalgo_proto::UnionListRead<'a, %sIn<'a>>" % (node.union.name)
+            return "scalgoproto::UnionListRead<'a, %sIn<'a>>" % (node.union.name)
         elif node.type_.type == TokenType.TEXT:
-            return "scalgo_proto::TextListRead<'a>"
+            return "scalgoproto::TextListRead<'a>"
         elif node.type_.type == TokenType.BYTES:
-            return "scalgo_proto::BytesListRead<'a>"
+            return "scalgoproto::BytesListRead<'a>"
         else:
             raise ICE()
 
     def list_access_type(self, node: Value) -> str:
         if node.type_.type == TokenType.BOOL:
-            return "scalgo_proto::BoolListRead"
+            return "scalgoproto::BoolListRead"
         elif node.type_.type in typeMap:
-            return "scalgo_proto::PodListRead<%s>" % (typeMap[node.type_.type].p)
+            return "scalgoproto::PodListRead<%s>" % (typeMap[node.type_.type].p)
         elif node.struct:
-            return "scalgo_proto::StructListRead<%sIn>" % (node.struct.name)
+            return "scalgoproto::StructListRead<%sIn>" % (node.struct.name)
         elif node.enum:
-            return "scalgo_proto::EnumListRead<%s>" % (node.enum.name)
+            return "scalgoproto::EnumListRead<%s>" % (node.enum.name)
         elif node.table:
-            return "scalgo_proto::TableListRead<%sIn>" % (node.table.name)
+            return "scalgoproto::TableListRead<%sIn>" % (node.table.name)
         elif node.union:
-            return "scalgo_proto::UnionListRead<%sIn>" % (node.union.name)
+            return "scalgoproto::UnionListRead<%sIn>" % (node.union.name)
         elif node.type_.type == TokenType.TEXT:
-            return "scalgo_proto::TextListRead"
+            return "scalgoproto::TextListRead"
         elif node.type_.type == TokenType.BYTES:
-            return "scalgo_proto::BytesListRead"
+            return "scalgoproto::BytesListRead"
         else:
             raise ICE()
 
@@ -243,7 +243,7 @@ class Generator:
         self.output_doc(node, "    ")
         self.o(
             f"""    #[inline]
-    pub fn {lname}(&self) -> Result<Option<scalgo_proto::ListIn<{tn}>>> {{
+    pub fn {lname}(&self) -> Result<Option<scalgoproto::ListIn<{tn}>>> {{
         self._reader.get_list{"_inplace" if node.inplace else ""}::<{tn}>({node.offset})
     }}
 """
@@ -255,7 +255,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-    pub fn set_{lname}(&mut self, v: Option<&scalgo_proto::ListOut::<'a, {ot}, Normal>>) {{
+    pub fn set_{lname}(&mut self, v: Option<&scalgoproto::ListOut::<'a, {ot}, Normal>>) {{
         self._slice.set_list({node.offset}, v)
     }}
 """
@@ -263,7 +263,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-    pub fn add_{lname}(&mut self, len: usize) -> scalgo_proto::ListOut::<'a, {ot}, Normal> {{
+    pub fn add_{lname}(&mut self, len: usize) -> scalgoproto::ListOut::<'a, {ot}, Normal> {{
         self._slice.add_list::<{ot}>({node.offset}, len)
     }}
 """
@@ -272,7 +272,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f""" #[inline]
-    pub fn add_{lname}(&mut self, len: usize) -> scalgo_proto::ListOut::<'a, {ot}, Inplace> {{
+    pub fn add_{lname}(&mut self, len: usize) -> scalgoproto::ListOut::<'a, {ot}, Inplace> {{
         self._slice.add_list_inplace::<{ot}>({node.offset}, len, None)
     }}
 """
@@ -288,7 +288,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-    pub fn set_{lname}(&mut self, v: &scalgo_proto::ListOut<'a, {ot}, Normal>) {{
+    pub fn set_{lname}(&mut self, v: &scalgoproto::ListOut<'a, {ot}, Normal>) {{
         self._slice.set_pod::<u16>(0, &{idx});
         self._slice.set_list(2, Some(v))
     }}
@@ -298,7 +298,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-    pub fn add_{lname}(&mut self, len: usize) -> scalgo_proto::ListOut::<'a, {ot}, Normal> {{
+    pub fn add_{lname}(&mut self, len: usize) -> scalgoproto::ListOut::<'a, {ot}, Normal> {{
         self._slice.set_pod::<u16>(0, &{idx});
         self._slice.add_list::<{ot}>(2, len)
     }}
@@ -309,7 +309,7 @@ class Generator:
             # TODO We would like to return a in this method but, we cannot get the lifetimes to work out
             self.o(
                 f"""    #[inline]
-    pub fn copy_{lname}<'b>(&mut self, i: scalgo_proto::ListIn<'b, {tn}>) -> Result<()> {{
+    pub fn copy_{lname}<'b>(&mut self, i: scalgoproto::ListIn<'b, {tn}>) -> Result<()> {{
         let s: usize = i.len();
         let mut a = self.add_{lname}(s);
         a.copy_in(i)?;
@@ -321,7 +321,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-        pub fn add_{lname}(&mut self, len: usize) -> scalgo_proto::ListOut::<'a, {ot}, Inplace> {{
+        pub fn add_{lname}(&mut self, len: usize) -> scalgoproto::ListOut::<'a, {ot}, Inplace> {{
         self._slice.set_pod::<u16>(0, &{idx});
         self._slice.add_list_inplace::<{ot}>(2, len, Some(self._container_end))
     }}
@@ -330,7 +330,7 @@ class Generator:
             # TODO We would like to return a in this method but, we cannot get the lifetimes to work out
             self.o(
                 f"""    #[inline]
-    pub fn copy_{lname}<'b>(&mut self, i: scalgo_proto::ListIn<'b, {tn}>) -> Result<()> {{
+    pub fn copy_{lname}<'b>(&mut self, i: scalgoproto::ListIn<'b, {tn}>) -> Result<()> {{
         let s: usize = i.len();
         let mut a = self.add_{lname}(s);
         a.copy_in(i)?;
@@ -684,7 +684,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-    pub fn set_{lname}(&mut self, v: Option<&scalgo_proto::TextOut<'a>>) {{
+    pub fn set_{lname}(&mut self, v: Option<&scalgoproto::TextOut<'a>>) {{
         self._slice.set_text({node.offset}, v)
     }}
 """
@@ -692,7 +692,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-    pub fn add_{lname}(&mut self, v: & str) -> scalgo_proto::TextOut<'a> {{
+    pub fn add_{lname}(&mut self, v: & str) -> scalgoproto::TextOut<'a> {{
         self._slice.add_text({node.offset}, v)
     }}
 """
@@ -724,7 +724,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-    pub fn set_{lname}(&mut self, v: &scalgo_proto::TextOut<'a>) {{
+    pub fn set_{lname}(&mut self, v: &scalgoproto::TextOut<'a>) {{
         self._slice.set_pod::<u16>(0, &{idx});
         self._slice.set_text(2, Some(v));
     }}
@@ -733,7 +733,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-    pub fn add_{lname}(&mut self, v: &str) -> scalgo_proto::TextOut {{
+    pub fn add_{lname}(&mut self, v: &str) -> scalgoproto::TextOut {{
         let a = self._slice.arena.create_text(v); 
         self.set_{lname}(&a); 
         a
@@ -756,7 +756,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-    pub fn add_{lname}(&mut self, bytes: &[u8]) -> scalgo_proto::BytesOut<'a> {{
+    pub fn add_{lname}(&mut self, bytes: &[u8]) -> scalgoproto::BytesOut<'a> {{
         self._slice.add_bytes({node.offset}, bytes)
     }}
 """
@@ -764,7 +764,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-    pub fn set_{lname}(&mut self, bytes: Option<&scalgo_proto::BytesOut<'a>>) {{
+    pub fn set_{lname}(&mut self, bytes: Option<&scalgoproto::BytesOut<'a>>) {{
         self._slice.set_bytes({node.offset}, bytes)
     }}
 """
@@ -795,7 +795,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-    pub fn set_{lname}(&mut self, v: &scalgo_proto::BytesOut<'a>) {{
+    pub fn set_{lname}(&mut self, v: &scalgoproto::BytesOut<'a>) {{
         self._slice.set_pod::<u16>(0, &{idx}); 
         self._slice.set_bytes(2, Some(v));
     }}
@@ -804,7 +804,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-    pub fn add_{lname}(&mut self, v: &[u8]) -> scalgo_proto::BytesOut {{
+    pub fn add_{lname}(&mut self, v: &[u8]) -> scalgoproto::BytesOut {{
         let a = self._slice.arena.create_bytes(v);
         self.set_{lname}(&a);
         a
@@ -902,7 +902,7 @@ pub enum {union.name}In<'a> {{
             uname = self.value(member.identifier).upper()
             if member.list_:
                 self.o(
-                    "    %s(scalgo_proto::ListIn<'a, %s>),"
+                    "    %s(scalgoproto::ListIn<'a, %s>),"
                     % (uname, self.list_access_type_lt(member))
                 )
             elif member.table:
@@ -916,8 +916,8 @@ pub enum {union.name}In<'a> {{
         self.o(
             f"""}}
 
-impl<'a> scalgo_proto::UnionIn<'a> for {union.name}In<'a> {{
-    fn new(t: u16, magic: Option<u32>, offset: usize, size: usize, reader: &scalgo_proto::Reader<'a>) 
+impl<'a> scalgoproto::UnionIn<'a> for {union.name}In<'a> {{
+    fn new(t: u16, magic: Option<u32>, offset: usize, size: usize, reader: &scalgoproto::Reader<'a>) 
         -> Result<Self> {{
         match t {{"""
         )
@@ -1005,7 +1005,7 @@ impl<'a> {union.name}Out<'a, Inplace> {{
             f"""}}
 
 pub struct {name} {{}}
-impl<'a> scalgo_proto::Union<'a> for {name} {{
+impl<'a> scalgoproto::Union<'a> for {name} {{
     type Out = {name}Out<'a, Normal>;
     type InplaceOut = {name}Out<'a, Inplace>;
 
@@ -1020,7 +1020,7 @@ impl<'a> scalgo_proto::Union<'a> for {name} {{
     }}
 }}
 
-impl<'a, 'b> scalgo_proto::CopyIn<{name}In<'b> > for {name}Out<'a, Normal> {{
+impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Normal> {{
     fn copy_in(&mut self, i: {name}In<'b>) -> Result<()> {{
         match i {{
             {name}In::NONE => {{self.set_none();}},"""
@@ -1042,7 +1042,7 @@ impl<'a, 'b> scalgo_proto::CopyIn<{name}In<'b> > for {name}Out<'a, Normal> {{
     }}
 }}
 
-impl<'a, 'b> scalgo_proto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
+impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
     fn copy_in(&mut self, i: {name}In<'b>) -> Result<()> {{
         match i {{
             {name}In::NONE => {{}},"""
@@ -1064,10 +1064,10 @@ impl<'a, 'b> scalgo_proto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
     }}
 }}
 
-impl<'a, 'b, P: Placement> CopyIn<scalgo_proto::ListIn<'b, scalgo_proto::UnionListRead<'b, {name}In<'b>>>>
-    for scalgo_proto::ListOut<'a, scalgo_proto::UnionListWrite<'a, {name}>, P> {{
+impl<'a, 'b, P: Placement> CopyIn<scalgoproto::ListIn<'b, scalgoproto::UnionListRead<'b, {name}In<'b>>>>
+    for scalgoproto::ListOut<'a, scalgoproto::UnionListWrite<'a, {name}>, P> {{
     fn copy_in(&mut self, 
-        i: scalgo_proto::ListIn<'b, scalgo_proto::UnionListRead<'b, {name}In<'b>>>)
+        i: scalgoproto::ListIn<'b, scalgoproto::UnionListRead<'b, {name}In<'b>>>)
         -> Result<()> {{
         assert!(i.len() == self.len());
         for n in 0..i.len() {{
@@ -1142,7 +1142,7 @@ impl<'a, 'b, P: Placement> CopyIn<scalgo_proto::ListIn<'b, scalgo_proto::UnionLi
         self.output_doc(table, "")
         self.o(
             f"""pub struct {name}In<'a> {{
-    _reader: scalgo_proto::Reader<'a>,
+    _reader: scalgoproto::Reader<'a>,
 }}
 impl<'a> {name}In<'a> {{"""
         )
@@ -1165,14 +1165,14 @@ impl<'a> fmt::Debug for {name}In<'a> {{
         write!(f, "{name} {{{{ {format_str} }}}}", {format_args})
     }}
 }}
-impl<'a> scalgo_proto::TableIn<'a> for {name}In<'a> {{
+impl<'a> scalgoproto::TableIn<'a> for {name}In<'a> {{
     #[inline]
     fn magic() -> u32 {{
         {magic:#010x}
     }}
 
     #[inline]
-    fn new(reader: scalgo_proto::Reader<'a>) -> Self {{
+    fn new(reader: scalgoproto::Reader<'a>) -> Self {{
         Self {{ _reader: reader }}
     }}
 }}"""
@@ -1193,7 +1193,7 @@ impl<'a, P: Placement> {name}Out<'a, P> {{"""
         self.o(
             f"""}}
 
-impl<'a, P: Placement> scalgo_proto::TableOut<'a, P> for {name}Out<'a, P> {{
+impl<'a, P: Placement> scalgoproto::TableOut<'a, P> for {name}Out<'a, P> {{
     #[inline]
     fn offset(&self) -> usize {{
         self._slice.get_offset()
@@ -1225,7 +1225,7 @@ impl<'a, P: Placement> scalgo_proto::TableOut<'a, P> for {name}Out<'a, P> {{
     }}
 }}
 
-impl<'a, 'b, P: Placement> scalgo_proto::CopyIn<{name}In<'b> > for {name}Out<'a, P> {{
+impl<'a, 'b, P: Placement> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, P> {{
     fn copy_in(&mut self, i: {name}In<'b>) -> Result<()> {{"""
         )
         self.generate_table_copy(table)
@@ -1239,7 +1239,7 @@ impl<'a, 'b, P: Placement> scalgo_proto::CopyIn<{name}In<'b> > for {name}Out<'a,
         self.output_doc(table, "")
         self.o(
             f"""pub struct {name} {{}}
-impl<'a> scalgo_proto::Table<'a> for {name} {{
+impl<'a> scalgoproto::Table<'a> for {name} {{
     type In = {name}In<'a>;
     type Out = {name}Out<'a, Normal>;
 }}
@@ -1269,7 +1269,7 @@ pub struct {name} {{}}
     _bytes: &'a [u8; {size}],
 }}
 
-impl<'a> scalgo_proto::StructIn<'a> for {name}In<'a> {{
+impl<'a> scalgoproto::StructIn<'a> for {name}In<'a> {{
     type B = [u8; {size}];
 
     #[inline]
@@ -1293,7 +1293,7 @@ impl <'a> {name}In<'a> {{"""
                 self.o(
                     f"""    #[inline]
     pub fn {ident}(&self) -> bool {{
-        scalgo_proto::to_bool(self._bytes[{v.offset}])
+        scalgoproto::to_bool(self._bytes[{v.offset}])
     }}
 """
                 )
@@ -1301,7 +1301,7 @@ impl <'a> {name}In<'a> {{"""
                 self.o(
                     f"""    #[inline]
     pub fn {ident}(&self) -> {typeMap[v.type_.type][1]} {{
-        unsafe{{scalgo_proto::to_pod(&self._bytes[{v.offset}..{v.offset + v.bytes}])}}
+        unsafe{{scalgoproto::to_pod(&self._bytes[{v.offset}..{v.offset + v.bytes}])}}
     }}
 """
                 )
@@ -1309,7 +1309,7 @@ impl <'a> {name}In<'a> {{"""
                 self.o(
                     f"""    #[inline]
     pub fn {ident}(&self) -> {v.struct.name}In<'a> {{
-        unsafe{{scalgo_proto::to_struct::<{v.struct.name}In>(&self._bytes[{v.offset}..{v.offset + v.bytes}])}}
+        unsafe{{scalgoproto::to_struct::<{v.struct.name}In>(&self._bytes[{v.offset}..{v.offset + v.bytes}])}}
     }}
 """
                 )
@@ -1317,7 +1317,7 @@ impl <'a> {name}In<'a> {{"""
                 self.o(
                     f"""    #[inline]
     pub fn {ident}(&self) -> Option<{v.enum.name}> {{
-        unsafe{{scalgo_proto::to_enum(self._bytes[{v.enum.offset}])}}
+        unsafe{{scalgoproto::to_enum(self._bytes[{v.enum.offset}])}}
     }}
 """
                 )
@@ -1369,7 +1369,7 @@ impl <'a> {name}Out<'a> {{"""
                 self.o(
                     f"""    #[inline]
     pub fn {ident}(&mut self) -> {v.struct.name}Out {{
-        scalgo_proto::StructOut::new(self._slice.part({v.offset}, {v.struct.bytes}))
+        scalgoproto::StructOut::new(self._slice.part({v.offset}, {v.struct.bytes}))
     }}
 """
                 )
@@ -1386,7 +1386,7 @@ impl <'a> {name}Out<'a> {{"""
         self.o(
             f"""}}
 
-impl<'a> scalgo_proto::Struct<'a> for {name} {{
+impl<'a> scalgoproto::Struct<'a> for {name} {{
     type Out = {name}Out<'a>;
 
     #[inline]
@@ -1395,25 +1395,25 @@ impl<'a> scalgo_proto::Struct<'a> for {name} {{
     }} 
 }}
 
-impl<'a> scalgo_proto::StructOut<'a> for {name}Out<'a> {{
+impl<'a> scalgoproto::StructOut<'a> for {name}Out<'a> {{
     #[inline]
     fn new(slice: ArenaSlice<'a>) -> Self {{
         Self{{_slice: slice}}
     }}
 }}
 
-impl<'a, 'b> scalgo_proto::CopyIn<{name}In<'b> > for {name}Out<'a> {{
+impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a> {{
     fn copy_in(&mut self, i: {name}In<'b>) -> Result<()> {{
         self._slice.set_data(i._bytes);
         Ok(())
     }}
 }}
 
-impl<'a, 'b, P: Placement> CopyIn<scalgo_proto::ListIn<'b, scalgo_proto::StructListRead<'b, {name}In<'b>>>>
-    for scalgo_proto::ListOut<'a, scalgo_proto::StructListWrite<'a, {name}>, P> {{
+impl<'a, 'b, P: Placement> CopyIn<scalgoproto::ListIn<'b, scalgoproto::StructListRead<'b, {name}In<'b>>>>
+    for scalgoproto::ListOut<'a, scalgoproto::StructListWrite<'a, {name}>, P> {{
 
     fn copy_in(&mut self, 
-        i: scalgo_proto::ListIn<'b, scalgo_proto::StructListRead<'b, {name}In<'b>>>)
+        i: scalgoproto::ListIn<'b, scalgoproto::StructListRead<'b, {name}In<'b>>>)
         -> Result<()> {{
         assert!(i.len() == self.len());
         for n in 0..i.len() {{
@@ -1437,7 +1437,7 @@ pub enum {node.name} {{"""
         self.o(
             f"""}}
 
-impl scalgo_proto::Enum for {node.name} {{
+impl scalgoproto::Enum for {node.name} {{
     fn max_value() -> u8 {{
         {len(node.members)}
     }}
@@ -1507,13 +1507,13 @@ def run(args) -> int:
             """//! This file was generated by scalgoprotoc
 #![allow(dead_code)]
 #![allow(clippy::unreadable_literal)]
-use crate::scalgo_proto;
-use crate::scalgo_proto::CopyIn;
-use crate::scalgo_proto::Placement;
-use crate::scalgo_proto::Normal;
-use crate::scalgo_proto::Inplace;
-use crate::scalgo_proto::Result;
-use crate::scalgo_proto::ArenaSlice;
+use crate::scalgoproto;
+use crate::scalgoproto::CopyIn;
+use crate::scalgoproto::Placement;
+use crate::scalgoproto::Normal;
+use crate::scalgoproto::Inplace;
+use crate::scalgoproto::Result;
+use crate::scalgoproto::ArenaSlice;
 use std::marker::PhantomData;
 use std::fmt;
 """,

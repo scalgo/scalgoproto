@@ -4,7 +4,7 @@
 
 mod base;
 mod complex2;
-mod scalgo_proto;
+mod scalgoproto;
 mod union;
 
 macro_rules! require {
@@ -19,7 +19,7 @@ macro_rules! require {
                 expected,
                 stringify!($y)
             );
-            return Err(scalgo_proto::Error::InvalidPointer());
+            return Err(scalgoproto::Error::InvalidPointer());
         }
     }};
 }
@@ -28,7 +28,7 @@ macro_rules! require_none {
     ( $x:expr ) => {{
         if $x.is_some() {
             println!("Error {} should yield None", stringify!($x),);
-            return Err(scalgo_proto::Error::InvalidPointer());
+            return Err(scalgoproto::Error::InvalidPointer());
         }
     }};
 }
@@ -38,7 +38,7 @@ macro_rules! require_some {
         match $x {
             None => {
                 println!("Error {} should yield Some", stringify!($x),);
-                return Err(scalgo_proto::Error::InvalidPointer());
+                return Err(scalgoproto::Error::InvalidPointer());
             }
             Some(v) => v,
         }
@@ -52,7 +52,7 @@ macro_rules! require_enum {
             $y => $z,
             _ => {
                 println!("Error {} should yield {}", stringify!($x), stringify!($y));
-                return Err(scalgo_proto::Error::InvalidPointer());
+                return Err(scalgoproto::Error::InvalidPointer());
             }
         }
     }};
@@ -62,7 +62,7 @@ macro_rules! require_one_list {
     ( $x:expr) => {{
         if $x.len() != 1 {
             println!("Error {} should have length 1", stringify!($x),);
-            return Err(scalgo_proto::Error::InvalidPointer());
+            return Err(scalgoproto::Error::InvalidPointer());
         }
         $x.get(0)
     }};
@@ -80,7 +80,7 @@ macro_rules! ce {
     }};
 }
 
-fn validate_out(data: &[u8], path: &str) -> scalgo_proto::Result<()> {
+fn validate_out(data: &[u8], path: &str) -> scalgoproto::Result<()> {
     let exp = std::fs::read(path).expect("Unable to read file");
     if exp == data {
         return Ok(());
@@ -151,20 +151,20 @@ fn validate_out(data: &[u8], path: &str) -> scalgo_proto::Result<()> {
         }
         println!("\x1b[0m");
     }
-    Err(scalgo_proto::Error::InvalidPointer())
+    Err(scalgoproto::Error::InvalidPointer())
 }
 
-fn test_out_default(path: &str) -> scalgo_proto::Result<()> {
-    let arena = scalgo_proto::Arena::new(vec![]);
-    let mut writer = scalgo_proto::Writer::new(&arena);
+fn test_out_default(path: &str) -> scalgoproto::Result<()> {
+    let arena = scalgoproto::Arena::new(vec![]);
+    let mut writer = scalgoproto::Writer::new(&arena);
     writer.add_root::<base::Simple>();
     let data = arena.finalize();
     validate_out(&data, path)
 }
 
-fn test_in_default(path: &str) -> scalgo_proto::Result<()> {
+fn test_in_default(path: &str) -> scalgoproto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
-    let s = scalgo_proto::read_message::<base::Simple>(&data)?;
+    let s = scalgoproto::read_message::<base::Simple>(&data)?;
     require!(s.e(), None);
     require!(s.s().e(), Some(base::MyEnum::A));
     require!(s.s().s().x(), 0);
@@ -221,9 +221,9 @@ fn test_in_default(path: &str) -> scalgo_proto::Result<()> {
     Ok(())
 }
 
-fn test_out(path: &str) -> scalgo_proto::Result<()> {
-    let arena = scalgo_proto::Arena::new(vec![]);
-    let mut writer = scalgo_proto::Writer::new(&arena);
+fn test_out(path: &str) -> scalgoproto::Result<()> {
+    let arena = scalgoproto::Arena::new(vec![]);
+    let mut writer = scalgoproto::Writer::new(&arena);
     let mut s = writer.add_root::<base::Simple>();
     s.e(Some(base::MyEnum::C));
     let mut ss = s.s();
@@ -273,9 +273,9 @@ fn test_out(path: &str) -> scalgo_proto::Result<()> {
     validate_out(&data, path)
 }
 
-fn test_in(path: &str) -> scalgo_proto::Result<()> {
+fn test_in(path: &str) -> scalgoproto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
-    let s = scalgo_proto::read_message::<base::Simple>(&data)?;
+    let s = scalgoproto::read_message::<base::Simple>(&data)?;
     require!(s.e(), Some(base::MyEnum::C));
     require!(s.s().e(), Some(base::MyEnum::D));
     require!(s.s().s().x(), 42);
@@ -334,9 +334,9 @@ fn test_in(path: &str) -> scalgo_proto::Result<()> {
     Ok(())
 }
 
-fn test_out_complex(path: &str) -> scalgo_proto::Result<()> {
-    let arena = scalgo_proto::Arena::new(vec![]);
-    let mut writer = scalgo_proto::Writer::new(&arena);
+fn test_out_complex(path: &str) -> scalgoproto::Result<()> {
+    let arena = scalgoproto::Arena::new(vec![]);
+    let mut writer = scalgoproto::Writer::new(&arena);
 
     let mut m = writer.add_table::<base::Member>();
     m.id(42);
@@ -398,9 +398,9 @@ fn test_out_complex(path: &str) -> scalgo_proto::Result<()> {
     validate_out(&data, path)
 }
 
-fn test_in_complex(path: &str) -> scalgo_proto::Result<()> {
+fn test_in_complex(path: &str) -> scalgoproto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
-    let s = scalgo_proto::read_message::<base::Complex>(&data)?;
+    let s = scalgoproto::read_message::<base::Complex>(&data)?;
     require_none!(ce!(s.nmember()));
     require_none!(ce!(s.ntext()));
     require_none!(ce!(s.nbytes()));
@@ -459,9 +459,9 @@ fn test_in_complex(path: &str) -> scalgo_proto::Result<()> {
     Ok(())
 }
 
-fn test_out_complex2(path: &str) -> scalgo_proto::Result<()> {
-    let arena = scalgo_proto::Arena::new(vec![]);
-    let mut writer = scalgo_proto::Writer::new(&arena);
+fn test_out_complex2(path: &str) -> scalgoproto::Result<()> {
+    let arena = scalgoproto::Arena::new(vec![]);
+    let mut writer = scalgoproto::Writer::new(&arena);
 
     let mut m = writer.add_table::<base::Member>();
     m.id(42);
@@ -496,9 +496,9 @@ fn test_out_complex2(path: &str) -> scalgo_proto::Result<()> {
     validate_out(&data, path)
 }
 
-fn test_in_complex2(path: &str) -> scalgo_proto::Result<()> {
+fn test_in_complex2(path: &str) -> scalgoproto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
-    let s = scalgo_proto::read_message::<complex2::Complex2>(&data)?;
+    let s = scalgoproto::read_message::<complex2::Complex2>(&data)?;
     require!(
         require_enum!(ce!(s.u1()), base::NamedUnionIn::MEMBER(v), v).id(),
         42
@@ -525,9 +525,9 @@ fn test_in_complex2(path: &str) -> scalgo_proto::Result<()> {
     Ok(())
 }
 
-fn test_out_inplace(path: &str) -> scalgo_proto::Result<()> {
-    let arena = scalgo_proto::Arena::new(vec![]);
-    let mut writer = scalgo_proto::Writer::new(&arena);
+fn test_out_inplace(path: &str) -> scalgoproto::Result<()> {
+    let arena = scalgoproto::Arena::new(vec![]);
+    let mut writer = scalgoproto::Writer::new(&arena);
 
     let name = writer.add_text("nilson");
     let mut u = writer.add_table::<base::InplaceUnion>();
@@ -560,9 +560,9 @@ fn test_out_inplace(path: &str) -> scalgo_proto::Result<()> {
     validate_out(&data, path)
 }
 
-fn test_in_inplace(path: &str) -> scalgo_proto::Result<()> {
+fn test_in_inplace(path: &str) -> scalgoproto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
-    let s = scalgo_proto::read_message::<base::InplaceRoot>(&data)?;
+    let s = scalgoproto::read_message::<base::InplaceRoot>(&data)?;
 
     let u = require_some!(ce!(s.u()));
     let v = require_enum!(ce!(u.u()), base::InplaceUnionUIn::MONKEY(v), v);
@@ -584,27 +584,27 @@ fn test_in_inplace(path: &str) -> scalgo_proto::Result<()> {
     Ok(())
 }
 
-fn test_out_extend1(path: &str) -> scalgo_proto::Result<()> {
-    let arena = scalgo_proto::Arena::new(vec![]);
-    let mut writer = scalgo_proto::Writer::new(&arena);
+fn test_out_extend1(path: &str) -> scalgoproto::Result<()> {
+    let arena = scalgoproto::Arena::new(vec![]);
+    let mut writer = scalgoproto::Writer::new(&arena);
     let mut o = writer.add_root::<base::Gen1>();
     o.aa(77);
     let data = arena.finalize();
     validate_out(&data, path)
 }
 
-fn test_in_extend1(path: &str) -> scalgo_proto::Result<()> {
+fn test_in_extend1(path: &str) -> scalgoproto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
-    let s = scalgo_proto::read_message::<base::Gen2>(&data)?;
+    let s = scalgoproto::read_message::<base::Gen2>(&data)?;
     require!(s.aa(), 77);
     require!(s.bb(), 42);
     require_enum!(ce!(s.u()), base::Gen2UIn::NONE, ());
     Ok(())
 }
 
-fn test_out_extend2(path: &str) -> scalgo_proto::Result<()> {
-    let arena = scalgo_proto::Arena::new(vec![]);
-    let mut writer = scalgo_proto::Writer::new(&arena);
+fn test_out_extend2(path: &str) -> scalgoproto::Result<()> {
+    let arena = scalgoproto::Arena::new(vec![]);
+    let mut writer = scalgoproto::Writer::new(&arena);
     let mut o = writer.add_root::<base::Gen2>();
     o.aa(80);
     o.bb(81);
@@ -614,9 +614,9 @@ fn test_out_extend2(path: &str) -> scalgo_proto::Result<()> {
     validate_out(&data, path)
 }
 
-fn test_in_extend2(path: &str) -> scalgo_proto::Result<()> {
+fn test_in_extend2(path: &str) -> scalgoproto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
-    let s = scalgo_proto::read_message::<base::Gen3>(&data)?;
+    let s = scalgoproto::read_message::<base::Gen3>(&data)?;
     require!(s.aa(), 80);
     require!(s.bb(), 81);
     require!(
@@ -662,10 +662,10 @@ fn test_in_extend2(path: &str) -> scalgo_proto::Result<()> {
     Ok(())
 }
 
-fn test_out_union(path: &str) -> scalgo_proto::Result<()> {
+fn test_out_union(path: &str) -> scalgoproto::Result<()> {
     let data = {
-        let arena = scalgo_proto::Arena::new(vec![]);
-        let mut writer = scalgo_proto::Writer::new(&arena);
+        let arena = scalgoproto::Arena::new(vec![]);
+        let mut writer = scalgoproto::Writer::new(&arena);
         let mut root = writer.add_root::<union::Table3>();
 
         let mut v1 = root.add_v1();
@@ -709,10 +709,10 @@ fn test_out_union(path: &str) -> scalgo_proto::Result<()> {
         v10.b().add_v10(1).set(0, true);
         arena.finalize()
     };
-    let s = scalgo_proto::read_message::<union::Table3>(&data)?;
+    let s = scalgoproto::read_message::<union::Table3>(&data)?;
 
-    let arena = scalgo_proto::Arena::new(vec![]);
-    let mut writer = scalgo_proto::Writer::new(&arena);
+    let arena = scalgoproto::Arena::new(vec![]);
+    let mut writer = scalgoproto::Writer::new(&arena);
     let mut root = writer.add_root::<union::Table3>();
 
     let mut v1 = root.add_v1();
@@ -852,9 +852,9 @@ fn test_out_union(path: &str) -> scalgo_proto::Result<()> {
     validate_out(&data, path)
 }
 
-fn test_in_union(path: &str) -> scalgo_proto::Result<()> {
+fn test_in_union(path: &str) -> scalgoproto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
-    let i = scalgo_proto::read_message::<union::Table3>(&data)?;
+    let i = scalgoproto::read_message::<union::Table3>(&data)?;
 
     let v1 = require_some!(ce!(i.v1()));
     require!(
