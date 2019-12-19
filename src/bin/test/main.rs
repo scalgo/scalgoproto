@@ -2,9 +2,10 @@
 #![allow(clippy::float_cmp)]
 #![allow(clippy::many_single_char_names)]
 
+extern crate scalgoproto;
+
 mod base;
 mod complex2;
-mod scalgoproto;
 mod union;
 
 macro_rules! require {

@@ -1,5 +1,6 @@
 [package]
 name = "scalgoproto"
+crate-type = ["staticlib"]
 version = "0.1.0"
 authors = ["Jakob Truelsen <jakob@scalgo.com>"]
 edition = "2018"
