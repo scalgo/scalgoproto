@@ -1317,7 +1317,7 @@ impl <'a> {name}In<'a> {{"""
                 self.o(
                     f"""    #[inline]
     pub fn {ident}(&self) -> Option<{v.enum.name}> {{
-        unsafe{{scalgoproto::to_enum(self._bytes[{v.enum.offset}])}}
+        unsafe{{scalgoproto::to_enum(self._bytes[{v.offset}])}}
     }}
 """
                 )
