@@ -23,7 +23,7 @@ from .parser import (
     ICE,
 )
 from .sp_tokenize import Token, TokenType
-from .util import cescape, ucamel, lcamel, usnake, snake
+from .util import cescape, snake, ucamel
 
 TypeInfo = NamedTuple("TypeInfo", [("n", str), ("p", str)])
 
@@ -899,7 +899,7 @@ pub enum {union.name}In<'a> {{
         for member in union.members:
             if not isinstance(member, (Table, Value)):
                 raise ICE()
-            uname = self.value(member.identifier).upper()
+            uname = ucamel(self.value(member.identifier))
             if member.list_:
                 self.o(
                     "    %s(scalgoproto::ListIn<'a, %s>),"
@@ -922,7 +922,7 @@ impl<'a> scalgoproto::UnionIn<'a> for {union.name}In<'a> {{
         match t {{"""
         )
         for i, member in enumerate(union.members):
-            uname = self.value(member.identifier).upper()
+            uname = ucamel(self.value(member.identifier))
             if member.list_:
                 self.o(
                     f"        {i+1} => Ok(Self::{uname}(reader.get_list_union(magic, offset, size)?)),"
@@ -1027,7 +1027,7 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Normal> {{
         )
         for member in union.members:
             lname = snake(self.value(member.identifier))
-            uname = self.value(member.identifier).upper()
+            uname = ucamel(self.value(member.identifier))
             if member.table and member.table.empty:
                 self.o(f"            {name}In::{uname}(_) => {{self.add_{lname}();}},")
             elif member.list_ or member.table:
@@ -1049,7 +1049,7 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
         )
         for member in union.members:
             lname = snake(self.value(member.identifier))
-            uname = self.value(member.identifier).upper()
+            uname = ucamel(self.value(member.identifier))
             if member.table and member.table.empty:
                 self.o(f"            {name}In::{uname}(_) => {{self.add_{lname}();}},")
             elif member.list_ or member.table:
@@ -1433,7 +1433,7 @@ impl<'a, 'b, P: Placement> CopyIn<scalgoproto::ListIn<'b, scalgoproto::StructLis
 pub enum {node.name} {{"""
         )
         for ev in node.members:
-            self.o("    %s," % (usnake(self.value(ev.identifier))))
+            self.o("    %s," % (ucamel(self.value(ev.identifier))))
         self.o(
             f"""}}
 

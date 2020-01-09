@@ -500,18 +500,18 @@ fn test_in_complex2(path: &str) -> scalgoproto::Result<()> {
     let data = std::fs::read(path).expect("Unable to read file");
     let s = scalgoproto::read_message::<complex2::Complex2>(&data)?;
     require!(
-        require_enum!(ce!(s.u1()), base::NamedUnionIn::MEMBER(v), v).id(),
+        require_enum!(ce!(s.u1()), base::NamedUnionIn::Member(v), v).id(),
         42
     );
     require!(
-        require_enum!(ce!(s.u2()), base::NamedUnionIn::TEXT(v), v),
+        require_enum!(ce!(s.u2()), base::NamedUnionIn::Text(v), v),
         "text"
     );
     require!(
-        require_enum!(ce!(s.u3()), base::NamedUnionIn::MYBYTES(v), v),
+        require_enum!(ce!(s.u3()), base::NamedUnionIn::MyBytes(v), v),
         b"bytes"
     );
-    let l = require_enum!(ce!(s.u4()), base::NamedUnionIn::ENUMLIST(v), v);
+    let l = require_enum!(ce!(s.u4()), base::NamedUnionIn::EnumList(v), v);
     require!(l.len(), 2);
     require!(l.get(0), Some(base::NamedUnionEnumList::X));
     require!(l.get(1), Some(base::NamedUnionEnumList::Z));
@@ -565,10 +565,10 @@ fn test_in_inplace(path: &str) -> scalgoproto::Result<()> {
     let s = scalgoproto::read_message::<base::InplaceRoot>(&data)?;
 
     let u = require_some!(ce!(s.u()));
-    let v = require_enum!(ce!(u.u()), base::InplaceUnionUIn::MONKEY(v), v);
+    let v = require_enum!(ce!(u.u()), base::InplaceUnionUIn::Monkey(v), v);
     require!(ce!(v.name()), Some("nilson"));
     let u = require_some!(ce!(s.u2()));
-    let v = require_enum!(ce!(u.u()), base::InplaceUnionUIn::TEXT(v), v);
+    let v = require_enum!(ce!(u.u()), base::InplaceUnionUIn::Text(v), v);
     require!(ce!(v.t()), Some("foobar"));
     let u = require_some!(ce!(s.t()));
     require!(ce!(u.t()), Some("cake"));
@@ -620,7 +620,7 @@ fn test_in_extend2(path: &str) -> scalgoproto::Result<()> {
     require!(s.aa(), 80);
     require!(s.bb(), 81);
     require!(
-        require_enum!(ce!(s.u()), base::Gen3UIn::CAKE(cake), cake).v(),
+        require_enum!(ce!(s.u()), base::Gen3UIn::Cake(cake), cake).v(),
         45
     );
     require!(s.e(), Some(base::MyEnum::C));
