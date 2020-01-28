@@ -660,7 +660,6 @@ pub trait TableOut<'a, P: Placement> {
     fn default() -> &'static [u8];
     fn new(slice: ArenaSlice<'a>) -> Self;
     fn offset(&self) -> usize;
-    fn arena(&self) -> usize;
 }
 
 /* The meta types describes types of members */
@@ -900,10 +899,6 @@ impl Writer {
 }
 
 impl<'a> ArenaSlice<'a> {
-    pub fn arena_id(&self) -> usize {
-        self.arena as *const _ as usize
-    }
-
     pub fn get_offset(&self) -> usize {
         self.offset
     }
@@ -1009,12 +1004,7 @@ impl<'a> ArenaSlice<'a> {
 
     pub fn set_table<T: TableOut<'a, Normal>>(&mut self, offset: usize, value: Option<&T>) {
         let o = match value {
-            Some(t) => {
-                if t.arena() != self.arena_id() {
-                    panic!("Table not allocated in the same arena")
-                }
-                t.offset()
-            }
+            Some(t) => t.offset(),
             None => 0,
         } - 10;
         self.set_u48(offset, o as u64);
@@ -1039,12 +1029,7 @@ impl<'a> ArenaSlice<'a> {
 
     pub fn set_bytes(&mut self, offset: usize, v: Option<&BytesOut<'a>>) {
         let o = match v {
-            Some(b) => {
-                if b.slice.arena_id() != self.arena_id() {
-                    panic!("Bytes not allocated in the same arena")
-                }
-                b.slice.offset
-            }
+            Some(b) => b.slice.offset,
             None => 0,
         };
         self.set_u48(offset, o as u64);
@@ -1067,12 +1052,7 @@ impl<'a> ArenaSlice<'a> {
 
     pub fn set_text(&mut self, offset: usize, v: Option<&TextOut<'a>>) {
         let o = match v {
-            Some(b) => {
-                if b.slice.arena_id() != self.arena_id() {
-                    panic!("Text not allocated in the same arena")
-                }
-                b.slice.offset
-            }
+            Some(b) => b.slice.offset,
             None => 0,
         };
         self.set_u48(offset, o as u64);
@@ -1095,12 +1075,7 @@ impl<'a> ArenaSlice<'a> {
 
     pub fn set_list<T: ListWrite>(&mut self, offset: usize, v: Option<&ListOut<'a, T, Normal>>) {
         let o = match v {
-            Some(t) => {
-                if t.slice.arena_id() != self.arena_id() {
-                    panic!("List not allocated in the same arena")
-                };
-                t.slice.offset
-            }
+            Some(t) => t.slice.offset,
             None => 0,
         } - 10;
         self.set_u48(offset, o as u64);

@@ -1200,11 +1200,6 @@ impl<'a, P: Placement> scalgoproto::TableOut<'a, P> for {name}Out<'a, P> {{
     }}
 
     #[inline]
-    fn arena(&self) -> usize {{
-        self._slice.arena_id()
-    }}
-
-    #[inline]
     fn magic() -> u32 {{
         {magic:#010x}
     }}
