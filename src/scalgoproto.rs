@@ -619,7 +619,7 @@ enum ArenaState {
 
 pub struct Writer {
     data: std::cell::UnsafeCell<Vec<u8>>,
-    state: std::cell::UnsafeCell<ArenaState>,
+    state: std::cell::Cell<ArenaState>,
 }
 
 /// Represents disjoint slice of the arena
@@ -1254,7 +1254,7 @@ impl Writer {
         data.resize(10, 0u8);
         Writer {
             data: std::cell::UnsafeCell::new(data),
-            state: std::cell::UnsafeCell::<ArenaState>::new(ArenaState::BeforeRoot),
+            state: std::cell::Cell::new(ArenaState::BeforeRoot),
         }
     }
 
@@ -1262,7 +1262,7 @@ impl Writer {
     /// for the arena and a root added before this method may be called.
     /// The Vec returned is the one given to new, but now with the constructed message
     pub fn finalize(self) -> Vec<u8> {
-        if let ArenaState::AfterRoot = unsafe { *self.state.get() } {
+        if let ArenaState::AfterRoot = self.state.get() {
         } else {
             panic!("A root should be set before finalize is called")
         }
@@ -1274,10 +1274,8 @@ impl Writer {
     /// Add a root table to the message
     /// Note that exactly one root must be added to a message
     pub fn add_root<'a, F: Table<'a>>(&'a self) -> F::Out {
-        if let ArenaState::BeforeRoot = unsafe { *self.state.get() } {
-            unsafe {
-                *self.state.get() = ArenaState::AfterRoot;
-            }
+        if let ArenaState::BeforeRoot = self.state.get() {
+            self.state.set(ArenaState::AfterRoot);
         } else {
             panic!("Only one root element can be set")
         }
