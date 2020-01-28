@@ -618,7 +618,7 @@ enum ArenaState {
 }
 
 pub struct Writer {
-    data: std::cell::UnsafeCell<Vec<u8>>,
+    data: std::cell::RefCell<Vec<u8>>,
     state: std::cell::Cell<ArenaState>,
 }
 
@@ -831,9 +831,9 @@ where
 
 impl Writer {
     fn allocate(&self, size: usize, fill: u8) -> ArenaSlice {
-        let d = unsafe { &mut *self.data.get() };
-        let offset = d.len();
-        d.resize(offset + size, fill);
+        let mut data = self.data.borrow_mut();
+        let offset = data.len();
+        data.resize(offset + size, fill);
         ArenaSlice {
             arena: self,
             offset,
@@ -842,11 +842,11 @@ impl Writer {
     }
 
     fn allocate_default(&self, head: usize, default: &[u8]) -> ArenaSlice {
-        let d = unsafe { &mut *self.data.get() };
-        let offset = d.len();
-        d.reserve(offset + head + default.len());
-        d.resize(offset + head, 0);
-        d.extend_from_slice(default);
+        let mut data = self.data.borrow_mut();
+        let offset = data.len();
+        data.reserve(offset + head + default.len());
+        data.resize(offset + head, 0);
+        data.extend_from_slice(default);
         ArenaSlice {
             arena: self,
             offset,
@@ -922,12 +922,12 @@ impl<'a> ArenaSlice<'a> {
     }
 
     unsafe fn data(&self, o: usize) -> *mut u8 {
-        let data = &mut *self.arena.data.get();
+        let mut data = self.arena.data.borrow_mut();
         data.as_mut_ptr().add(self.offset + o)
     }
 
     fn check_offset(&self, o: usize, size: usize) {
-        assert!(self.offset + o + size <= unsafe { (*self.arena.data.get()).len() });
+        assert!(self.offset + o + size <= unsafe { (*self.arena.data.as_ptr()).len() });
     }
 
     fn check_inplace(&self, o: usize, container_end: Option<usize>) {
@@ -1253,7 +1253,7 @@ impl Writer {
         // Make room for the slice containing the root pointer
         data.resize(10, 0u8);
         Writer {
-            data: std::cell::UnsafeCell::new(data),
+            data: std::cell::RefCell::new(data),
             state: std::cell::Cell::new(ArenaState::BeforeRoot),
         }
     }
