@@ -155,10 +155,9 @@ fn validate_out(data: &[u8], path: &str) -> scalgoproto::Result<()> {
 }
 
 fn test_out_default(path: &str) -> scalgoproto::Result<()> {
-    let arena = scalgoproto::Arena::new(vec![]);
-    let mut writer = scalgoproto::Writer::new(&arena);
+    let writer = scalgoproto::Writer::new(vec![]);
     writer.add_root::<base::Simple>();
-    let data = arena.finalize();
+    let data = writer.finalize();
     validate_out(&data, path)
 }
 
@@ -222,8 +221,7 @@ fn test_in_default(path: &str) -> scalgoproto::Result<()> {
 }
 
 fn test_out(path: &str) -> scalgoproto::Result<()> {
-    let arena = scalgoproto::Arena::new(vec![]);
-    let mut writer = scalgoproto::Writer::new(&arena);
+    let writer = scalgoproto::Writer::new(vec![]);
     let mut s = writer.add_root::<base::Simple>();
     s.e(Some(base::MyEnum::C));
     let mut ss = s.s();
@@ -269,7 +267,7 @@ fn test_out(path: &str) -> scalgoproto::Result<()> {
     s.oi64(Some(5465729));
     s.of(Some(5.0));
     s.od(Some(6.4));
-    let data = arena.finalize();
+    let data = writer.finalize();
     validate_out(&data, path)
 }
 
@@ -335,8 +333,7 @@ fn test_in(path: &str) -> scalgoproto::Result<()> {
 }
 
 fn test_out_complex(path: &str) -> scalgoproto::Result<()> {
-    let arena = scalgoproto::Arena::new(vec![]);
-    let mut writer = scalgoproto::Writer::new(&arena);
+    let writer = scalgoproto::Writer::new(vec![]);
 
     let mut m = writer.add_table::<base::Member>();
     m.id(42);
@@ -394,7 +391,7 @@ fn test_out_complex(path: &str) -> scalgoproto::Result<()> {
     s.set_f64list(Some(&l8));
     s.set_u8list(Some(&l9));
     s.set_blist(Some(&l10));
-    let data = arena.finalize();
+    let data = writer.finalize();
     validate_out(&data, path)
 }
 
@@ -460,8 +457,7 @@ fn test_in_complex(path: &str) -> scalgoproto::Result<()> {
 }
 
 fn test_out_complex2(path: &str) -> scalgoproto::Result<()> {
-    let arena = scalgoproto::Arena::new(vec![]);
-    let mut writer = scalgoproto::Writer::new(&arena);
+    let writer = scalgoproto::Writer::new(vec![]);
 
     let mut m = writer.add_table::<base::Member>();
     m.id(42);
@@ -492,7 +488,7 @@ fn test_out_complex2(path: &str) -> scalgoproto::Result<()> {
     r.s().x(Some(complex2::Complex2SX::P));
     r.s().y().z(8);
     r.set_l2(Some(&l3));
-    let data = arena.finalize();
+    let data = writer.finalize();
     validate_out(&data, path)
 }
 
@@ -526,8 +522,7 @@ fn test_in_complex2(path: &str) -> scalgoproto::Result<()> {
 }
 
 fn test_out_inplace(path: &str) -> scalgoproto::Result<()> {
-    let arena = scalgoproto::Arena::new(vec![]);
-    let mut writer = scalgoproto::Writer::new(&arena);
+    let writer = scalgoproto::Writer::new(vec![]);
 
     let name = writer.add_text("nilson");
     let mut u = writer.add_table::<base::InplaceUnion>();
@@ -556,7 +551,7 @@ fn test_out_inplace(path: &str) -> scalgoproto::Result<()> {
     root.set_t(Some(&t));
     root.set_b(Some(&b));
     root.set_l(Some(&l));
-    let data = arena.finalize();
+    let data = writer.finalize();
     validate_out(&data, path)
 }
 
@@ -585,11 +580,10 @@ fn test_in_inplace(path: &str) -> scalgoproto::Result<()> {
 }
 
 fn test_out_extend1(path: &str) -> scalgoproto::Result<()> {
-    let arena = scalgoproto::Arena::new(vec![]);
-    let mut writer = scalgoproto::Writer::new(&arena);
+    let writer = scalgoproto::Writer::new(vec![]);
     let mut o = writer.add_root::<base::Gen1>();
     o.aa(77);
-    let data = arena.finalize();
+    let data = writer.finalize();
     validate_out(&data, path)
 }
 
@@ -603,14 +597,13 @@ fn test_in_extend1(path: &str) -> scalgoproto::Result<()> {
 }
 
 fn test_out_extend2(path: &str) -> scalgoproto::Result<()> {
-    let arena = scalgoproto::Arena::new(vec![]);
-    let mut writer = scalgoproto::Writer::new(&arena);
+    let writer = scalgoproto::Writer::new(vec![]);
     let mut o = writer.add_root::<base::Gen2>();
     o.aa(80);
     o.bb(81);
     let mut cake = o.u().add_cake();
     cake.v(45);
-    let data = arena.finalize();
+    let data = writer.finalize();
     validate_out(&data, path)
 }
 
@@ -664,8 +657,7 @@ fn test_in_extend2(path: &str) -> scalgoproto::Result<()> {
 
 fn test_out_union(path: &str) -> scalgoproto::Result<()> {
     let data = {
-        let arena = scalgoproto::Arena::new(vec![]);
-        let mut writer = scalgoproto::Writer::new(&arena);
+        let writer = scalgoproto::Writer::new(vec![]);
         let mut root = writer.add_root::<union::Table3>();
 
         let mut v1 = root.add_v1();
@@ -707,12 +699,11 @@ fn test_out_union(path: &str) -> scalgoproto::Result<()> {
         let mut v10 = root.add_v10();
         v10.a().add_v10(1).set(0, true);
         v10.b().add_v10(1).set(0, true);
-        arena.finalize()
+        writer.finalize()
     };
     let s = scalgoproto::read_message::<union::Table3>(&data)?;
 
-    let arena = scalgoproto::Arena::new(vec![]);
-    let mut writer = scalgoproto::Writer::new(&arena);
+    let writer = scalgoproto::Writer::new(vec![]);
     let mut root = writer.add_root::<union::Table3>();
 
     let mut v1 = root.add_v1();
@@ -848,7 +839,7 @@ fn test_out_union(path: &str) -> scalgoproto::Result<()> {
         .e()
         .copy_v10(require_enum!(ce!(iv10.b()), union::Union1In::V10(v), v)));
 
-    let data = arena.finalize();
+    let data = writer.finalize();
     validate_out(&data, path)
 }
 

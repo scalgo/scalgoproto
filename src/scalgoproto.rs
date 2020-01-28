@@ -611,13 +611,13 @@ impl Placement for Inplace {}
 pub struct Normal {}
 impl Placement for Normal {}
 
+#[derive(Debug, Clone, Copy)]
 enum ArenaState {
-    BeforeWriter,
     BeforeRoot,
     AfterRoot,
 }
 
-pub struct PArena {
+pub struct Writer {
     data: std::cell::UnsafeCell<Vec<u8>>,
     state: std::cell::UnsafeCell<ArenaState>,
 }
@@ -625,7 +625,7 @@ pub struct PArena {
 /// Represents disjoint slice of the arena
 /// Note that this is an internal struct, it should not be used from user code
 pub struct ArenaSlice<'a> {
-    pub arena: &'a PArena,
+    pub arena: &'a Writer,
     offset: usize,
     length: usize,
 }
@@ -830,7 +830,7 @@ where
     }
 }
 
-impl PArena {
+impl Writer {
     fn allocate(&self, size: usize, fill: u8) -> ArenaSlice {
         let d = unsafe { &mut *self.data.get() };
         let offset = d.len();
@@ -1270,26 +1270,16 @@ pub fn read_message<'a, F: Table<'a> + 'a>(data: &'a [u8]) -> Result<F::In> {
     }
 }
 
-/// Writer used to write message
-pub struct Writer<'a> {
-    slice: ArenaSlice<'a>,
-}
-
-/// Arena a message is written in
-pub struct Arena {
-    arena: PArena,
-}
-
-impl Arena {
+impl Writer {
     /// Construct an arena storing data in the given Vec
     /// the data currently in the Vec is discarded
     pub fn new(mut data: Vec<u8>) -> Self {
         data.clear();
-        Self {
-            arena: PArena {
-                data: std::cell::UnsafeCell::new(data),
-                state: std::cell::UnsafeCell::<ArenaState>::new(ArenaState::BeforeWriter),
-            },
+        // Make room for the slice containing the root pointer
+        data.resize(10, 0u8);
+        Writer {
+            data: std::cell::UnsafeCell::new(data),
+            state: std::cell::UnsafeCell::<ArenaState>::new(ArenaState::BeforeRoot),
         }
     }
 
@@ -1297,139 +1287,122 @@ impl Arena {
     /// for the arena and a root added before this method may be called.
     /// The Vec returned is the one given to new, but now with the constructed message
     pub fn finalize(self) -> Vec<u8> {
-        unsafe {
-            if let ArenaState::AfterRoot = *self.arena.state.get() {
-            } else {
-                panic!("A root should be set before finalize is called")
-            }
-        };
-        self.arena.data.into_inner()
+        if let ArenaState::AfterRoot = unsafe { *self.state.get() } {
+        } else {
+            panic!("A root should be set before finalize is called")
+        }
+        self.data.into_inner()
     }
 }
 
-impl<'a> Writer<'a> {
-    /// Construct a new writer for the given arena
-    /// Note that exactly one writer must be allocated for an arena
-    pub fn new(arena: &'a Arena) -> Self {
-        unsafe {
-            if let ArenaState::BeforeWriter = *arena.arena.state.get() {
-                *arena.arena.state.get() = ArenaState::BeforeRoot;
-            } else {
-                panic!("Only one writer can be constructed per arena")
-            }
-        }
-        Self {
-            slice: arena.arena.allocate(10, 0),
-        }
-    }
-
+impl Writer {
     /// Add a root table to the message
     /// Note that exactly one root must be added to a message
-    pub fn add_root<F: Table<'a> + 'a>(&mut self) -> F::Out {
-        unsafe {
-            if let ArenaState::BeforeRoot = *self.slice.arena.state.get() {
-                *self.slice.arena.state.get() = ArenaState::AfterRoot;
-            } else {
-                panic!("Only one root element can be set")
+    pub fn add_root<'a, F: Table<'a>>(&'a self) -> F::Out {
+        if let ArenaState::BeforeRoot = unsafe { *self.state.get() } {
+            unsafe {
+                *self.state.get() = ArenaState::AfterRoot;
             }
-            let root = self.slice.arena.create_table::<F::Out>();
-            self.slice.set_pod(0, &ROOTMAGIC);
-            self.slice.set_u48(4, (root.offset() - 10) as u64);
-            root
+        } else {
+            panic!("Only one root element can be set")
         }
+        let mut slice = ArenaSlice {
+            arena: self,
+            offset: 0,
+            length: 10,
+        };
+        let root = self.create_table::<F::Out>();
+        slice.set_pod(0, &ROOTMAGIC);
+        slice.set_u48(4, (root.offset() - 10) as u64);
+        root
     }
 
-    pub fn add_table<F: Table<'a> + 'a>(&mut self) -> F::Out {
-        self.slice.arena.create_table::<F::Out>()
+    pub fn add_table<'a, F: Table<'a>>(&'a self) -> F::Out {
+        self.create_table::<F::Out>()
     }
 
-    pub fn add_text(&mut self, text: &str) -> TextOut<'a> {
-        self.slice.arena.create_text(text)
+    pub fn add_text(&self, text: &str) -> TextOut {
+        self.create_text(text)
     }
 
-    pub fn add_bytes(&mut self, bytes: &[u8]) -> BytesOut<'a> {
-        self.slice.arena.create_bytes(bytes)
+    pub fn add_bytes(&self, bytes: &[u8]) -> BytesOut {
+        self.create_bytes(bytes)
     }
 
-    pub fn add_u8_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<u8>, Normal> {
-        self.slice.arena.create_list::<PodListWrite<u8>>(size)
+    pub fn add_u8_list(&self, size: usize) -> ListOut<PodListWrite<u8>, Normal> {
+        self.create_list::<PodListWrite<u8>>(size)
     }
 
-    pub fn add_u16_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<u16>, Normal> {
-        self.slice.arena.create_list::<PodListWrite<u16>>(size)
+    pub fn add_u16_list(&self, size: usize) -> ListOut<PodListWrite<u16>, Normal> {
+        self.create_list::<PodListWrite<u16>>(size)
     }
 
-    pub fn add_u32_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<u32>, Normal> {
-        self.slice.arena.create_list::<PodListWrite<u32>>(size)
+    pub fn add_u32_list(&self, size: usize) -> ListOut<PodListWrite<u32>, Normal> {
+        self.create_list::<PodListWrite<u32>>(size)
     }
 
-    pub fn add_u64_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<u64>, Normal> {
-        self.slice.arena.create_list::<PodListWrite<u64>>(size)
+    pub fn add_u64_list(&self, size: usize) -> ListOut<PodListWrite<u64>, Normal> {
+        self.create_list::<PodListWrite<u64>>(size)
     }
 
-    pub fn add_i8_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<i8>, Normal> {
-        self.slice.arena.create_list::<PodListWrite<i8>>(size)
+    pub fn add_i8_list(&self, size: usize) -> ListOut<PodListWrite<i8>, Normal> {
+        self.create_list::<PodListWrite<i8>>(size)
     }
 
-    pub fn add_i16_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<i16>, Normal> {
-        self.slice.arena.create_list::<PodListWrite<i16>>(size)
+    pub fn add_i16_list(&self, size: usize) -> ListOut<PodListWrite<i16>, Normal> {
+        self.create_list::<PodListWrite<i16>>(size)
     }
 
-    pub fn add_i32_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<i32>, Normal> {
-        self.slice.arena.create_list::<PodListWrite<i32>>(size)
+    pub fn add_i32_list(&self, size: usize) -> ListOut<PodListWrite<i32>, Normal> {
+        self.create_list::<PodListWrite<i32>>(size)
     }
 
-    pub fn add_i64_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<i64>, Normal> {
-        self.slice.arena.create_list::<PodListWrite<i64>>(size)
+    pub fn add_i64_list(&self, size: usize) -> ListOut<PodListWrite<i64>, Normal> {
+        self.create_list::<PodListWrite<i64>>(size)
     }
 
-    pub fn add_f32_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<f32>, Normal> {
-        self.slice.arena.create_list::<PodListWrite<f32>>(size)
+    pub fn add_f32_list(&self, size: usize) -> ListOut<PodListWrite<f32>, Normal> {
+        self.create_list::<PodListWrite<f32>>(size)
     }
 
-    pub fn add_f64_list(&mut self, size: usize) -> ListOut<'a, PodListWrite<f64>, Normal> {
-        self.slice.arena.create_list::<PodListWrite<f64>>(size)
+    pub fn add_f64_list(&self, size: usize) -> ListOut<PodListWrite<f64>, Normal> {
+        self.create_list::<PodListWrite<f64>>(size)
     }
 
-    pub fn add_enum_list<T: Enum + 'a>(
-        &mut self,
+    pub fn add_enum_list<T: Enum>(&self, size: usize) -> ListOut<EnumListWrite<T>, Normal> {
+        self.create_list::<EnumListWrite<T>>(size)
+    }
+
+    pub fn add_table_list<'a, F: Table<'a>>(
+        &'a self,
         size: usize,
-    ) -> ListOut<'a, EnumListWrite<T>, Normal> {
-        self.slice.arena.create_list::<EnumListWrite<T>>(size)
+    ) -> ListOut<TableListWrite<F::Out>, Normal> {
+        self.create_list::<TableListWrite<F::Out>>(size)
     }
 
-    pub fn add_table_list<F: Table<'a> + 'a>(
-        &mut self,
+    pub fn add_struct_list<'a, F: Struct<'a>>(
+        &'a self,
         size: usize,
-    ) -> ListOut<'a, TableListWrite<'a, F::Out>, Normal> {
-        self.slice
-            .arena
-            .create_list::<TableListWrite<'a, F::Out>>(size)
+    ) -> ListOut<StructListWrite<F>, Normal> {
+        self.create_list::<StructListWrite<F>>(size)
     }
 
-    pub fn add_struct_list<F: Struct<'a> + 'a>(
-        &mut self,
+    pub fn add_union_list<'a, F: Union<'a>>(
+        &'a self,
         size: usize,
-    ) -> ListOut<'a, StructListWrite<'a, F>, Normal> {
-        self.slice.arena.create_list::<StructListWrite<F>>(size)
+    ) -> ListOut<UnionListWrite<F>, Normal> {
+        self.create_list::<UnionListWrite<F>>(size)
     }
 
-    pub fn add_union_list<F: Union<'a> + 'a>(
-        &mut self,
-        size: usize,
-    ) -> ListOut<'a, UnionListWrite<'a, F>, Normal> {
-        self.slice.arena.create_list::<UnionListWrite<F>>(size)
+    pub fn add_text_list(&self, size: usize) -> ListOut<TextListWrite, Normal> {
+        self.create_list::<TextListWrite>(size)
     }
 
-    pub fn add_text_list(&mut self, size: usize) -> ListOut<'a, TextListWrite, Normal> {
-        self.slice.arena.create_list::<TextListWrite>(size)
+    pub fn add_bytes_list(&self, size: usize) -> ListOut<BytesListWrite, Normal> {
+        self.create_list::<BytesListWrite>(size)
     }
 
-    pub fn add_bytes_list(&mut self, size: usize) -> ListOut<'a, BytesListWrite, Normal> {
-        self.slice.arena.create_list::<BytesListWrite>(size)
-    }
-
-    pub fn add_bool_list(&mut self, size: usize) -> ListOut<'a, BoolListWrite, Normal> {
-        self.slice.arena.create_list::<BoolListWrite>(size)
+    pub fn add_bool_list(&self, size: usize) -> ListOut<BoolListWrite, Normal> {
+        self.create_list::<BoolListWrite>(size)
     }
 }
