@@ -6,8 +6,14 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <fcntl.h>
 #include <limits>
+#include <memory>
 #include <stdexcept>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <utility>
 
 namespace scalgoproto {
@@ -771,8 +777,16 @@ struct MetaMagic<ListOut<A>> {
 	using t = ListTag;
 };
 
+class WriterBacking {
+public:
+	virtual char * setCapacity(size_t newCapacity) = 0;
+	virtual void finalizeBacking(size_t finalSize) = 0;
+	virtual ~WriterBacking() {}
+};
+
 class Writer {
 private:
+	std::unique_ptr<WriterBacking> backing;
 	char * data = nullptr;
 	size_t size = 0;
 	size_t capacity = 0;
@@ -784,14 +798,24 @@ private:
 	friend class ListOut;
 	template <typename, typename>
 	friend class ListAccessHelp;
-	void reserve(size_t size) {
-		if (size <= capacity) return;
-		data = (char *)realloc(data, size);
-		capacity = size;
+	void setCapacity(size_t newCapacity) {
+		if (backing) {
+			data = backing->setCapacity(newCapacity);
+			capacity = newCapacity;
+			return;
+		}
+		if (newCapacity == 0) {
+			free(data);
+			data = nullptr;
+			capacity = 0;
+			return;
+		}
+		data = (char *)realloc(data, newCapacity);
+		capacity = newCapacity;
 	}
 
 	void expand(std::uint64_t s) {
-		while (size + s > capacity) reserve(capacity * 2);
+		while (size + s > capacity) setCapacity(capacity * 2);
 		size += s;
 	}
 
@@ -801,14 +825,15 @@ private:
 	}
 
 public:
-	Writer(size_t capacity = 256)
-		: size(10) {
-		reserve(capacity);
+	Writer(size_t capacity = 256, std::unique_ptr<WriterBacking> backing = {})
+		: backing(std::move(backing)), size(10) {
+		setCapacity(capacity);
 	}
 	Writer(const Writer &) = delete;
 	Writer & operator=(const Writer &) = delete;
 	Writer(Writer && o)
-		: data(o.data)
+		: backing(std::move(o.backing))
+		, data(o.data)
 		, size(o.size)
 		, capacity(o.capacity) {
 		o.data = nullptr;
@@ -816,7 +841,8 @@ public:
 		o.capacity = 0;
 	}
 	Writer & operator=(Writer && o) {
-		if (data) free(data);
+		setCapacity(0);
+		backing = std::move(o.backing);
 		data = o.data;
 		size = o.size;
 		capacity = o.capacity;
@@ -827,7 +853,7 @@ public:
 	}
 
 	~Writer() {
-		if (data) free(data);
+		setCapacity(0);
 		data = nullptr;
 		size = 0;
 		capacity = 0;
@@ -1193,6 +1219,7 @@ void ListAccessHelp<UnionTag, T>::copy(Writer & writer, std::uint64_t offset,
 Bytes Writer::finalize(const TableOut & root) {
 	write(ROOTMAGIC, 0);
 	this->write48_(root.offset_ - 10, 4);
+	if (backing) backing->finalizeBacking(size);
 	return std::make_pair(data, size);
 }
 
