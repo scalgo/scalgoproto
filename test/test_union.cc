@@ -52,12 +52,13 @@ scalgoproto::Bytes forCopy(scalgoproto::Writer & w) {
 }
 
 int main(int, char ** argv) {
+	bool useMmap = false;
 	if (!strcmp(argv[1], "out")) {
 		scalgoproto::Writer win;
 		scalgoproto::Reader r(forCopy(win));
 		auto i = r.root<Table3In>();
 
-		scalgoproto::Writer w;
+		auto w = getTestWriter(argv[2], useMmap);
 		auto root = w.construct<Table3Out>();
 		
 		auto v1 = root.addV1();
@@ -147,7 +148,7 @@ int main(int, char ** argv) {
 		v10.e().addV10(i.v10().b().v10());
 
 		auto [data, size] = w.finalize(root);
-		return !validateOut(data, size, argv[2]);
+		return !validateOut(data, size, argv[2], useMmap);
 	} else if (!strcmp(argv[1], "in")) {
 		auto o = readIn(argv[2]);
 		scalgoproto::Reader r(o.data(), o.size());

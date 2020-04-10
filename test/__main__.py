@@ -44,6 +44,7 @@ def runCppSetup(schemas: List[str], cpp: str) -> bool:
 
 def runCpp(name: str, bin: str) -> bool:
     subprocess.check_call(["tmp/bin", name, bin])
+    subprocess.check_call(["tmp/bin", name, bin, "mmap"])
     return True
 
 
@@ -223,6 +224,10 @@ def main():
             ["test/base.spr", "test/complex2.spr"], "test/test_base.cc"
         ),
     ):
+        runTest(
+            "cpp mmap stress test",
+            lambda: subprocess.check_call(["tmp/bin", "mmap_stress", "test/mmap.bin"]) or True,
+        )
         runTest(
             "cpp out default simple",
             lambda: runCpp("out_default", "test/simple_default.bin"),

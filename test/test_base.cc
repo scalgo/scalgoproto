@@ -9,14 +9,16 @@
 using namespace scalgoprototest;
 using namespace scalgoprototest2;
 
-int main(int, char ** argv) {
+int main(int argc, char ** argv) {
+	if (argc < 3) return 4;
+	bool useMmap = argc >= 4 && !strcmp(argv[3], "mmap");
 	if (!strcmp(argv[1], "out_default")) {
-		scalgoproto::Writer w;
+		auto w = getTestWriter(argv[2], useMmap);
 		auto s = w.construct<SimpleOut>();
 		auto [data, size] = w.finalize(s);
-		return !validateOut(data, size, argv[2]);
+		return !validateOut(data, size, argv[2], useMmap);
 	} else if (!strcmp(argv[1], "out")) {
-		scalgoproto::Writer w;
+		auto w = getTestWriter(argv[2], useMmap);
 		auto s = w.construct<SimpleOut>();
 		s.setE(MyEnum::c);
 		s.setS({MyEnum::d, {42, 27.0, true}, false, 8, 9, 10, 11, -8, -9, -10, -11, 27.0, 22.0});
@@ -30,7 +32,7 @@ int main(int, char ** argv) {
 		s.setOi8(-60).setOi16(4055).setOi32(124465).setOi64(5465729);
 		s.setOf(5.0).setOd(6.4);
 		auto [data, size] = w.finalize(s);
-		return !validateOut(data, size, argv[2]);
+		return !validateOut(data, size, argv[2], useMmap);
 	} else if (!strcmp(argv[1], "in")) {
 		auto o = readIn(argv[2]);
 		scalgoproto::Reader r(o.data(), o.size());
@@ -157,7 +159,7 @@ int main(int, char ** argv) {
 		REQUIRE(s.hasNf(), false);
 		REQUIRE(s.hasNd(), false);
 	} else if (!strcmp(argv[1], "out_complex")) {
-		scalgoproto::Writer w;
+		auto w = getTestWriter(argv[2], useMmap);
 		auto m = w.construct<MemberOut>();
 		m.setId(42);
 		auto l = w.constructList<std::int32_t>(31);
@@ -208,7 +210,7 @@ int main(int, char ** argv) {
 		s.setBlist(l10);
 
 		auto [data, size] = w.finalize(s);
-		return !validateOut(data, size, argv[2]);
+		return !validateOut(data, size, argv[2], useMmap);
 	} else if (!strcmp(argv[1], "in_complex")) {
 		auto o = readIn(argv[2]);
 		scalgoproto::Reader r(o.data(), o.size());
@@ -313,7 +315,7 @@ int main(int, char ** argv) {
 
 		return 0;
 	} else if (!strcmp(argv[1], "out_complex2")) {
-		scalgoproto::Writer w;
+		auto w = getTestWriter(argv[2], useMmap);
 
 		auto m = w.construct<MemberOut>();
 		m.setId(42);
@@ -347,7 +349,7 @@ int main(int, char ** argv) {
 		r.setL2(l3);
 
 		auto [data, size] = w.finalize(r);
-		return !validateOut(data, size, argv[2]);
+		return !validateOut(data, size, argv[2], useMmap);
 	} else if (!strcmp(argv[1], "in_complex2")) {
 		auto o = readIn(argv[2]);
 		scalgoproto::Reader r(o.data(), o.size());
@@ -384,7 +386,7 @@ int main(int, char ** argv) {
 		REQUIRE(l3[1].myBytes().second, 5);
 		REQUIRE(memcmp(l3[1].myBytes().first, "bytes", 5), 0);
 	} else if (!strcmp(argv[1], "out_inplace")) {
-		scalgoproto::Writer w;
+		auto w = getTestWriter(argv[2], useMmap);
 		auto name = w.constructText("nilson");
 		auto u = w.construct<InplaceUnionOut>();
 		u.u().addMonkey().setName(name);
@@ -409,7 +411,7 @@ int main(int, char ** argv) {
 		auto root = w.construct<InplaceRootOut>();
 		root.setU(u).setU2(u2).setT(t).setB(b).setL(l);
 		auto [data, size] = w.finalize(root);
-		return !validateOut(data, size, argv[2]);
+		return !validateOut(data, size, argv[2], useMmap);
 	} else if (!strcmp(argv[1], "in_inplace")) {
 		auto o = readIn(argv[2]);
 		scalgoproto::Reader r(o.data(), o.size());
@@ -452,11 +454,11 @@ int main(int, char ** argv) {
 		REQUIRE(ll[1], 99);
 		return 0;		
 	} else if (!strcmp(argv[1], "out_extend1")) {
-		scalgoproto::Writer w;
+		auto w = getTestWriter(argv[2], useMmap);
 		auto root = w.construct<Gen1Out>();
 		root.setAa(77);
 		auto [data, size] = w.finalize(root);
-		return !validateOut(data, size, argv[2]);
+		return !validateOut(data, size, argv[2], useMmap);
 	} else if (!strcmp(argv[1], "in_extend1")) {
 		auto o = readIn(argv[2]);
 		scalgoproto::Reader r(o.data(), o.size());
@@ -466,14 +468,14 @@ int main(int, char ** argv) {
 		REQUIRE(s.hasU(), false);
 		return 0;
 	} else if (!strcmp(argv[1], "out_extend2")) {
-		scalgoproto::Writer w;
+		auto w = getTestWriter(argv[2], useMmap);
 		auto root = w.construct<Gen2Out>();
 		root.setAa(80);
 		root.setBb(81);
 		auto cake = root.u().addCake();
 		cake.setV(45);
 		auto [data, size] = w.finalize(root);
-		return !validateOut(data, size, argv[2]);
+		return !validateOut(data, size, argv[2], useMmap);
 	} else if (!strcmp(argv[1], "in_extend2")) {
 		auto o = readIn(argv[2]);
 		scalgoproto::Reader r(o.data(), o.size());
@@ -518,6 +520,18 @@ int main(int, char ** argv) {
 		REQUIRE(s.hasTextList(), false);
 		REQUIRE(s.hasBytesList(), false);
 		REQUIRE(s.hasMemberList(), false);
+		return 0;
+	} else if (!strcmp(argv[1], "mmap_stress")) {
+		auto backing = std::make_unique<scalgoproto::FileWriterBacking>();
+		if (backing->open(argv[2])) return 1;
+		auto w = scalgoproto::Writer(256, std::move(backing));
+		auto s = w.construct<SimpleOut>();
+		auto l4 = w.constructTextList(2000);
+		for (size_t i = 0; i < l4.size(); ++i) {
+			l4[i] = "HELLO";
+		}
+		auto [data, sz] = w.finalize(s);
+		(void)data;
 		return 0;
 	} else {
 		return 1;
