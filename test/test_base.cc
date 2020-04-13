@@ -182,6 +182,10 @@ int main(int argc, char ** argv) {
 		l6[0] = m;
 		l6[2] = m;
 
+		auto l6a = w.constructDirectList<MemberOut>(3);
+		l6a[0].setId(43);
+		l6a[2].setId(43);
+
 		auto l7 = w.constructList<float>(2);
 		l7[1] = 98.0;
 
@@ -204,6 +208,7 @@ int main(int argc, char ** argv) {
 		s.setTextList(l4);
 		s.setBytesList(l5);
 		s.setMemberList(l6);
+		s.setDirectMemberList(l6a);
 		s.setF32list(l7);
 		s.setF64list(l8);
 		s.setU8list(l9);
@@ -279,6 +284,12 @@ int main(int argc, char ** argv) {
 		REQUIRE(l6.has(2), true);
 		REQUIRE(l6[0].id(), 42);
 		REQUIRE(l6[2].id(), 42);
+
+		REQUIRE(s.hasDirectMemberList(), true);
+		auto l6a = s.directMemberList();
+		REQUIRE(l6a.size(), 3);
+		REQUIRE(l6a[0].id(), 43);
+		REQUIRE(l6a[2].id(), 43);
 
 		REQUIRE(s.hasF32list(), true);
 		auto l7 = s.f32list();
@@ -474,6 +485,11 @@ int main(int argc, char ** argv) {
 		root.setBb(81);
 		auto cake = root.u().addCake();
 		cake.setV(45);
+		auto list = root.addDirectMemberList(4);
+		list[0].setId(100);
+		list[1].setId(101);
+		list[2].setId(102);
+		list[3].setId(103);
 		auto [data, size] = w.finalize(root);
 		return !validateOut(data, size, argv[2], useMmap);
 	} else if (!strcmp(argv[1], "in_extend2")) {
@@ -484,6 +500,17 @@ int main(int argc, char ** argv) {
 		REQUIRE(s.bb(), 81);
 		REQUIRE(s.u().isCake(), true);
 		REQUIRE(s.u().cake().v(), 45);
+		REQUIRE(s.hasDirectMemberList(), true);
+		auto list = s.directMemberList();
+		REQUIRE(list.size(), 4);
+		REQUIRE(list[0].id(), 100);
+		REQUIRE(list[0].cookie(), 37);
+		REQUIRE(list[1].id(), 101);
+		REQUIRE(list[1].cookie(), 37);
+		REQUIRE(list[2].id(), 102);
+		REQUIRE(list[2].cookie(), 37);
+		REQUIRE(list[3].id(), 103);
+		REQUIRE(list[3].cookie(), 37);
 		REQUIREQ(s.e(), MyEnum::c);
 		REQUIRE(s.s().x, 0);
 		REQUIRE(s.s().y, 0);

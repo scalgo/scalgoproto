@@ -428,6 +428,10 @@ def test_out_complex(path: str) -> bool:
     l6[0] = m
     l6[2] = m
 
+    l6a = w.construct_direct_table_list(base.MemberOut, 3)
+    l6a[0].id = 43
+    l6a[2].id = 43
+
     l7 = w.construct_float32_list(2)
     l7[1] = 98.0
 
@@ -452,6 +456,7 @@ def test_out_complex(path: str) -> bool:
     s.text_list = l4
     s.bytes_list = l5
     s.member_list = l6
+    s.direct_member_list = l6a
     s.f32list = l7
     s.f64list = l8
     s.u8list = l9
@@ -557,6 +562,16 @@ def test_in_complex(path: str) -> bool:
     if require(l6[0].id, 42):
         return False
     if require(l6[2].id, 42):
+        return False
+
+    if require(s.has_direct_member_list, True):
+        return False
+    l6a = s.direct_member_list
+    if require(len(l6a), 3):
+        return False
+    if require(l6a[0].id, 43):
+        return False
+    if require(l6a[2].id, 43):
         return False
 
     if require(s.has_f32list, True):
@@ -830,6 +845,12 @@ def test_out_extend2(path: str) -> bool:
     root.bb = 81
     cake = root.u.add_cake()
     cake.v = 45
+
+    l = root.add_direct_member_list(4)
+    l[0].id = 100
+    l[1].id = 101
+    l[2].id = 102
+    l[3].id = 103
     data = w.finalize(root)
     return validate_out(data, path)
 
@@ -845,6 +866,27 @@ def test_in_extend2(path: str) -> bool:
     if require(s.u.is_cake, True):
         return False
     if require(s.u.cake.v, 45):
+        return False
+    if require(s.has_direct_member_list, True):
+        return False
+    l = s.direct_member_list
+    if require(len(l), 4):
+        return False
+    if require(l[0].id, 100):
+        return False
+    if require(l[0].cookie, 37):
+        return False
+    if require(l[1].id, 101):
+        return False
+    if require(l[1].cookie, 37):
+        return False
+    if require(l[2].id, 102):
+        return False
+    if require(l[2].cookie, 37):
+        return False
+    if require(l[3].id, 103):
+        return False
+    if require(l[3].cookie, 37):
         return False
     if require(s.e, base.MyEnum.c):
         return False

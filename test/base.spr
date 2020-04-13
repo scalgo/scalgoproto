@@ -148,6 +148,12 @@ table Gen2 @B4957DF9 {
 		 monkey {},
 		cake {v:I32},
 	}
+	directMemberList : direct list Member;
+}
+
+table MemberV2 @836DE498 {
+	id: I16;
+	cookie: I32 = 37;
 }
 
 table Gen3 @B4957DF9 {
@@ -159,6 +165,8 @@ table Gen3 @B4957DF9 {
 		 cake {v:I32},
 		 bat {}
 	}
+
+	directMemberList : direct list MemberV2;
 
 	e: MyEnum = c;
 	s: MyStruct;
