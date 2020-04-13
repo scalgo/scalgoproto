@@ -40,6 +40,7 @@ class TokenType(Enum):
     DOCCOMMENT = 68
     INPLACE = 69
     IMPORT = 70
+    DIRECT = 71
 
 
 Token = ty.NamedTuple(
@@ -84,6 +85,7 @@ def tokenize(data: str, document: int) -> ty.Iterator[Token]:
         "namespace": TokenType.NAMESPACE,
         "inplace": TokenType.INPLACE,
         "import": TokenType.IMPORT,
+        "direct": TokenType.DIRECT,
     }
 
     while cur < len(data):

@@ -114,7 +114,10 @@ def runNeg(name: str, base: str, bad: str, good: str) -> None:
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as f:
         f.write(base % bad)
         f.flush()
-        code = subprocess.call(["python3", "-m", "scalgoprotoc", "validate", f.name], stderr=subprocess.DEVNULL)
+        code = subprocess.call(
+            ["python3", "-m", "scalgoprotoc", "validate", f.name],
+            stderr=subprocess.DEVNULL,
+        )
         if code == 0:
             print("FAILURE1")
             failures.append(name)
@@ -214,6 +217,15 @@ def main():
         "table Monkey @8908828A {a: inplace Bytes; b: %s Text}",
         "inplace",
         "",
+    )
+
+    runNeg("direct text list", "table Monkey @8908828A {a: %s list Text}", "direct", "")
+
+    runNeg(
+        "direct list",
+        "table Monkey @8908828A {a: direct list %s}",
+        "struct {}",
+        "table @8908828B {}",
     )
 
     runTest("validate base", lambda: runValidate("test/base.spr"))

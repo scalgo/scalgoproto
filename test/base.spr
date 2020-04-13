@@ -96,6 +96,7 @@ table Complex @CCDD589C {
 	textList: list Text;
 	bytesList: list Bytes;
 	memberList: list Member;
+	directMemberList: direct list Member;
 	f32list: list F32;
 	f64list: list F64;
 	u8list: list U8;

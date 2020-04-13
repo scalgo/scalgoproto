@@ -148,6 +148,7 @@ class Value(AstNode):
         "optional",
         "list_",
         "inplace",
+        "direct",
         "direct_table",
         "direct_union",
         "has_offset",
@@ -167,6 +168,7 @@ class Value(AstNode):
     optional: Token
     list_: Token
     inplace: Token
+    direct: Token
     direct_table: Table
     direct_union: Union
     direct_enum: Enum
@@ -190,6 +192,7 @@ class Value(AstNode):
         optional: Token,
         list_: Token,
         inplace: Token,
+        direct: Token,
         direct_table: Table,
         direct_union: Union,
         direct_enum: Enum,
@@ -203,6 +206,7 @@ class Value(AstNode):
         self.optional = optional
         self.list_ = list_
         self.inplace = inplace
+        self.direct = direct
         self.direct_table = direct_table
         self.direct_union = direct_union
         self.direct_enum = direct_enum
@@ -281,12 +285,18 @@ class Parser:
                 optional: Token = None
                 list_: Token = None
                 inplace: Token = None
+                direct: Token = None
                 value: Token = None
                 direct_table: Table = None
                 direct_union: Union = None
                 direct_enum: Enum = None
                 direct_struct: Struct = None
-                modifiers = [TokenType.OPTIONAL, TokenType.LIST, TokenType.INPLACE]
+                modifiers = [
+                    TokenType.OPTIONAL,
+                    TokenType.LIST,
+                    TokenType.INPLACE,
+                    TokenType.DIRECT,
+                ]
                 while self.token.type in modifiers:
                     if self.token.type == TokenType.OPTIONAL:
                         optional = self.consume_token([TokenType.OPTIONAL])
@@ -294,6 +304,8 @@ class Parser:
                         list_ = self.consume_token([TokenType.LIST])
                     elif self.token.type == TokenType.INPLACE:
                         inplace = self.consume_token([TokenType.INPLACE])
+                    elif self.token.type == TokenType.DIRECT:
+                        direct = self.consume_token([TokenType.DIRECT])
                 type_ = self.token
                 self.check_token(
                     self.token,
@@ -382,6 +394,7 @@ class Parser:
                         optional,
                         list_,
                         inplace,
+                        direct,
                         direct_table,
                         direct_union,
                         direct_enum,
@@ -416,6 +429,7 @@ class Parser:
                         ident,
                         self.document.id,
                         ident,
+                        None,
                         None,
                         None,
                         None,

@@ -5,7 +5,7 @@ Perform validation of the ast, and assign offsets and such
 import enum
 import struct
 import sys
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Optional
 
 from .documents import Documents
 from .error import error
@@ -181,7 +181,8 @@ class Annotater:
         default = []
         bool_bit = 8
         bool_offset = 0
-        inplace: Value = None
+        inplace: Optional[Value] = None
+        direct: Optional[Value] = None
         for v in values:
             self.create_doc_string(v)
             val = self.value(v.identifier)
@@ -244,13 +245,23 @@ class Annotater:
                 self.error(v.inplace, "Not allowed in structs")
             if t == ContentType.UNION and v.inplace:
                 self.error(v.inplace, "Not allowed in unions")
-
             if v.inplace and inplace:
                 self.error(v.inplace, "More than one inplace element defined")
                 self.error(inplace.inplace, "Previously defined here")
-
             if v.inplace:
                 inplace = v
+
+            if t == ContentType.STRUCT and v.direct:
+                self.error(v.direct, "Not allowed in structs")
+            if t == ContentType.UNION and v.direct:
+                self.error(v.direct, "Not allowed in unions")
+            if v.direct and direct:
+                self.error(v.direct, "More than one direct element defined")
+                self.error(direct.direct, "Previously defined here")
+            if v.direct:
+                direct = v
+                if not v.list_:
+                    self.error(v.direct, "Only lists can be direct")
 
             if v.optional and v.type_.type in (
                 TokenType.U8,
@@ -298,6 +309,10 @@ class Annotater:
                         self.outer.uses.add(v.union)
                     else:
                         self.error(v.type_, "Unknown type")
+
+                if v.direct and not v.table:
+                    self.error(v.direct, "Only table lists may be marked direct")
+
                 if t == ContentType.STRUCT:
                     self.error(v.list_, "Not allowed in structs")
                 if v.optional:
@@ -332,7 +347,7 @@ class Annotater:
                 bool_bit += 1
             elif v.type_.type in (TokenType.U8, TokenType.I8, TokenType.BOOL):
                 if v.inplace:
-                    self.error(v.inplace, "Basic types may not be implace")
+                    self.error(v.inplace, "Basic types may not be inplace")
                 if v.type_.type == TokenType.U8:
                     v.parsed_value = self.get_int(v.value, 0, 255, 0)
                     default.append(struct.pack("<B", v.parsed_value))
@@ -347,7 +362,7 @@ class Annotater:
                 v.offset = bytes
             elif v.type_.type in (TokenType.U16, TokenType.I16):
                 if v.inplace:
-                    self.error(v.inplace, "Basic types may not be implace")
+                    self.error(v.inplace, "Basic types may not be inplace")
                 if v.type_.type == TokenType.U16:
                     v.parsed_value = self.get_int(v.value, 0, 2 ** 16 - 1, 0)
                     default.append(struct.pack("<H", v.parsed_value))
@@ -360,7 +375,7 @@ class Annotater:
                 v.offset = bytes
             elif v.type_.type in (TokenType.UI32, TokenType.I32, TokenType.F32):
                 if v.inplace:
-                    self.error(v.inplace, "Basic types may not be implace")
+                    self.error(v.inplace, "Basic types may not be inplace")
                 if v.type_.type == TokenType.UI32:
                     v.parsed_value = self.get_int(v.value, 0, 2 ** 32 - 1, 0)
                     default.append(struct.pack("<I", v.parsed_value))
@@ -378,7 +393,7 @@ class Annotater:
                 v.offset = bytes
             elif v.type_.type in (TokenType.UI64, TokenType.I64, TokenType.F64):
                 if v.inplace:
-                    self.error(v.inplace, "Basic types may not be implace")
+                    self.error(v.inplace, "Basic types may not be inplace")
                 if v.type_.type == TokenType.UI64:
                     v.parsed_value = self.get_int(v.value, 0, 2 ** 64 - 1, 0)
                     default.append(struct.pack("<Q", v.parsed_value))
@@ -404,7 +419,7 @@ class Annotater:
                 v.offset = bytes
             elif typeName in self.enums or v.direct_enum:
                 if v.inplace:
-                    self.error(v.inplace, "Enums types may not be implace")
+                    self.error(v.inplace, "Enums types may not be inplace")
                 if v.optional:
                     self.error(v.optional, "Are alwayes optional")
                 v.enum = v.direct_enum or self.enums[typeName]
@@ -422,7 +437,7 @@ class Annotater:
                 v.offset = bytes
             elif typeName in self.structs or v.direct_struct:
                 if v.inplace:
-                    self.error(v.inplace, "Structs types may not be implace")
+                    self.error(v.inplace, "Structs types may not be inplace")
                 if v.optional:
                     if bool_bit == 8:
                         bool_bit = 0
