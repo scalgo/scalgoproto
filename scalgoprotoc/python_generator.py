@@ -59,6 +59,8 @@ class Generator:
             return "scalgoproto.StructListOut[%s]" % (node.struct.name)
         elif node.enum:
             return "scalgoproto.EnumListOut[%s]" % (node.enum.name)
+        elif node.table and node.direct:
+            return "scalgoproto.DirectTableListOut[%sOut]" % (node.table.name)
         elif node.table:
             return "scalgoproto.TableListOut[%sOut]" % (node.table.name)
         elif node.union:
@@ -79,6 +81,8 @@ class Generator:
             return "construct_struct_list(%s, size)" % (node.struct.name)
         elif node.enum:
             return "construct_enum_list(%s, size)" % (node.enum.name)
+        elif node.table and node.direct:
+            return "construct_direct_table_list(%sOut, size)" % (node.table.name)
         elif node.table:
             return "construct_table_list(%sOut, size)" % (node.table.name)
         elif node.union:
@@ -122,8 +126,7 @@ class Generator:
         elif node.table:
             return (
                 node.table.name + "In",
-                "        return self._reader._get_table_list(%sIn, %s)"
-                % (node.table.name, os),
+                f"        return self._reader._get_table_list({node.table.name}In, {os}, direct={'True' if node.direct else 'False'})",
             )
         elif node.union:
             return (
@@ -173,8 +176,7 @@ class Generator:
         self.o("        return self._get_uint48(%d) != 0" % (node.offset,))
         (tn, acc) = self.in_list_help(
             node,
-            "*self._get_ptr%s(%d, scalgoproto.LIST_MAGIC)"
-            % ("_inplace" if node.inplace else "", node.offset),
+            f"*self._get_ptr{'_inplace' if node.inplace else ''}({node.offset}, scalgoproto.{'DIRECT_' if node.direct else ''}LIST_MAGIC)",
         )
         self.o()
         self.o("    @property")
@@ -186,7 +188,10 @@ class Generator:
         self.o()
 
     def generate_union_list_in(self, node: Value, uname: str) -> None:
-        (tn, acc) = self.in_list_help(node, "*self._get_ptr(scalgoproto.LIST_MAGIC)")
+        (tn, acc) = self.in_list_help(
+            node,
+            f"*self._get_ptr(scalgoproto.{'DIRECT_' if node.direct else ''}LIST_MAGIC)",
+        )
         self.o("    @property")
         self.o("    def %s(self) -> scalgoproto.ListIn[%s]:" % (uname, tn))
         self.output_doc(node, "        ")
@@ -210,6 +215,11 @@ class Generator:
             self.o(
                 "        l = scalgoproto.StructListOut[%s](self._writer, %s, size, False)"
                 % (node.struct.name, node.struct.name)
+            )
+        elif node.table and node.direct:
+            self.o(
+                "        l = scalgoproto.DirectTableListOut[%sOut](self._writer, %sOut, size, False)"
+                % (node.table.name, node.table.name)
             )
         elif node.table:
             self.o(
@@ -827,7 +837,7 @@ class Generator:
         self.o("    __slots__ = []")
         self.o("    _MEMBERS = [")
         for node in union.members:
-            self.o("        \"%s\"," % snake(self.value(node.identifier)))
+            self.o('        "%s",' % snake(self.value(node.identifier)))
         self.o("    ]")
         self.o()
         self.o(
@@ -948,7 +958,12 @@ class Generator:
                     or node.type_.type == TokenType.TEXT
                     or node.type_.type == TokenType.BYTES
                 ):
-                    if node.optional or node.enum or node.type_.type == TokenType.TEXT or node.type_.type == TokenType.BYTES:
+                    if (
+                        node.optional
+                        or node.enum
+                        or node.type_.type == TokenType.TEXT
+                        or node.type_.type == TokenType.BYTES
+                    ):
                         self.o("        if i.has_%s:" % uname)
                         self.o("            self.%s = i.%s" % (uname, uname))
                     else:
@@ -988,17 +1003,10 @@ class Generator:
         self.o("    _MAGIC: typing_.ClassVar[int] = 0x%08X" % table.magic)
         self.o("    _MEMBERS = [")
         for node in table.members:
-            self.o("        \"%s\"," % snake(self.value(node.identifier)))
+            self.o('        "%s",' % snake(self.value(node.identifier)))
         self.o("    ]")
         self.o()
-        self.o(
-            "    def __init__(self, reader: scalgoproto.Reader, offset: int, size: int) -> None:"
-        )
-        self.o(
-            '        """Private constructor. Call factory methods on scalgoproto.Reader to construct instances"""'
-        )
-        self.o("        super().__init__(reader, offset, size)")
-        self.o()
+
         for node in table.members:
             self.generate_value_in(table, node)
         self.o()
@@ -1009,19 +1017,10 @@ class Generator:
         self.o("    __slots__ = []")
         self.o("    _MAGIC: typing_.ClassVar[int] = 0x%08X" % table.magic)
         self.o("    _SIZE: typing_.ClassVar[int] = %d" % len(table.default))
+        self.o('    _DEFAULT: typing_.ClassVar[bytes] = b"%s"' % cescape(table.default))
         self.o("    _IN = %sIn" % (table.name))
         self.o()
-        self.o(
-            "    def __init__(self, writer: scalgoproto.Writer, withHeader: bool) -> None:"
-        )
-        self.o(
-            '        """Private constructor. Call factory methods on scalgoproto.Reader to construct instances"""'
-        )
-        self.o(
-            '        super().__init__(writer, withHeader, \n b"%s")'
-            % (cescape(table.default))
-        )
-        self.o()
+
         for node in table.members:
             self.generate_value_out(table, node)
         self.generate_table_copy(table)

@@ -3,12 +3,23 @@ import enum
 import math
 import struct
 from abc import abstractmethod
-from typing import Callable, ClassVar, Generic, Sequence, Tuple, Type, TypeVar, Union
+from typing import (
+    Callable,
+    ClassVar,
+    Generic,
+    Sequence,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+    Optional,
+)
 
 MESSAGE_MAGIC = 0xB5C0C4B3
 TEXT_MAGIC = 0xD812C8F5
 BYTES_MAGIC = 0xDCDBBE10
 LIST_MAGIC = 0x3400BB46
+DIRECT_LIST_MAGIC = 0xE2C6CC05
 
 B = TypeVar("B")
 
@@ -314,19 +325,40 @@ class Reader(object):
             raise Exception("Expected magic %08X but got %08X" % (magic, m))
         return join48_(sizelow, sizehigh)
 
-    def _get_table_list(self, t: Type[TI], off: int, size: int) -> ListIn[TI]:
-        def getter(r: "Reader", s: int, i: int) -> TI:
-            ooo = unpack48_(r._data[s + 6 * i : s + 6 * i + 6])
-            sss = r._read_size(ooo, t._MAGIC)
-            return t(r, ooo + 10, sss)
+    def _get_table_list(
+        self, t: Type[TI], off: int, size: int, direct: bool = False
+    ) -> ListIn[TI]:
+        if not direct:
 
-        return ListIn[TI](
-            self,
-            size,
-            off,
-            getter,
-            lambda r, s, i: unpack48_(r._data[s + 6 * i : s + 6 * i + 6]) != 0,
-        )
+            def getter(r: "Reader", s: int, i: int) -> TI:
+                ooo = unpack48_(r._data[s + 6 * i : s + 6 * i + 6])
+                sss = r._read_size(ooo, t._MAGIC)
+                return t(r, ooo + 10, sss)
+
+            return ListIn[TI](
+                self,
+                size,
+                off,
+                getter,
+                lambda r, s, i: unpack48_(r._data[s + 6 * i : s + 6 * i + 6]) != 0,
+            )
+        else:
+            magic, item_size = struct.unpack("<II", self._data[off : off + 8])
+            if magic != t._MAGIC:
+                raise Exception(
+                    "Expected scalgoproto magic %08X but got %08X" % (t._MAGIC, magic)
+                )
+
+            if off + 8 + item_size * size > len(self._data):
+                raise Exception("Invalid table size")
+
+            return ListIn[TI](
+                self,
+                size,
+                off + 8,
+                lambda r, s, i: t(r, s + i * item_size, item_size),
+                lambda r, s, i: True,
+            )
 
     def _get_bool_list(self, off: int, size: int) -> ListIn[bool]:
         return ListIn[bool](
@@ -438,16 +470,24 @@ class BytesOut(object):
 class TableOut(object):
     __slots__ = ["_writer", "_offset"]
     _MAGIC: ClassVar[int] = 0
+    _SIZE: ClassVar[int] = 0
+    _DEFAULT: ClassVar[bytes] = b""
 
-    def __init__(self, writer: "Writer", with_weader: bool, default: bytes) -> None:
+    def __init__(
+        self, writer: "Writer", with_header: bool = True, offset: Optional[int] = None
+    ) -> None:
         """Private constructor. Use factory methods on writer"""
+        assert self._SIZE == len(self._DEFAULT)
         self._writer = writer
-        self._writer._reserve(len(default) + 10)
-        if with_weader:
-            sizelow, sizehigh = split48_(len(default))
-            writer._write(struct.pack("<IIH", self._MAGIC, sizelow, sizehigh))
-        self._offset = writer._used
-        writer._write(default)
+        if offset is not None:
+            self._offset = offset
+        else:
+            self._writer._reserve(self._SIZE + 10)
+            if with_header:
+                sizelow, sizehigh = split48_(self._SIZE)
+                writer._write(struct.pack("<IIH", self._MAGIC, sizelow, sizehigh))
+            self._offset = writer._used
+            writer._write(self._DEFAULT)
 
     def _set_int8(self, o: int, v: int) -> None:
         self._writer._put(self._offset + o, struct.pack("<b", v))
@@ -667,6 +707,28 @@ class TableListOut(OutList, Generic[TO]):
         return res
 
 
+class DirectTableListOut(OutList, Generic[TO]):
+    def __init__(
+        self, writer: "Writer", t: Type[TO], size: int, with_header: bool = True
+    ) -> None:
+        self._writer = writer
+
+        writer._reserve(t._SIZE * size + 18)
+        if with_header:
+            sizelow, sizehigh = split48_(size)
+            writer._write(struct.pack("<IIH", DIRECT_LIST_MAGIC, sizelow, sizehigh))
+
+        self._offset = writer._used
+        self._size = size
+        writer._write(struct.pack("<II", t._MAGIC, t._SIZE))
+        for _ in range(size):
+            writer._write(t._DEFAULT)
+        self._t = t
+
+    def __getitem__(self, index: int) -> B:
+        return self._t(self._writer, offset=self._offset + 8 + index * self._t._SIZE)
+
+
 class TextListOut(OutList):
     def __init__(self, writer: "Writer", size: int, with_header: bool = True) -> None:
         """Private constructor. Use factory methods on writer"""
@@ -766,6 +828,9 @@ class Writer:
 
     def construct_table_list(self, s: Type[TO], size: int) -> TableListOut[TO]:
         return TableListOut[S](self, s, size)
+
+    def construct_direct_table_list(self, s: Type[TO], size: int) -> TableListOut[TO]:
+        return DirectTableListOut[S](self, s, size)
 
     def construct_text_list(self, size: int) -> TextListOut:
         return TextListOut(self, size)
