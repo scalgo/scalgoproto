@@ -22,6 +22,7 @@ static constexpr std::uint32_t ROOTMAGIC = 0xB5C0C4B3;
 static constexpr std::uint32_t LISTMAGIC = 0x3400BB46;
 static constexpr std::uint32_t TEXTMAGIC = 0xD812C8F5;
 static constexpr std::uint32_t BYTESMAGIC = 0xDCDBBE10;
+static constexpr std::uint32_t DIRECTLISTMAGIC = 0xE2C6CC05;
 
 class Out;
 class UnionOut;
@@ -47,6 +48,12 @@ using Bytes = std::pair<const char *, size_t>;
 
 template <typename T>
 class ListOut;
+
+template <typename T>
+class DirectListOut;
+
+template <typename T>
+class DirectListIn;
 
 template <typename, typename>
 class ListAccessHelp;
@@ -159,6 +166,8 @@ private:
 	friend class ListAccessHelp;
 	template <bool>
 	friend class UnionIn;
+	template <typename>
+	friend class DirectListIn;
 
 	const char * data;
 	size_t size;
@@ -608,6 +617,142 @@ public:
 	}
 };
 
+
+template <typename T>
+class DirectListInIterator {
+private:
+	const Reader * reader;
+	const char * start;
+	std::uint32_t item_size;
+	std::uint64_t index;
+	friend class DirectListIn<T>;
+	DirectListInIterator(const Reader & reader, const char * start,
+				std::uint32_t item_size,
+				std::uint64_t index) noexcept
+		: reader(&reader)
+		, start(start)
+		, item_size(item_size)
+		, index(index) {}
+
+public:
+	using value_type = T;
+	using size_type = std::size_t;
+	using difference_type = int;
+	using pointer = T *;
+	using reference = T &;
+	using iterator_category = std::random_access_iterator_tag;
+
+	DirectListInIterator(const DirectListInIterator &) = default;
+	DirectListInIterator(DirectListInIterator &&) = default;
+	DirectListInIterator & operator=(const DirectListInIterator &) = default;
+	DirectListInIterator & operator=(DirectListInIterator &&) = default;
+
+	value_type operator*() const noexcept {
+		return T(reader, start + index * item_size, item_size);
+	}
+
+	// Compare
+	bool operator<(const DirectListInIterator & o) const noexcept { return index < o.index; }
+	bool operator>(const DirectListInIterator & o) const noexcept { return index > o.index; }
+	bool operator<=(const DirectListInIterator & o) const noexcept { return index <= o.index; }
+	bool operator>=(const DirectListInIterator & o) const noexcept { return index >= o.index; }
+	bool operator!=(const DirectListInIterator & o) const noexcept { return index != o.index; }
+	bool operator==(const DirectListInIterator & o) const noexcept { return index == o.index; }
+
+	// Movement
+	DirectListInIterator & operator++() noexcept {
+		index++;
+		return *this;
+	}
+	DirectListInIterator & operator--() noexcept {
+		index--;
+		return *this;
+	}
+	DirectListInIterator operator++(int) noexcept {
+		DirectListInIterator t = *this;
+		index++;
+		return t;
+	}
+	DirectListInIterator operator--(int) noexcept {
+		DirectListInIterator t = *this;
+		index--;
+		return t;
+	}
+	DirectListInIterator operator+(difference_type delta) const noexcept {
+		DirectListInIterator t = *this;
+		t += delta;
+		return t;
+	}
+	DirectListInIterator operator-(difference_type delta) const noexcept {
+		DirectListInIterator t = *this;
+		t -= delta;
+		return t;
+	}
+	DirectListInIterator & operator+=(difference_type delta) noexcept {
+		index += delta;
+		return *this;
+	}
+	DirectListInIterator & operator-=(difference_type delta) noexcept {
+		index -= delta;
+		return *this;
+	}
+
+	difference_type operator-(const DirectListInIterator & o) const noexcept {
+		return difference_type(index) - difference_type(o.index);
+	}
+};
+
+template <typename T>
+class DirectListIn : public In {
+	friend class In;
+	const Reader & reader_;
+	const char * start_;
+	const std::uint64_t size_;
+	const std::uint32_t item_size_;
+
+	static std::uint32_t parse_header(const Reader & reader, Ptr p) {
+		if (p.start + 8 > reader.data + reader.size)
+			throw Error();
+		std::uint32_t magic, item_size;
+		memcpy(&magic, p.start, 4);
+		if (magic != T::MAGIC)
+			throw Error();
+		memcpy(&item_size, p.start+4, 4);
+		if (item_size > 65534) throw Error(); //Items larger than this is currently not support as it might overflow the multiplication below
+		if (p.start + 4 + p.size * item_size > reader.data + reader.size)
+			throw Error();
+		return item_size;
+	}
+
+	DirectListIn(const Reader & reader, Ptr p) noexcept(false)
+		: reader_(reader)
+		, start_(p.start+8)
+		, size_(p.size)
+		, item_size_(parse_header(reader, p)) {}
+public:
+	using value_type = T;
+	using size_type = std::size_t;
+	using iterator = DirectListInIterator<T>;
+
+	DirectListIn(const Reader & reader) noexcept : reader_(reader), start_(nullptr), size_(0), item_size_(0) {}
+
+	value_type front() const noexcept {return (*this)[0];}
+	value_type back() const noexcept {return (*this)[size_ - 1];}
+	size_type size() const noexcept { return size_; }
+	bool empty() const noexcept { return size_ == 0; }
+	iterator begin() const noexcept { return iterator(reader_, start_, item_size_, 0); }
+	iterator end() const noexcept { return iterator(reader_, start_, item_size_, size_); }
+	value_type at(size_type pos) const {
+		if (pos >= size_) throw std::out_of_range("out of range");
+		return (*this)[pos];
+	};
+	value_type operator[](size_type pos) const noexcept {
+		assert(pos < size_);
+		return getObject_<T>(reader_, Ptr{start_ + pos * item_size_, item_size_});
+	}
+};
+
+
 class TableIn : public In {
 protected:
 	const Reader & reader_;
@@ -777,6 +922,36 @@ struct MetaMagic<ListOut<A>> {
 	using t = ListTag;
 };
 
+template <typename T>
+class DirectListOut {
+protected:
+	friend class Writer;
+	friend class Out;
+	Writer & writer_;
+	std::uint64_t offset_;
+	std::uint64_t size_;
+
+	
+	DirectListOut(Writer & writer, std::uint64_t offset, std::uint64_t size_)
+		: writer_(writer)
+		, offset_(offset)
+		, size_(size_) {}
+
+public:
+	using value_type = T;
+
+	T operator[](size_t index) noexcept;
+
+	std::uint64_t size() const noexcept { return size_; }
+
+	DirectListOut & copy_(const DirectListIn<typename T::IN> in) {
+		assert(in.size() == size());
+		for (size_t i=0; i < size(); ++i)
+			(*this)[i].copy_(in[i]);
+		return *this;
+	}
+};
+
 class WriterBacking {
 public:
 	virtual char * setCapacity(size_t newCapacity) = 0;
@@ -884,6 +1059,8 @@ private:
 	friend class TableOut;
 	template <typename>
 	friend class ListOut;
+	template <typename>
+	friend class DirectListOut;
 	template <typename, typename>
 	friend class ListAccessHelp;
 	void setCapacity(size_t newCapacity) {
@@ -910,6 +1087,11 @@ private:
 	template <typename T>
 	void write(const T & t, std::uint64_t offset) {
 		memcpy(data + offset, &t, sizeof(T));
+	}
+
+	template <typename T>
+	T accessTable(std::uint64_t o) {
+		return T(*this, o);
 	}
 
 public:
@@ -1006,6 +1188,24 @@ public:
 		return o;
 	}
 
+	template <typename T>
+	DirectListOut<T> constructDirectList(size_t size) {
+		DirectListOut<T> o(*this, this->size, size);
+		expand(18);
+
+		write((std::uint32_t)DIRECTLISTMAGIC, o.offset_);
+		write48_(size, o.offset_ + 4);
+		write((std::uint32_t)T::MAGIC, o.offset_ + 10);
+		write((std::uint32_t)T::SIZE, o.offset_ + 14);
+		o.offset_ += 18;
+
+		// Default fill the whole table
+		for (size_t i=0; i < size; ++i)
+			T(*this, false);
+
+		return o;
+	}
+
 	ListOut<TextOut> constructTextList(size_t size) {
 		return constructList<TextOut>(size);
 	}
@@ -1071,6 +1271,25 @@ protected:
 		memset(writer.data + o.offset_, A::def, bsize);
 		return o;
 	}
+
+	template <typename T>
+	static DirectListOut<T> addInplaceDirectList_(Writer & writer, size_t start,
+									  size_t size) noexcept {
+		assert(writer.size == start);
+		(void)start;
+
+		DirectListOut<T> o(writer, writer.size, size);
+		writer.expand(8);
+		write((std::uint32_t)T::MAGIC, o.offset_ + 0);
+		write((std::uint32_t)T::SIZE, o.offset_ + 4);
+		o.offset += 8;
+
+		// Default fill the whole table
+		for (size_t i=0; i < size; ++i)
+			T(writer, false);
+
+		return o;
+	}
 };
 
 class UnionOut : public Out {
@@ -1134,6 +1353,12 @@ protected:
 		}
 		writer_.expand(size);
 		memcpy(writer_.data + offset_, def, size);
+	}
+
+
+	TableOut(Writer & writer, size_t offset)
+		: writer_(writer)
+		, offset_(offset) {
 	}
 
 	template <std::uint64_t o>
@@ -1315,6 +1540,13 @@ template <typename O>
 void copy(O out, typename O::IN in) {
 	out.copy_(in);
 }
+
+template <typename T>
+T DirectListOut<T>::operator[](size_t index) noexcept {
+	assert(index < size_);
+	return writer_.template accessTable<T>(offset_ + T::SIZE * index);
+}
+
 
 } // namespace scalgoproto
 #endif //__SCALGOPROTO_HH__

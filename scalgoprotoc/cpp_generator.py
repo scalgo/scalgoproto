@@ -127,18 +127,20 @@ class Generator:
     def generate_list_in(self, node: Value, uname: str) -> None:
         lname = lcamel(uname)
         typeName, rawType = self.in_list_types(node)
-        self.o("\tbool has%s() const noexcept {" % (uname))
-        self.o("\t\treturn get48_<%d>() != 0;" % (node.offset))
+        direct = "Direct" if node.direct else ""
+        mult = f", scalgoproto::ListAccess<{typeName}>::mult" if not node.direct else ""
+        self.o(f"\tbool has{uname}() const noexcept {{")
+        self.o(f"\t\treturn get48_<{node.offset}>() != 0;")
         self.o("\t}")
         self.o("\t")
         self.output_doc(node, "\t")
-        self.o("\tscalgoproto::ListIn<%s> %s() const {" % (typeName, lname))
-        self.o("\t\tif (!has%s()) {" % uname)
-        self.o("\t\t\treturn scalgoproto::ListIn<%s>(reader_);" % typeName)
+
+        self.o(f"\tscalgoproto::{direct}ListIn<{typeName}> {lname}() const {{")
+        self.o(f"\t\tif (!has{uname}()) {{")
+        self.o(f"\t\t\treturn scalgoproto::{direct}ListIn<{typeName}>(reader_);")
         self.o("\t\t}")
         self.o(
-            "\t\treturn getObject_<scalgoproto::ListIn<%s> >(reader_, getPtr_<%s, scalgoproto::LISTMAGIC, %d, scalgoproto::ListAccess<%s>::mult>());"
-            % (typeName, bs(node.inplace), node.offset, typeName)
+            f"\t\treturn getObject_<scalgoproto::{direct}ListIn<{typeName}> >(reader_, getPtr_<{bs(node.inplace)}, scalgoproto::{direct.upper()}LISTMAGIC, {node.offset}{mult}>());"
         )
         self.o("\t}")
         if rawType:
@@ -146,22 +148,22 @@ class Generator:
             self.output_doc(
                 node, "\t", [], ["\\note accessing this is undefined behaivour"]
             )
-            self.o("\tstd::pair<const %s *, size_t> %sRaw() const {" % (rawType, lname))
-            self.o("\t\tassert(has%s());" % uname)
+            self.o(f"\tstd::pair<const {rawType} *, size_t> {lname}Raw() const {{")
+            self.o(f"\t\tassert(has{uname}());")
             self.o(
-                "\t\treturn getListRaw_<%s>(getPtr_<%s, scalgoproto::LISTMAGIC, %d, scalgoproto::ListAccess<%s>::mult>());"
-                % (rawType, bs(node.inplace), node.offset, typeName)
+                f"\t\treturn getListRaw_<{rawType}>(getPtr_<{bs(node.inplace)}, scalgoproto::LISTMAGIC, {node.offset}{mult}>());"
             )
             self.o("\t}")
 
     def generate_union_list_in(self, node: Value, uname: str) -> None:
         lname = lcamel(uname)
         typeName, rawType = self.in_list_types(node)
-        self.o("\tscalgoproto::ListIn<%s> %s() const {" % (typeName, lname))
-        self.o("\t\tassert(is%s());" % (uname))
+        direct = "Direct" if node.direct else ""
+        mult = f", scalgoproto::ListAccess<{typeName}>::mult" if not node.direct else ""
+        self.o(f"\tscalgoproto::{direct}ListIn<{typeName}> {lname}() const {{")
+        self.o(f"\t\tassert(is{uname}());")
         self.o(
-            "\t\treturn scalgoproto::In::getObject_<scalgoproto::ListIn<%s>>(this->reader_, this->template getPtr_<scalgoproto::LISTMAGIC, scalgoproto::ListAccess<%s>::mult>());"
-            % (typeName, typeName)
+            f"\t\treturn scalgoproto::In::getObject_<scalgoproto::{direct}ListIn<{typeName}>>(this->reader_, this->template getPtr_<scalgoproto::{direct.upper()}LISTMAGIC{mult}>());"
         )
         self.o("\t}")
         if rawType:
@@ -169,55 +171,50 @@ class Generator:
             self.output_doc(
                 node, "\t", [], ["\\note accessing this is undefined behavior"]
             )
-            self.o("\tstd::pair<const %s *, size_t> %sRaw() const {" % (rawType, lname))
-            self.o("\t\tassert(is%s());" % (uname))
+            self.o(f"\tstd::pair<const {rawType} *, size_t> {lname}Raw() const {{")
+            self.o(f"\t\tassert(is{uname}());")
             self.o(
-                "\t\treturn scalgoproto::In::getListRaw_<%s>(this->reader_, this->template getPtr_<scalgoproto::LISTMAGIC, scalgoproto::ListAccess<%s>::mult>());"
-                % (rawType, typeName)
+                f"\t\treturn scalgoproto::In::getListRaw_<{rawType}>(this->reader_, this->template getPtr_<scalgoproto::LISTMAGIC, scalgoproto::ListAccess<{typeName}>::mult>());"
             )
             self.o("\t}")
 
     def generate_list_out(self, node: Value, uname: str, outer: str) -> None:
         typeName = self.out_list_type(node)
+        direct = "Direct" if node.direct else ""
+        header_size = 18 if node.direct else 10
         if node.inplace:
             self.o(
-                "\tscalgoproto::ListOut<%s> add%s(size_t size) noexcept {"
-                % (typeName, uname)
+                f"\tscalgoproto::{direct}ListOut<{typeName}> add{uname}(size_t size) noexcept {{"
             )
-            self.o("\t\tset48_<%d>(size);" % (node.offset))
+            self.o(f"\t\tset48_<{node.offset}>(size);")
             self.o(
-                "\t\treturn addInplaceList_<%s>(writer_, offset_ + SIZE, size);"
-                % (typeName)
+                f"\t\treturn addInplace{direct}List_<{typeName}>(writer_, offset_ + SIZE, size);"
             )
         else:
             self.o(
-                "\t%s & set%s(scalgoproto::ListOut<%s> value) noexcept {"
-                % (outer, uname, typeName)
+                f"\t{outer} & set{uname}(scalgoproto::{direct}ListOut<{typeName}> value) noexcept {{"
             )
-            self.o("\t\tset48_<%d>(getOffset_(value)-10);" % (node.offset))
+            self.o(f"\t\tset48_<{node.offset}>(getOffset_(value)-{header_size});")
             self.o("\t\treturn * this;")
             self.o("\t}")
             self.o(
-                "\tscalgoproto::ListOut<%s> add%s(size_t size) noexcept {"
-                % (typeName, uname)
+                f"\tscalgoproto::{direct}ListOut<{typeName}> add{uname}(size_t size) noexcept {{"
             )
-            self.o("\t\tauto res = writer_.constructList<%s>(size);" % typeName)
-            self.o("\t\tset48_<%d>(getOffset_(res)-10);" % (node.offset))
+            self.o(f"\t\tauto res = writer_.construct{direct}List<{typeName}>(size);")
+            self.o(f"\t\tset48_<{node.offset}>(getOffset_(res)-{header_size});")
             self.o("\t\treturn res;")
         self.o("\t}")
         self.o(
-            "\tscalgoproto::ListOut<%s> add%s(scalgoproto::ListIn<%s> in) noexcept {"
-            % (typeName, uname, self.in_list_types(node)[0])
+            f"\tscalgoproto::{direct}ListOut<{typeName}> add{uname}(scalgoproto::{direct}ListIn<{self.in_list_types(node)[0]}> in) noexcept {{"
         )
-        self.o("\t\treturn add%s(in.size()).copy_(in);" % uname)
+        self.o(f"\t\treturn add{uname}(in.size()).copy_(in);")
         self.o("\t}")
 
         if node.type_.type in typeMap or node.struct or node.enum:
             self.o(
-                "\tscalgoproto::ListOut<%s> add%s(const %s * data, size_t size) noexcept {"
-                % (typeName, uname, typeName)
+                f"\tscalgoproto::ListOut<{typeName}> add{uname}(const {typeName} * data, size_t size) noexcept {{"
             )
-            self.o("\t\tauto v = add%s(size);" % uname)
+            self.o(f"\t\tauto v = add{uname}(size);")
             self.o("\t\tfor (size_t i = 0; i < size; ++i) {")
             self.o("\t\t\tv[i] = data[i];")
             self.o("\t\t}")
@@ -228,35 +225,34 @@ class Generator:
         self, node: Value, uname: str, inplace: bool, idx: int
     ) -> None:
         typeName = self.out_list_type(node)
+        direct = "Direct" if node.direct else ""
         if inplace:
             self.o(
-                "\tscalgoproto::ListOut<%s> add%s(size_t size) noexcept {"
-                % (typeName, uname)
+                f"\tscalgoproto::{direct}ListOut<{typeName}> add{uname}(size_t size) noexcept {{"
             )
-            self.o("\t\tsetType_(%d);" % (idx))
+            self.o(f"\t\tsetType_({idx});")
             self.o("\t\tsetSize_(size);")
-            self.o("\t\treturn addInplaceList_<%s>(writer_, next_, size);" % (typeName))
+            self.o(
+                f"\t\treturn addInplace{direct}List_<{typeName}>(writer_, next_, size);"
+            )
         else:
             self.o(
-                "\tvoid set%s(scalgoproto::ListOut<%s> value) noexcept {"
-                % (uname, typeName)
+                f"\tvoid set{uname}(scalgoproto::{direct}ListOut<{typeName}> value) noexcept {{"
             )
-            self.o("\t\tsetType_(%d);" % (idx))
-            self.o("\t\tsetObject_(getOffset_(value)-10);")
+            self.o(f"\t\tsetType_({idx});")
+            self.o(f"\t\tsetObject_(getOffset_(value)-{18 if node.direct else 10});")
             self.o("\t}")
             self.o(
-                "\tscalgoproto::ListOut<%s> add%s(size_t size) noexcept {"
-                % (typeName, uname)
+                f"\tscalgoproto::{direct}ListOut<{typeName}> add{uname}(size_t size) noexcept {{"
             )
-            self.o("\t\tauto res = writer_.constructList<%s>(size);" % typeName)
-            self.o("\t\tset%s(res);" % (uname))
+            self.o(f"\t\tauto res = writer_.constructList<{typeName}>(size);")
+            self.o(f"\t\tset{uname}(res);")
             self.o("\t\treturn res;")
         self.o("\t}")
         self.o(
-            "\tscalgoproto::ListOut<%s> add%s(scalgoproto::ListIn<%s> in) noexcept {"
-            % (typeName, uname, self.in_list_types(node)[0])
+            f"\tscalgoproto::{direct}ListOut<{typeName}> add{uname}(scalgoproto::{direct}ListIn<{self.in_list_types(node)[0]}> in) noexcept {{"
         )
-        self.o("\t\treturn add%s(in.size()).copy_(in);" % uname)
+        self.o(f"\t\treturn add{uname}(in.size()).copy_(in);")
         self.o("\t}")
 
     def generate_bool_in(self, node: Value, uname: str) -> None:
@@ -1005,6 +1001,10 @@ class Generator:
             '\t%sOut(scalgoproto::Writer & writer, bool withHeader): scalgoproto::TableOut(writer, withHeader, MAGIC, "%s", SIZE) {}'
             % (table.name, cescape(table.default))
         )
+        self.o(
+            "\t%sOut(scalgoproto::Writer & writer, std::uint64_t offset): scalgoproto::TableOut(writer, offset) {}"
+            % (table.name,)
+        )
         self.o("public:")
         for node in table.members:
             self.generate_value_out(node, "%sOut" % table.name)
@@ -1160,8 +1160,8 @@ class Generator:
                     for use in sorted(node.uses, key=lambda u: u.name):
                         n = node_path(use)
                         lcp = os.path.commonprefix([name, os.path.dirname(n) + "/"])
-                        dirs = name[len(lcp):].count("/")
-                        relpath = "../" * dirs + n[len(lcp):]
+                        dirs = name[len(lcp) :].count("/")
+                        relpath = "../" * dirs + n[len(lcp) :]
                         self.o('#include "%s.hh"' % relpath)
 
             if isinstance(node, Struct):
@@ -1201,5 +1201,10 @@ def setup(subparsers) -> None:
     cmd.add_argument("schema", help="schema to generate things from")
     cmd.add_argument("output", help="where do we store the output")
     cmd.add_argument("--single", action="store_true")
-    cmd.add_argument("--dir-strip", type=int, metavar="N", help="output in subdir formed by removing first N components of namespace")
+    cmd.add_argument(
+        "--dir-strip",
+        type=int,
+        metavar="N",
+        help="output in subdir formed by removing first N components of namespace",
+    )
     cmd.set_defaults(func=run)
