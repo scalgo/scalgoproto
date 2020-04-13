@@ -6,8 +6,14 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <fcntl.h>
 #include <limits>
+#include <memory>
 #include <stdexcept>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <utility>
 
 namespace scalgoproto {
@@ -771,8 +777,104 @@ struct MetaMagic<ListOut<A>> {
 	using t = ListTag;
 };
 
+class WriterBacking {
+public:
+	virtual char * setCapacity(size_t newCapacity) = 0;
+	virtual void finalizeBacking(size_t finalSize) = 0;
+	virtual ~WriterBacking() {}
+};
+
+class FileWriterBacking : public WriterBacking {
+private:
+	int fd;
+	void * addr;
+	size_t capacity;
+
+	static constexpr size_t PAGE_SIZE = 4096;
+
+public:
+	FileWriterBacking() : fd(-1), addr(nullptr), capacity(0) {}
+	// Must not copy fd and addr.
+	FileWriterBacking(const FileWriterBacking &) = delete;
+	FileWriterBacking & operator=(const FileWriterBacking &) = delete;
+	// We could in principle implement move semantics, but it is not needed.
+	FileWriterBacking(FileWriterBacking &&) = delete;
+	FileWriterBacking & operator=(FileWriterBacking &&) = delete;
+
+	int open(const char * path) {
+		assert(::sysconf(_SC_PAGE_SIZE) == PAGE_SIZE);
+		if (addr != nullptr) return -1;
+		fd = ::open(path, O_TRUNC | O_CREAT | O_RDWR, 0666);
+		if (fd == -1) return -1;
+		if (::ftruncate(fd, PAGE_SIZE)) {
+			// Close the file descriptor, but set errno to the error from ftruncate.
+			int oldErrno = errno;
+			::close(fd);
+			errno = oldErrno;
+			fd = -1;
+			return -1;
+		}
+		capacity = PAGE_SIZE;
+		addr = ::mmap(nullptr, capacity, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+		if (addr == (void*)-1) {
+			addr = nullptr;
+			::close(fd);
+			capacity = 0;
+			fd = -1;
+			return -1;
+		}
+		return 0;
+	}
+
+	void finalizeBacking(size_t finalSize) final {
+		if (fd == -1) {
+			throw std::runtime_error("finalizeBacking() cannot truncate: Already closed");
+		}
+		if (::ftruncate(fd, finalSize)) {
+			throw std::runtime_error("ftruncate() failed in finalizeBacking()");
+		}
+	}
+
+	void closeInner() {
+		if (fd != -1) {
+			::close(fd);
+			fd = -1;
+		}
+		if (addr != nullptr) {
+			::munmap(addr, capacity);
+			addr = nullptr;
+			capacity = 0;
+		}
+	}
+
+	~FileWriterBacking() {
+		closeInner();
+	}
+
+	char * setCapacity(size_t newCapacity) final {
+		if (addr == nullptr)
+			throw std::runtime_error("Cannot extend mmap backing after freeing it");
+		if (newCapacity == 0) {
+			closeInner();
+			return nullptr;
+		}
+		// Round up to nearest multiple of PAGE_SIZE
+		newCapacity = (newCapacity + PAGE_SIZE - 1) / PAGE_SIZE * PAGE_SIZE;
+		if (newCapacity == capacity) return (char *)addr;
+		if (::ftruncate(fd, newCapacity))
+			throw std::runtime_error("ftruncate failed");
+		void * result = ::mremap(addr, capacity, newCapacity, MREMAP_MAYMOVE);
+		if (result == (void *)-1)
+			throw std::runtime_error("mremap failed");
+		addr = result;
+		capacity = newCapacity;
+		return (char *)addr;
+	}
+};
+
 class Writer {
 private:
+	std::unique_ptr<WriterBacking> backing;
 	char * data = nullptr;
 	size_t size = 0;
 	size_t capacity = 0;
@@ -784,14 +886,24 @@ private:
 	friend class ListOut;
 	template <typename, typename>
 	friend class ListAccessHelp;
-	void reserve(size_t size) {
-		if (size <= capacity) return;
-		data = (char *)realloc(data, size);
-		capacity = size;
+	void setCapacity(size_t newCapacity) {
+		if (backing) {
+			data = backing->setCapacity(newCapacity);
+			capacity = newCapacity;
+			return;
+		}
+		if (newCapacity == 0) {
+			free(data);
+			data = nullptr;
+			capacity = 0;
+			return;
+		}
+		data = (char *)realloc(data, newCapacity);
+		capacity = newCapacity;
 	}
 
 	void expand(std::uint64_t s) {
-		while (size + s > capacity) reserve(capacity * 2);
+		while (size + s > capacity) setCapacity(capacity * 2);
 		size += s;
 	}
 
@@ -801,14 +913,15 @@ private:
 	}
 
 public:
-	Writer(size_t capacity = 256)
-		: size(10) {
-		reserve(capacity);
+	Writer(size_t capacity = 256, std::unique_ptr<WriterBacking> backing = {})
+		: backing(std::move(backing)), size(10) {
+		setCapacity(capacity);
 	}
 	Writer(const Writer &) = delete;
 	Writer & operator=(const Writer &) = delete;
 	Writer(Writer && o)
-		: data(o.data)
+		: backing(std::move(o.backing))
+		, data(o.data)
 		, size(o.size)
 		, capacity(o.capacity) {
 		o.data = nullptr;
@@ -816,7 +929,8 @@ public:
 		o.capacity = 0;
 	}
 	Writer & operator=(Writer && o) {
-		if (data) free(data);
+		setCapacity(0);
+		backing = std::move(o.backing);
 		data = o.data;
 		size = o.size;
 		capacity = o.capacity;
@@ -827,7 +941,7 @@ public:
 	}
 
 	~Writer() {
-		if (data) free(data);
+		setCapacity(0);
 		data = nullptr;
 		size = 0;
 		capacity = 0;
@@ -1193,6 +1307,7 @@ void ListAccessHelp<UnionTag, T>::copy(Writer & writer, std::uint64_t offset,
 Bytes Writer::finalize(const TableOut & root) {
 	write(ROOTMAGIC, 0);
 	this->write48_(root.offset_ - 10, 4);
+	if (backing) backing->finalizeBacking(size);
 	return std::make_pair(data, size);
 }
 
