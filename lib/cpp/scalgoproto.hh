@@ -807,7 +807,10 @@ public:
 		fd = ::open(path, O_TRUNC | O_CREAT | O_RDWR, 0666);
 		if (fd == -1) return -1;
 		if (::ftruncate(fd, PAGE_SIZE)) {
+			// Close the file descriptor, but set errno to the error from ftruncate.
+			int oldErrno = errno;
 			::close(fd);
+			errno = oldErrno;
 			fd = -1;
 			return -1;
 		}
