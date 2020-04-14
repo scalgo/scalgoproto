@@ -182,7 +182,6 @@ class Annotater:
         bool_bit = 8
         bool_offset = 0
         inplace: Optional[Value] = None
-        direct: Optional[Value] = None
         for v in values:
             self.create_doc_string(v)
             val = self.value(v.identifier)
@@ -253,15 +252,9 @@ class Annotater:
 
             if t == ContentType.STRUCT and v.direct:
                 self.error(v.direct, "Not allowed in structs")
-            if t == ContentType.UNION and v.direct:
-                self.error(v.direct, "Not allowed in unions")
-            if v.direct and direct:
-                self.error(v.direct, "More than one direct element defined")
-                self.error(direct.direct, "Previously defined here")
-            if v.direct:
-                direct = v
-                if not v.list_:
-                    self.error(v.direct, "Only lists can be direct")
+
+            if v.direct and not v.list_:
+                self.error(v.direct, "Only lists can be direct")
 
             if v.optional and v.type_.type in (
                 TokenType.U8,
