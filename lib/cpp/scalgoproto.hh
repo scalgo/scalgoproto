@@ -1381,11 +1381,21 @@ protected:
 		*(std::uint8_t *)(writer_.data + offset_ + o) &= ~(1 << b);
 	}
 
+	template <std::uint64_t o, std::uint8_t bit, std::uint8_t>
+	std::uint8_t getBit_() const noexcept {
+		return *(std::uint8_t *)(writer_.data + offset_ + o) & 1 << bit;
+	}
+
 	template <typename T, std::uint64_t offset>
 	T getInner_() const noexcept {
 		T ans;
 		memcpy(&ans, writer_.data + offset_ + offset, sizeof(T));
 		return ans;
+	}
+
+	template <typename T, std::uint64_t o>
+	T getInner_(T) const noexcept {
+		return getInner_<T, o>();
 	}
 
 	template <std::uint64_t o>

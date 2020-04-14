@@ -282,6 +282,7 @@ class Generator:
         )
         self.o("\t\treturn *this;")
         self.o("\t}")
+        self.generate_bool_in(node, uname)
 
     def generate_basic_in(self, node: Value, uname: str) -> None:
         if node.inplace:
@@ -324,6 +325,7 @@ class Generator:
         self.o("\t\tsetInner_<%s, %d>(value);" % (typeName, node.offset))
         self.o("\t\treturn *this;")
         self.o("\t}")
+        self.generate_basic_in(node, uname)
 
     def generate_enum_in(self, node: Value, uname: str) -> None:
         if node.inplace:
@@ -354,6 +356,7 @@ class Generator:
         self.o("\t\tsetInner_<%s, %d>(value);" % (self.qualify(node.enum), node.offset))
         self.o("\t\treturn *this;")
         self.o("\t}")
+        self.generate_enum_in(node, uname)
 
     def generate_struct_in(self, node: Value, uname: str) -> None:
         if node.inplace:
@@ -388,6 +391,7 @@ class Generator:
         )
         self.o("\t\treturn *this;")
         self.o("\t}")
+        self.generate_struct_in(node, uname)
 
     def generate_table_in(self, node: Value, uname: str) -> None:
         self.o("\tbool has%s() const noexcept {" % (uname))
