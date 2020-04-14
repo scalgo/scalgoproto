@@ -488,7 +488,7 @@ private:
 public:
 	using value_type = T;
 	using size_type = std::size_t;
-	using difference_type = int;
+	using difference_type = std::ptrdiff_t;
 	using pointer = T *;
 	using reference = T &;
 	using iterator_category = std::random_access_iterator_tag;
@@ -637,7 +637,7 @@ private:
 public:
 	using value_type = T;
 	using size_type = std::size_t;
-	using difference_type = int;
+	using difference_type = std::ptrdiff_t;
 	using pointer = T *;
 	using reference = T &;
 	using iterator_category = std::random_access_iterator_tag;
