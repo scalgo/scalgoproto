@@ -270,7 +270,7 @@ class Generator:
                 % (uname, self.out_list_type(node))
             )
             self.output_doc(node, "        ")
-            self.o("        assert self._writer._used == self._offset + self._SIZE")
+            self.o("        assert self._writer._used == self._offset + self._SIZE, 'No object may be created between table and its implace list'")
             self.generate_inplace_list_constructor(node)
             self.o("        self._set_inplace_list(%d, size)" % (node.offset))
             self.o("        return l")
@@ -313,6 +313,7 @@ class Generator:
                 % (uname, self.out_list_type(node))
             )
             self.output_doc(node, "        ")
+            self.o("        assert self._writer._used == self._end, 'No object may be created between table and its implace list'")
             self.o("        self._set(%d, size)" % (idx,))
             self.generate_inplace_list_constructor(node)
             self.o("        return l")
@@ -530,7 +531,7 @@ class Generator:
             self.o()
             self.o("    def add_%s(self) -> %sOut:" % (uname, node.table.name))
             self.output_doc(node, "        ")
-            self.o("        assert self._writer._used == self._offset + self._SIZE")
+            self.o("        assert self._writer._used == self._offset + self._SIZE, 'No object may be created between table and its implace table'")
             self.o(
                 "        self._set_uint48(%d, %d)"
                 % (node.offset, len(node.table.default))
@@ -586,7 +587,7 @@ class Generator:
             self.o()
             self.o("    def add_%s(self) -> %sOut:" % (uname, table.name))
             self.output_doc(node, "        ")
-            self.o("        assert self._end == self._writer._used")
+            self.o("        assert self._end == self._writer._used, 'No object may be created between table and its implace table'")
             self.o("        self._set(%d, %d)" % (idx, table.bytes))
             self.o("        return %sOut(self._writer, False)" % table.name)
             self.o()
@@ -627,7 +628,6 @@ class Generator:
             )
         self.output_doc(node, "        ")
         if node.inplace:
-            self.o("        assert self._writer._used == self._offset + self._SIZE")
             self.o("        self._add_inplace_text(%d, text)" % (node.offset))
         else:
             self.o("        self._set_text(%d, t)" % (node.offset))
@@ -687,7 +687,6 @@ class Generator:
             )
         self.output_doc(node, "        ")
         if node.inplace:
-            self.o("        assert self._writer._used == self._offset + self._SIZE")
             self.o("        self._add_inplace_bytes(%d, value)" % (node.offset))
         else:
             self.o("        self._set_bytes(%d, value)" % (node.offset))

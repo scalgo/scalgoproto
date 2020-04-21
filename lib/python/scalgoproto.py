@@ -550,6 +550,7 @@ class TableOut(object):
         )[0]
 
     def _add_inplace_text(self, o: int, t: str) -> None:
+        assert self._writer._used == self._offset + self._SIZE, 'No object may be created between table and its implace text'
         tt = t.encode("utf-8")
         self._writer._put(self._offset + o, pack48_(len(tt)))
         self._writer._reserve(len(tt) + 1)
@@ -557,6 +558,7 @@ class TableOut(object):
         self._writer._write(b"\0")
 
     def _add_inplace_bytes(self, o: int, t: bytes) -> None:
+        assert self._writer._used == self._offset + self._SIZE, 'No object may be created between table and its implace bytes'
         self._writer._put(self._offset + o, pack48_(len(t)))
         self._writer._reserve(len(t))
         self._writer._write(t)
@@ -588,7 +590,7 @@ class UnionOut(object):
         self._set(idx, v._offset - 10)
 
     def _add_inplace_text(self, idx: int, v: str) -> None:
-        assert self._writer._used == self._end
+        assert self._writer._used == self._end, 'No object may be created between table and its implace text'
         tt = v.encode("utf-8")
         self._set(idx, len(tt))
         self._writer._reserve(len(tt) + 1)
@@ -596,7 +598,7 @@ class UnionOut(object):
         self._writer._write(b"\0")
 
     def _add_inplace_bytes(self, idx: int, t: bytes) -> None:
-        assert self._writer._used == self._end
+        assert self._writer._used == self._end, 'No object may be created between table and its implace bytes'
         self._set(idx, len(t))
         self._writer._reserve(len(t))
         self._writer._write(t)
