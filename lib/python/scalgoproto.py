@@ -133,7 +133,7 @@ class ListIn(Sequence[B]):
 class UnionIn(object):
     __slots__ = ["_reader", "_type", "_offset", "_size"]
 
-    def __init__(self, reader: "Reader", type: int, offset: int, size: int = None):
+    def __init__(self, reader: "Reader", type: int, offset: int, size: Optional[int] = None):
         """Private constructor. Use the accessor methods on tables or the root method on Reader to get an instance"""
         self._reader = reader
         self._type = type
@@ -160,7 +160,7 @@ class UnionIn(object):
         return {m: v}
 
     def _get_ptr(self, magic: int) -> Tuple[int, int]:
-        if self._size:
+        if self._size is not None:
             return (self._offset, self._size)
         return (self._offset + 10, self._reader._read_size(self._offset, magic))
 
