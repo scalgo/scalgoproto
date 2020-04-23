@@ -953,6 +953,8 @@ public:
 };
 
 class WriterBacking {
+protected:
+	WriterBacking() = default;
 public:
 	virtual char * setCapacity(size_t newCapacity) = 0;
 	virtual void finalizeBacking(size_t finalSize) = 0;
@@ -1095,7 +1097,7 @@ private:
 	}
 
 public:
-	Writer(size_t capacity = 256, std::unique_ptr<WriterBacking> backing = {})
+	Writer(size_t capacity = 256, std::unique_ptr<WriterBacking> backing = nullptr)
 		: backing(std::move(backing)), size(10) {
 		setCapacity(capacity);
 	}
