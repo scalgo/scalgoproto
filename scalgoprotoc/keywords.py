@@ -152,5 +152,6 @@ keywords = frozenset(
         "with",
         "xor",
         "yield",
+        "removed",
     ]
 )

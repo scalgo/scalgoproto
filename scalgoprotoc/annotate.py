@@ -5,7 +5,7 @@ Perform validation of the ast, and assign offsets and such
 import enum
 import struct
 import sys
-from typing import Dict, List, Set, Optional
+from typing import Dict, List, Set, Optional, Tuple
 
 from .documents import Documents
 from .error import error
@@ -88,6 +88,8 @@ class Annotater:
         add: bool = False,
         get: bool = False,
     ) -> None:
+        if t.type == TokenType.REMOVED:
+            return
         if name[0].isupper() or name.count("_") or not name.isidentifier():
             self.error(t, "Name must be CamelCase")
         if name in keywords:
@@ -175,34 +177,36 @@ class Annotater:
 
     def visit_content(
         self, name: str, values: List[Value], t: ContentType, inplace_context: bool
-    ) -> bytes:
+    ) -> Tuple[bytes , List[Value]]:
         content: Dict[str, Token] = {}
         bytes = 0
         default = []
         bool_bit = 8
         bool_offset = 0
         inplace: Optional[Value] = None
+        out_values: List[Value] = []
         for v in values:
             self.create_doc_string(v)
+            removed = v.identifier.type == TokenType.REMOVED
             val = self.value(v.identifier)
 
-            if v.direct_enum:
+            if not removed and v.direct_enum:
                 v.direct_enum.name = name + ucamel(val)
                 self.attach_namespace(v.direct_enum)
                 self.visit_enum(v.direct_enum)
 
-            if v.direct_table:
+            if not removed and v.direct_table:
                 v.direct_table.name = name + ucamel(val)
                 self.attach_namespace(v.direct_table)
                 ip = v.inplace != None if t == ContentType.TABLE else inplace_context
                 self.assign_magic(v.direct_table, not ip)
-                v.direct_table.default = self.visit_content(
+                v.direct_table.default, v.direct_table.members = self.visit_content(
                     v.direct_table.name, v.direct_table.members, ContentType.TABLE, ip
                 )
                 v.direct_table.bytes = len(v.direct_table.default)
                 v.direct_table.empty = len(v.direct_table.members) == 0
 
-            if v.direct_union:
+            if not removed and v.direct_union:
                 v.direct_union.name = name + ucamel(val)
                 self.attach_namespace(v.direct_union)
                 self.visit_content(
@@ -212,7 +216,7 @@ class Annotater:
                     v.inplace != None,
                 )
 
-            if v.direct_struct:
+            if not removed and v.direct_struct:
                 v.direct_struct.name = name + ucamel(val)
                 self.attach_namespace(v.direct_struct)
                 v.direct_struct.bytes = len(
@@ -508,11 +512,13 @@ class Annotater:
                     self.error(v.value, "Unhandled value")
 
             bytes += v.bytes
+            if not removed:
+                out_values.append(v)
 
         default2 = b"".join(default)
         if len(default2) != bytes:
             raise ICE()
-        return default2
+        return (default2, out_values)
 
     def annotate(self, ast: List[AstNode]) -> None:
         self.enums = {}
@@ -528,12 +534,12 @@ class Annotater:
                 name = self.validate_uname(node.identifier)
                 node.name = name
                 self.attach_namespace(node)
-                bytes = len(
-                    self.visit_content(name, node.members, ContentType.STRUCT, False)
-                )
+                default, node.members = self.visit_content(name, node.members, ContentType.STRUCT, False)
                 self.structs[name] = node
-                node.bytes = bytes
+                node.bytes = len(default)
             elif isinstance(node, Enum):
+                if node.removed:
+                    continue
                 self.context = "enum %s" % self.value(node.identifier)
                 name = self.validate_uname(node.identifier)
                 node.name = name
@@ -546,7 +552,7 @@ class Annotater:
                 node.name = name
                 self.attach_namespace(node)
                 self.assign_magic(node, True)
-                node.default = self.visit_content(
+                node.default, node.members = self.visit_content(
                     name, node.members, ContentType.TABLE, False
                 )
                 node.bytes = len(node.default)
@@ -558,7 +564,7 @@ class Annotater:
                 name = self.validate_uname(node.identifier)
                 node.name = name
                 self.attach_namespace(node)
-                self.visit_content(name, node.members, ContentType.UNION, False)
+                default, node.members = self.visit_content(name, node.members, ContentType.UNION, False)
                 self.unions[name] = node
             elif isinstance(node, Namespace):
                 self.namespace[node.document] = node.namespace

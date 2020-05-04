@@ -70,23 +70,25 @@ class Struct(AstNode):
 
 
 class Enum(AstNode):
-    __slots__ = ["identifier", "members", "annotatedValues", "name"]
+    __slots__ = ["identifier", "members", "annotatedValues", "name", "removed"]
     identifier: Token
     members: ty.List["Value"]
-    name: str
-    annotatedValues: ty.Dict[str, int]
+    name: ty.Optional[str]
+    annotatedValues: ty.Optional[ty.Dict[str, int]]
+    removed: bool
 
     def __init__(
         self,
         token: Token,
         document: int,
         identifier: Token,
-        members: ty.List["Value"],
+        members: ty.Optional[ty.List["Value"]],
         doc_comment: Token,
     ) -> None:
         super().__init__(token, document, doc_comment)
         self.identifier = identifier
-        self.members = members
+        self.members = members if members is not None else []
+        self.removed = members is None
         self.name = None
         self.annotatedValues = None
 
@@ -271,13 +273,13 @@ class Parser:
         doc_comment: Token = None
         while True:
             t = self.consume_token(
-                [TokenType.RBRACE, TokenType.IDENTIFIER, TokenType.DOCCOMMENT]
+                [TokenType.RBRACE, TokenType.IDENTIFIER, TokenType.DOCCOMMENT, TokenType.REMOVED]
             )
             if t.type == TokenType.DOCCOMMENT:
                 doc_comment = t
             elif t.type == TokenType.RBRACE:
                 break
-            elif t.type == TokenType.IDENTIFIER:
+            elif t.type in (TokenType.IDENTIFIER, TokenType.REMOVED):
                 self.check_token(self.token, [TokenType.COLON, TokenType.LBRACE])
                 colon: Token = None
                 if self.token.type == TokenType.COLON:
@@ -409,7 +411,10 @@ class Parser:
                 self.next_token()
         return members
 
-    def parse_enum(self) -> ty.List[Value]:
+    def parse_enum(self) -> ty.Optional[ty.List[Value]]:
+        if self.token.type == TokenType.REMOVED:
+            self.consume_token([TokenType.REMOVED])
+            return None
         self.consume_token([TokenType.LBRACE])
         values: ty.List[Value] = []
         doc_comment = None

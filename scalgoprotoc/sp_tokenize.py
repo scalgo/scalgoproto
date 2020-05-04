@@ -41,6 +41,7 @@ class TokenType(Enum):
     INPLACE = 69
     IMPORT = 70
     DIRECT = 71
+    REMOVED = 72
 
 
 Token = ty.NamedTuple(
@@ -86,6 +87,7 @@ def tokenize(data: str, document: int) -> ty.Iterator[Token]:
         "inplace": TokenType.INPLACE,
         "import": TokenType.IMPORT,
         "direct": TokenType.DIRECT,
+        "Removed": TokenType.REMOVED,
     }
 
     while cur < len(data):
