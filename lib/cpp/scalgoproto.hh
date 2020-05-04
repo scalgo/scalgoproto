@@ -619,7 +619,7 @@ public:
 
 
 template <typename T>
-class DirectListInIterator {
+class DirectListInIterator: public In {
 private:
 	const Reader * reader;
 	const char * start;
@@ -648,7 +648,7 @@ public:
 	DirectListInIterator & operator=(DirectListInIterator &&) = default;
 
 	value_type operator*() const noexcept {
-		return T(reader, start + index * item_size, item_size);
+		return getObject_<T>(*reader, Ptr{start + index * item_size, item_size});
 	}
 
 	// Compare
