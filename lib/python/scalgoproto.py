@@ -2,7 +2,7 @@
 import enum
 import math
 import struct
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 from typing import (
     Callable,
     ClassVar,
@@ -13,6 +13,7 @@ from typing import (
     TypeVar,
     Union,
     Optional,
+    Any
 )
 
 MESSAGE_MAGIC = 0xB5C0C4B3
@@ -21,8 +22,31 @@ BYTES_MAGIC = 0xDCDBBE10
 LIST_MAGIC = 0x3400BB46
 DIRECT_LIST_MAGIC = 0xE2C6CC05
 
-B = TypeVar("B")
+class Hash(ABC):
+    def update(self, data: bytes) -> None:
+        pass
 
+def digest(h: Hash, v: Any) -> None:
+    if v is None:
+        return
+    if hasattr(v, "_digest"):
+        v._digest(h)
+    else:
+        h.update(b"\xff\xe0")
+        if isinstance(v, enum.IntEnum):
+            h.update(str(int(v)).encode("utf-8"))
+        elif isinstance(v, (bool, int)):
+            h.update(str(v).encode("utf-8"))
+        elif isinstance(v, float):
+            h.update(struct.pack("<d", v).replace(b"\xff", b"\xff\xef"))
+        elif isinstance(v, str):
+            h.update(v.encode("utf-8"))
+        elif isinstance(v, bytes):
+            h.update(v.replace(b"\xff", b"\xff\xef"))
+        else:
+            assert False
+
+B = TypeVar("B")
 
 class StructType(Generic[B]):
     _WIDTH: ClassVar[int] = 0
@@ -47,6 +71,11 @@ class StructType(Generic[B]):
             o[m] = v
         return o
 
+    def _digest(self, h: Hash) -> None:
+        h.update(b"\xff\xe1")
+        for m in self.__slots__:
+            digest(h, getattr(self, m))
+        h.update(b"\xff\xe2")
 
 TI = TypeVar("TI", bound="TableIn")
 TO = TypeVar("TO", bound="TableOut")
@@ -129,6 +158,11 @@ class ListIn(Sequence[B]):
             o.append(v)
         return o
 
+    def _digest(self, h: Hash) -> None:
+        h.update(b"\xff\xe3")
+        for v in self:
+            digest(h, v)
+        h.update(b"\xff\xe4")
 
 class UnionIn(object):
     __slots__ = ["_reader", "_type", "_offset", "_size"]
@@ -140,24 +174,31 @@ class UnionIn(object):
         self._offset = offset
         self._size = size
 
-    def __str__(self):
-        if self.type == 0:
+    def __str__(self) -> str:
+        if self._type == 0:
             return "{}"
-        m = self._MEMBERS[self.type - 1]
+        m = self._MEMBERS[self._type - 1]
         if hasattr(self, m):
             return "{%s: %s}" % (m, getattr(self, m))
         return "{%s}" % m
 
     def _to_dict(self):
-        if self.type == 0:
+        if self._type == 0:
             return {}
-        m = self._MEMBERS[self.type - 1]
+        m = self._MEMBERS[self._type - 1]
         if not hasattr(self, m):
             return {m: None}
         v = getattr(self, m)
         if hasattr(v, "_to_dict"):
             v = v._to_dict()
         return {m: v}
+
+    def _digest(self, h: Hash) -> None:
+        h.update(b"\xff\xe5%d"%(self._type))
+        if self._type == 0:
+            return
+        m = self._MEMBERS[self._type - 1]
+        digest(h, getattr(self, m, None))
 
     def _get_ptr(self, magic: int) -> Tuple[int, int]:
         if self._size is not None:
@@ -194,6 +235,13 @@ class TableIn(object):
                     v = v._to_dict()
                 o[m] = v
         return o
+
+    def _digest(self, h: Hash) -> None:
+        h.update(b"\xff\xe6")
+        for m in self._MEMBERS:
+            if getattr(self, "has_" + m, True):
+                digest(h, getattr(self, m))
+        h.update(b"\xff\xe7")
 
     def _get_uint48_f(self, o: int) -> int:
         return unpack48_(self._reader._data[self._offset + o : self._offset + o + 6])
