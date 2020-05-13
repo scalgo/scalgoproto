@@ -854,11 +854,7 @@ def test_out_extend2(path: str) -> bool:
     data = w.finalize(root)
     return validate_out(data, path)
 
-
-def test_in_extend2(path: str) -> bool:
-    o = read_in(path)
-    r = scalgoproto.Reader(o)
-    s = r.root(base.Gen3In)
+def test_extend2_part(s: base.Gen3In) -> bool:
     if require(s.aa, 80):
         return False
     if require(s.bb, 81):
@@ -963,6 +959,25 @@ def test_in_extend2(path: str) -> bool:
     return True
 
 
+def test_in_extend2(path: str) -> bool:
+    o = read_in(path)
+    r = scalgoproto.Reader(o)
+    s = r.root(base.Gen3In)
+    return test_extend2_part(s)
+
+def test_copy_extend2(path: str) -> bool:
+    data1 = read_in(path)
+    reader1 = scalgoproto.Reader(data1)
+    root1 = reader1.root(base.Gen3In)
+
+    writer = scalgoproto.Writer()
+    root2 = writer.copy(base.Gen3Out, root1)
+    data2 = writer.finalize(root2)
+
+    reader2 = scalgoproto.Reader(data2)
+    root3 = reader2.root(base.Gen3In)
+    return test_extend2_part(root3)
+
 def main() -> None:
     ans = False
     test = sys.argv[1]
@@ -995,6 +1010,8 @@ def main() -> None:
         ans = test_out_extend2(path)
     elif test == "in_extend2":
         ans = test_in_extend2(path)
+    elif test == "copy_extend2":
+        ans = test_copy_extend2(path)
     if not ans:
         sys.exit(1)
 

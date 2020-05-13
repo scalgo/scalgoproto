@@ -292,6 +292,7 @@ def main():
         runTest("py in extend1", lambda: runPy("in_extend1", "test/extend1.bin"))
         runTest("py out extend2", lambda: runPy("out_extend2", "test/extend2.bin"))
         runTest("py in extend2", lambda: runPy("in_extend2", "test/extend2.bin"))
+        runTest("py copy extend2", lambda: runPy("copy_extend2", "test/extend2.bin"))
 
     if runTest("py setup union", lambda: runPySetup(["test/union.spr"])):
         runTest(

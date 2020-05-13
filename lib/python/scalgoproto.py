@@ -778,6 +778,10 @@ class DirectTableListOut(OutList, Generic[TO]):
     def __getitem__(self, index: int) -> B:
         return self._t(self._writer, offset=self._offset + 8 + index * self._t._SIZE)
 
+    def _copy(self, inp: ListIn) -> None:
+        assert self._size == inp._size
+        for i in range(self._size):
+            self[i]._copy(inp[i])
 
 class TextListOut(OutList):
     def __init__(self, writer: "Writer", size: int, with_header: bool = True) -> None:
