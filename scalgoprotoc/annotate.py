@@ -219,14 +219,13 @@ class Annotater:
             if not removed and v.direct_struct:
                 v.direct_struct.name = name + ucamel(val)
                 self.attach_namespace(v.direct_struct)
-                v.direct_struct.bytes = len(
-                    self.visit_content(
-                        v.direct_struct.name,
-                        v.direct_struct.members,
-                        ContentType.STRUCT,
-                        False,
-                    )
+                default_bytes, _ = self.visit_content(
+                    v.direct_struct.name,
+                    v.direct_struct.members,
+                    ContentType.STRUCT,
+                    False,
                 )
+                v.direct_struct.bytes = len(default_bytes)
 
             self.validate_member_name(
                 v.identifier,
