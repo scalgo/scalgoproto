@@ -216,7 +216,7 @@ public:
 		memcpy(&magic, data, 4);
 		std::uint64_t offset = read48_(data + 4);
 		if (magic != ROOTMAGIC) throw Error();
-		return T(*this, getPtr_<T::MAGIC>(offset));
+		return T(this, getPtr_<T::MAGIC>(offset));
 	}
 };
 
@@ -227,8 +227,8 @@ protected:
 		return T(std::forward<TT>(tt)...);
 	}
 
-	static std::string_view getText_(const Reader & reader, Ptr p) noexcept {
-		reader.validateTextPtr_(p);
+	static std::string_view getText_(const Reader * reader, Ptr p) noexcept {
+		reader->validateTextPtr_(p);
 		return std::string_view(p.start, p.size);
 	}
 
@@ -247,7 +247,7 @@ struct ListAccessHelp<BoolTag, T> : public In {
 	static constexpr bool hasAdd = false;
 	static constexpr std::uint64_t mult = 0;
 	static constexpr int def = 0;
-	static bool get(const Reader &, const char * start, std::uint64_t index) noexcept {
+	static bool get(const Reader *, const char * start, std::uint64_t index) noexcept {
 		const size_t bit = index & 7;
 		const size_t byte = index >> 3;
 		std::uint8_t v;
@@ -271,7 +271,7 @@ struct ListAccessHelp<BoolTag, T> : public In {
 		}
 	};
 
-	static void copy(Writer & writer, std::uint64_t offset, const Reader &,
+	static void copy(Writer & writer, std::uint64_t offset, const Reader *,
 					 const char * start, std::uint64_t size);
 };
 
@@ -282,7 +282,7 @@ struct ListAccessHelp<PodTag, T> : public In {
 	static constexpr bool hasAdd = false;
 	static constexpr uint64_t mult = sizeof(T);
 	static constexpr int def = 0;
-	static T get(const Reader &, const char * start, std::uint64_t index) noexcept {
+	static T get(const Reader *, const char * start, std::uint64_t index) noexcept {
 		T ans;
 		memcpy(&ans, start + index * sizeof(T), sizeof(T));
 		return ans;
@@ -297,7 +297,7 @@ struct ListAccessHelp<PodTag, T> : public In {
 		void operator=(const T & value) noexcept { memcpy(location, &value, sizeof(T)); }
 	};
 
-	static void copy(Writer & writer, std::uint64_t offset, const Reader &,
+	static void copy(Writer & writer, std::uint64_t offset, const Reader *,
 					 const char * start, std::uint64_t size);
 };
 
@@ -311,7 +311,7 @@ struct ListAccessHelp<EnumTag, T> : public In {
 	static bool has(const char * start, std::uint64_t index) noexcept {
 		return ((const unsigned char *)(start))[index] != 255;
 	}
-	static T get(const Reader &, const char * start, std::uint64_t index) noexcept {
+	static T get(const Reader *, const char * start, std::uint64_t index) noexcept {
 		T ans;
 		memcpy(&ans, start + index * sizeof(T), sizeof(T));
 		return ans;
@@ -327,7 +327,7 @@ struct ListAccessHelp<EnumTag, T> : public In {
 		void operator=(const T & value) noexcept { memcpy(location, &value, sizeof(T)); }
 	};
 
-	static void copy(Writer & writer, std::uint64_t offset, const Reader &,
+	static void copy(Writer & writer, std::uint64_t offset, const Reader *,
 					 const char * start, std::uint64_t size);
 };
 
@@ -343,11 +343,11 @@ struct ListAccessHelp<TextTag, T> : public In {
 		std::uint64_t off = read48_(start + index * 6);
 		return off != 0;
 	}
-	static std::string_view get(const Reader & reader, const char * start,
+	static std::string_view get(const Reader * reader, const char * start,
 								std::uint64_t index) {
 		std::uint64_t off = read48_(start + index * 6);
 		assert(off != 0);
-		Ptr p = reader.getPtr_<TEXTMAGIC, 1, 1>(off);
+		Ptr p = reader->getPtr_<TEXTMAGIC, 1, 1>(off);
 		return getText_(reader, p);
 	}
 	class Setter {
@@ -362,7 +362,7 @@ struct ListAccessHelp<TextTag, T> : public In {
 		TextOut operator=(std::string_view t);
 	};
 
-	static void copy(Writer & writer, std::uint64_t offset, const Reader &,
+	static void copy(Writer & writer, std::uint64_t offset, const Reader *,
 					 const char * start, std::uint64_t size);
 };
 
@@ -377,11 +377,11 @@ struct ListAccessHelp<BytesTag, T> : public In {
 		std::uint64_t off = read48_(start + index * 6);
 		return off != 0;
 	}
-	static Bytes get(const Reader & reader, const char * start,
+	static Bytes get(const Reader * reader, const char * start,
 					 std::uint64_t index) noexcept {
 		std::uint64_t off = read48_(start + index * 6);
 		assert(off != 0);
-		return getBytes_(reader.getPtr_<BYTESMAGIC>(off));
+		return getBytes_(reader->getPtr_<BYTESMAGIC>(off));
 	}
 	class Setter {
 		template <typename>
@@ -395,7 +395,7 @@ struct ListAccessHelp<BytesTag, T> : public In {
 		void operator=(Bytes bytes) noexcept;
 	};
 
-	static void copy(Writer & writer, std::uint64_t offset, const Reader &,
+	static void copy(Writer & writer, std::uint64_t offset, const Reader *,
 					 const char * start, std::uint64_t size);
 };
 
@@ -411,11 +411,11 @@ struct ListAccessHelp<TableTag, T> : public In {
 		return off != 0;
 	}
 
-	static T get(const Reader & reader, const char * start,
+	static T get(const Reader * reader, const char * start,
 				 std::uint64_t index) noexcept {
 		std::uint64_t off = read48_(start + index * 6);
 		assert(off != 0);
-		return getObject_<T>(reader, reader.getPtr_<T::MAGIC>(off));
+		return getObject_<T>(reader, reader->getPtr_<T::MAGIC>(off));
 	}
 
 	static T add(Writer & w, std::uint64_t offset, std::uint64_t index);
@@ -432,7 +432,7 @@ struct ListAccessHelp<TableTag, T> : public In {
 		}
 	};
 
-	static void copy(Writer & writer, std::uint64_t offset, const Reader &,
+	static void copy(Writer & writer, std::uint64_t offset, const Reader *,
 					 const char * start, std::uint64_t size);
 };
 
@@ -450,7 +450,7 @@ struct ListAccessHelp<UnionTag, T> : public In {
 		return type != 0;
 	}
 
-	static T get(const Reader & reader, const char * start,
+	static T get(const Reader * reader, const char * start,
 				 std::uint64_t index) noexcept {
 		std::uint16_t type;
 		memcpy(&type, start + index * 8, 2);
@@ -459,7 +459,7 @@ struct ListAccessHelp<UnionTag, T> : public In {
 		return getObject_<T>(reader, type, off);
 	}
 
-	static void copy(Writer & writer, std::uint64_t offset, const Reader &,
+	static void copy(Writer & writer, std::uint64_t offset, const Reader *,
 					 const char * start, std::uint64_t size);
 
 	using Setter = T;
@@ -479,9 +479,9 @@ private:
 	std::uint64_t index;
 	using A = ListAccess<T>;
 	friend class ListIn<T>;
-	ListInIterator(const Reader & reader, const char * start,
+	ListInIterator(const Reader * reader, const char * start,
 				   std::uint64_t index) noexcept
-		: reader(&reader)
+		: reader(reader)
 		, start(start)
 		, index(index) {}
 
@@ -507,7 +507,7 @@ public:
 
 	value_type operator*() const noexcept {
 		if constexpr (A::optional) assert(A::has(start, index));
-		return A::get(*reader, start, index);
+		return A::get(reader, start, index);
 	}
 
 	// Compare
@@ -564,13 +564,13 @@ public:
 template <typename T>
 class ListIn : public In {
 	friend class In;
-	const Reader & reader_;
+	const Reader * reader_;
 	const char * start_;
 	const std::uint64_t size_;
 	template <typename>
 	friend class ListOut;
 
-	ListIn(const Reader & reader, Ptr p) noexcept
+	ListIn(const Reader * reader, Ptr p) noexcept
 		: reader_(reader)
 		, start_(p.start)
 		, size_(p.size) {}
@@ -578,13 +578,13 @@ class ListIn : public In {
 
 public:
 	static constexpr bool noexceptGet =
-		noexcept(A::get(std::declval<const Reader &>(), std::declval<const char *>(), 0));
+		noexcept(A::get(std::declval<const Reader *>(), std::declval<const char *>(), 0));
 
 	using value_type = T;
 	using size_type = std::size_t;
 	using iterator = ListInIterator<T>;
 
-	ListIn(const Reader & reader) noexcept : reader_(reader), start_(nullptr), size_(0) {}
+	ListIn(const Reader * reader) noexcept : reader_(reader), start_(nullptr), size_(0) {}
 
 	bool hasFront() const noexcept { return !empty() && has(0); }
 	value_type front() const noexcept(noexceptGet) {
@@ -626,10 +626,10 @@ private:
 	std::uint32_t item_size;
 	std::uint64_t index;
 	friend class DirectListIn<T>;
-	DirectListInIterator(const Reader & reader, const char * start,
+	DirectListInIterator(const Reader * reader, const char * start,
 				std::uint32_t item_size,
 				std::uint64_t index) noexcept
-		: reader(&reader)
+		: reader(reader)
 		, start(start)
 		, item_size(item_size)
 		, index(index) {}
@@ -648,7 +648,7 @@ public:
 	DirectListInIterator & operator=(DirectListInIterator &&) = default;
 
 	value_type operator*() const noexcept {
-		return getObject_<T>(*reader, Ptr{start + index * item_size, item_size});
+		return getObject_<T>(reader, Ptr{start + index * item_size, item_size});
 	}
 
 	// Compare
@@ -705,13 +705,13 @@ public:
 template <typename T>
 class DirectListIn : public In {
 	friend class In;
-	const Reader & reader_;
+	const Reader * reader_;
 	const char * start_;
 	const std::uint64_t size_;
 	const std::uint32_t item_size_;
 
-	static std::uint32_t parse_header(const Reader & reader, Ptr p) {
-		if (p.start + 8 > reader.data + reader.size)
+	static std::uint32_t parse_header(const Reader * reader, Ptr p) {
+		if (p.start + 8 > reader->data + reader->size)
 			throw Error();
 		std::uint32_t magic, item_size;
 		memcpy(&magic, p.start, 4);
@@ -719,12 +719,12 @@ class DirectListIn : public In {
 			throw Error();
 		memcpy(&item_size, p.start+4, 4);
 		if (item_size > 65534) throw Error(); //Items larger than this is currently not support as it might overflow the multiplication below
-		if (p.start + 4 + p.size * item_size > reader.data + reader.size)
+		if (p.start + 4 + p.size * item_size > reader->data + reader->size)
 			throw Error();
 		return item_size;
 	}
 
-	DirectListIn(const Reader & reader, Ptr p) noexcept(false)
+	DirectListIn(const Reader * reader, Ptr p) noexcept(false)
 		: reader_(reader)
 		, start_(p.start+8)
 		, size_(p.size)
@@ -734,7 +734,7 @@ public:
 	using size_type = std::size_t;
 	using iterator = DirectListInIterator<T>;
 
-	DirectListIn(const Reader & reader) noexcept : reader_(reader), start_(nullptr), size_(0), item_size_(0) {}
+	DirectListIn(const Reader * reader) noexcept : reader_(reader), start_(nullptr), size_(0), item_size_(0) {}
 
 	value_type front() const noexcept {return (*this)[0];}
 	value_type back() const noexcept {return (*this)[size_ - 1];}
@@ -755,14 +755,15 @@ public:
 
 class TableIn : public In {
 protected:
-	const Reader & reader_;
+	const Reader * reader_;
 	const char * start_;
-	const std::uint64_t size_;
+	std::uint64_t size_;
 
-	TableIn(const Reader & reader, Ptr p)
+	TableIn(const Reader * reader, Ptr p)
 		: reader_(reader)
 		, start_(p.start)
 		, size_(p.size) {}
+
 
 	template <typename T, std::uint64_t o>
 	T getInnerUnchecked_() const noexcept {
@@ -798,9 +799,9 @@ protected:
 			  std::uint64_t add = 0>
 	Ptr getPtr_() const {
 		if constexpr (inplace)
-			return reader_.getPtrInplace_<mult, add>(start_ + size_, read48_(start_ + o));
+			return reader_->getPtrInplace_<mult, add>(start_ + size_, read48_(start_ + o));
 		else
-			return reader_.getPtr_<magic, mult, add>(read48_(start_ + o));
+			return reader_->getPtr_<magic, mult, add>(read48_(start_ + o));
 	}
 
 	template <std::uint64_t o, std::uint8_t bit, std::uint8_t def>
@@ -815,18 +816,18 @@ class UnionIn : public In {
 protected:
 	friend class In;
 
-	const Reader & reader_;
+	const Reader * reader_;
 	const std::uint16_t type_;
 	const std::uint64_t offset_;
 
-	UnionIn(const Reader & reader, std::uint16_t type, std::uint64_t offset_)
+	UnionIn(const Reader * reader, std::uint16_t type, std::uint64_t offset_)
 		: reader_(reader)
 		, type_(type)
 		, offset_(offset_) {}
 
 	template <std::uint32_t magic, std::uint64_t mult = 1, std::uint64_t add = 0>
 	Ptr getPtr_() const {
-		return reader_.getPtr_<magic, mult, add>(offset_);
+		return reader_->getPtr_<magic, mult, add>(offset_);
 	}
 };
 
@@ -835,12 +836,12 @@ class UnionIn<true> : public In {
 protected:
 	friend class In;
 
-	const Reader & reader_;
+	const Reader * reader_;
 	const std::uint16_t type_;
 	const char * start_;
 	const std::uint64_t size_;
 
-	UnionIn(const Reader & reader, std::uint16_t type, const char * start,
+	UnionIn(const Reader * reader, std::uint16_t type, const char * start,
 			std::uint64_t size)
 		: reader_(reader)
 		, type_(type)
@@ -849,7 +850,7 @@ protected:
 
 	template <std::uint32_t magic, std::uint64_t mult = 1, std::uint64_t add = 0>
 	Ptr getPtr_() const {
-		return reader_.getPtrInplace_<mult, add>(start_, size_);
+		return reader_->getPtrInplace_<mult, add>(start_, size_);
 	}
 };
 
@@ -1414,7 +1415,7 @@ ListAccessHelp<BoolTag, T>::Setter::Setter(Writer & writer, std::uint64_t offset
 
 template <typename T>
 void ListAccessHelp<BoolTag, T>::copy(Writer & writer, std::uint64_t offset,
-									  const Reader &, const char * start,
+									  const Reader *, const char * start,
 									  std::uint64_t size) {
 	memcpy(writer.data + offset, start, (size + 7) >> 3);
 }
@@ -1426,7 +1427,7 @@ ListAccessHelp<PodTag, T>::Setter::Setter(Writer & writer, std::uint64_t offset,
 
 template <typename T>
 void ListAccessHelp<PodTag, T>::copy(Writer & writer, std::uint64_t offset,
-									 const Reader &, const char * start,
+									 const Reader *, const char * start,
 									 std::uint64_t size) {
 	memcpy(writer.data + offset, start, size * sizeof(T));
 }
@@ -1438,7 +1439,7 @@ ListAccessHelp<EnumTag, T>::Setter ::Setter(Writer & writer, std::uint64_t offse
 
 template <typename T>
 void ListAccessHelp<EnumTag, T>::copy(Writer & writer, std::uint64_t offset,
-									  const Reader &, const char * start,
+									  const Reader *, const char * start,
 									  std::uint64_t size) {
 	memcpy(writer.data + offset, start, size * sizeof(T));
 }
@@ -1465,12 +1466,12 @@ TextOut ListAccessHelp<TextTag, T>::Setter::operator=(std::string_view t) {
 
 template <typename T>
 void ListAccessHelp<TextTag, T>::copy(Writer & writer, std::uint64_t offset,
-									  const Reader & reader, const char * start,
+									  const Reader * reader, const char * start,
 									  std::uint64_t size) {
 	for (size_t index = 0; index < size; ++index) {
 		std::uint64_t off = read48_(start + index * 6);
 		if (off == 0) continue;
-		auto t = getText_(reader, reader.getPtr_<TEXTMAGIC, 1, 1>(off));
+		auto t = getText_(reader, reader->getPtr_<TEXTMAGIC, 1, 1>(off));
 		auto v = writer.constructText(t);
 		write48_(writer.data + offset + 6 * index, v.offset_);
 	}
@@ -1484,12 +1485,12 @@ ListAccessHelp<BytesTag, T>::Setter::Setter(Writer & writer, std::uint64_t offse
 
 template <typename T>
 void ListAccessHelp<BytesTag, T>::copy(Writer & writer, std::uint64_t offset,
-									   const Reader & reader, const char * start,
+									   const Reader * reader, const char * start,
 									   std::uint64_t size) {
 	for (size_t index = 0; index < size; ++index) {
 		std::uint64_t off = read48_(start + index * 6);
 		if (off == 0) continue;
-		auto b = getBytes_(reader.getPtr_<BYTESMAGIC>(off));
+		auto b = getBytes_(reader->getPtr_<BYTESMAGIC>(off));
 		auto v = writer.constructBytes(b.first, b.second);
 		write48_(writer.data + offset + 6 * index, v.offset_);
 	}
@@ -1515,12 +1516,12 @@ T ListAccessHelp<TableTag, T>::add(Writer & w, std::uint64_t offset,
 
 template <typename T>
 void ListAccessHelp<TableTag, T>::copy(Writer & writer, std::uint64_t offset,
-									   const Reader & reader, const char * start,
+									   const Reader * reader, const char * start,
 									   std::uint64_t size) {
 	for (size_t index = 0; index < size; ++index) {
 		std::uint64_t off = read48_(start + index * 6);
 		if (off == 0) continue;
-		auto t = getObject_<typename T::IN>(reader, reader.getPtr_<T::MAGIC>(off));
+		auto t = getObject_<typename T::IN>(reader, reader->getPtr_<T::MAGIC>(off));
 		auto v = writer.construct<T>();
 		v.copy_(t);
 		write48_(writer.data + offset + 6 * index, v.offset_ - 10);
@@ -1529,7 +1530,7 @@ void ListAccessHelp<TableTag, T>::copy(Writer & writer, std::uint64_t offset,
 
 template <typename T>
 void ListAccessHelp<UnionTag, T>::copy(Writer & writer, std::uint64_t offset,
-									   const Reader & reader, const char * start,
+									   const Reader * reader, const char * start,
 									   std::uint64_t size) {
 	for (size_t index = 0; index < size; ++index) {
 		std::uint16_t type;

@@ -684,7 +684,7 @@ class Generator:
         )
         self.output_doc(node, "\t")
         self.o(
-            "\t%sIn<%s> %s() {"
+            "\t%sIn<%s> %s() const {"
             % (self.qualify(node.union), bs(node.inplace), lcamel(uname))
         )
         self.o("\t\tassert(has%s());" % (uname))
@@ -977,7 +977,7 @@ class Generator:
         )
         self.o("protected:")
         self.o(
-            "\t%sIn(const scalgoproto::Reader & reader, scalgoproto::Ptr p): scalgoproto::TableIn(reader, p) {}"
+            "\t%sIn(const scalgoproto::Reader * reader, scalgoproto::Ptr p): scalgoproto::TableIn(reader, p) {}"
             % table.name
         )
         self.o("public:")
