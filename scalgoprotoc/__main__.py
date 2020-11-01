@@ -5,7 +5,7 @@ Main executable
 import argparse
 import sys
 
-from . import ts_generator, cpp_generator, magic, python_generator, validate
+from . import ts_generator, cpp_generator, magic, python_generator, rust_generator, validate
 from .parser import ParseError, Parser
 
 parser = argparse.ArgumentParser(description="Process schema.")
@@ -15,7 +15,7 @@ magic.setup(subparsers)
 cpp_generator.setup(subparsers)
 python_generator.setup(subparsers)
 ts_generator.setup(subparsers)
-
+rust_generator.setup(subparsers)
 
 def main():
     args = parser.parse_args()
