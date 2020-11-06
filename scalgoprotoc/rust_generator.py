@@ -193,28 +193,6 @@ class Generator:
         else:
             raise ICE()
 
-    def list_access_type(self, node: Value) -> str:
-        if node.type_.type == TokenType.BOOL:
-            return "scalgoproto::BoolListRead"
-        elif node.type_.type in typeMap:
-            return "scalgoproto::PodListRead<%s>" % (typeMap[node.type_.type].p)
-        elif node.struct:
-            return "scalgoproto::StructListRead<%sIn>" % (node.struct.name)
-        elif node.enum:
-            return "scalgoproto::EnumListRead<%s>" % (node.enum.name)
-        elif node.table and node.direct:
-            return "scalgoproto::DirectTableListRead<%sIn>" % (node.table.name)
-        elif node.table:
-            return "scalgoproto::TableListRead<%sIn>" % (node.table.name)
-        elif node.union:
-            return "scalgoproto::UnionListRead<%sIn>" % (node.union.name)
-        elif node.type_.type == TokenType.TEXT:
-            return "scalgoproto::TextListRead"
-        elif node.type_.type == TokenType.BYTES:
-            return "scalgoproto::BytesListRead"
-        else:
-            raise ICE()
-
     def o(self, text="") -> None:
         print(text, file=self.out)
 
@@ -245,13 +223,13 @@ class Generator:
         self.o("%s */" % indent)
 
     def generate_list_in(self, node: Value, lname: str) -> None:
-        tn = self.list_access_type(node)
+        tn = self.list_access_type_lt(node)
         self.output_doc(node, "    ")
         directTable_ = "direct_table_" if node.direct else ""
         an = f"{node.table.name}In" if node.direct else tn
         self.o(
             f"""    #[inline]
-    pub fn {lname}(&self) -> Result<Option<scalgoproto::ListIn<{tn}>>> {{
+    pub fn {lname}(&self) -> Result<std::option::Option<scalgoproto::ListIn<'a, {tn}>>> {{
         self._reader.get_{directTable_}list{"_inplace" if node.inplace else ""}::<{an}>({node.offset})
     }}
 """
@@ -266,7 +244,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-    pub fn set_{lname}(&mut self, v: Option<&scalgoproto::ListOut::<'a, {ot}, Normal>>) {{
+    pub fn set_{lname}(&mut self, v: std::option::Option<&scalgoproto::ListOut::<'a, {ot}, Normal>>) {{
         self._slice.set_list({node.offset}, v)
     }}
 """
@@ -357,7 +335,7 @@ class Generator:
         if node.optional:
             self.o(
                 f"""    #[inline]
-    pub fn {lname}(&self) -> Option<bool> {{
+    pub fn {lname}(&self) -> std::option::Option<bool> {{
         if self._reader.get_bit({node.has_offset}, {node.has_bit}) {{
             Some(self._reader.get_bit({node.offset}, {node.bit}))
         }} else {{
@@ -380,7 +358,7 @@ class Generator:
         if node.optional:
             self.o(
                 f"""    #[inline]
-    pub fn {lname}(&mut self, v : Option<bool>) {{
+    pub fn {lname}(&mut self, v : std::option::Option<bool>) {{
         match v {{
             None => self._slice.set_bit({node.has_offset}, {node.has_bit}, false),
             Some(b) => {{
@@ -409,7 +387,7 @@ class Generator:
             if node.type_.type in (TokenType.F32, TokenType.F64):
                 self.o(
                     f"""    #[inline]
-    pub fn {lname}(&self) -> Option<{ti.p}> {{
+    pub fn {lname}(&self) -> std::option::Option<{ti.p}> {{
         match self._reader.get_pod::<{ti.p}>({node.offset}) {{
             None => None, 
             Some(v) if v.is_nan() => None, 
@@ -421,7 +399,7 @@ class Generator:
             else:
                 self.o(
                     f"""    #[inline]
-    pub fn {lname}(&self) -> Option<{ti.p}> {{
+    pub fn {lname}(&self) -> std::option::Option<{ti.p}> {{
         if self._reader.get_bit({node.has_offset}, {node.has_bit}) {{
             self._reader.get_pod({node.offset})
         }} else {{
@@ -449,7 +427,7 @@ class Generator:
         if node.optional and ti.p in ("f32", "f64"):
             self.o(
                 f"""    #[inline]
-    pub fn {lname}(&mut self, v : Option<{ti.p}>) {{
+    pub fn {lname}(&mut self, v : std::option::Option<{ti.p}>) {{
         match v {{
             None => self._slice.set_pod({node.offset}, &std::{ti.p}::NAN),
             Some(b) => self._slice.set_pod({node.offset}, &b)
@@ -460,7 +438,7 @@ class Generator:
         elif node.optional:
             self.o(
                 f"""    #[inline]
-    pub fn {lname}(&mut self, v : Option<{ti.p}>) {{
+    pub fn {lname}(&mut self, v : std::option::Option<{ti.p}>) {{
         match v {{
             None => self._slice.set_bit({node.has_offset}, {node.has_bit}, false),
             Some(b) => {{
@@ -486,7 +464,7 @@ class Generator:
         self.output_doc(node, "    ")
         self.o(
             f"""    #[inline]
-    pub fn {lname}(&self) -> Option<{node.enum.name}> {{
+    pub fn {lname}(&self) -> std::option::Option<{node.enum.name}> {{
         self._reader.get_enum({node.offset}, {node.parsed_value})
     }}
 """
@@ -498,7 +476,7 @@ class Generator:
         self.output_doc(node, "    ")
         self.o(
             f"""    #[inline]
-    pub fn {lname}(&mut self, v: Option<{node.enum.name}>) {{
+    pub fn {lname}(&mut self, v: std::option::Option<{node.enum.name}>) {{
         self._slice.set_enum({node.offset}, v)
     }}
 """
@@ -511,7 +489,7 @@ class Generator:
         if node.optional:
             self.o(
                 f"""    #[inline]
-    pub fn {lname}(&self) -> Option<{node.struct.name}In> {{
+    pub fn {lname}(&self) -> std::option::Option<{node.struct.name}In> {{
         if self._reader.get_bit({node.has_offset}, {node.has_bit}) {{
             Some(self._reader.get_struct::<{node.struct.name}In>({node.offset}))
         }} else {{
@@ -558,7 +536,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-    pub fn {lname}(&self) -> Result<Option<{tname}In>> {{
+    pub fn {lname}(&self) -> Result<std::option::Option<{tname}In>> {{
         self._reader.get_table::<{tname}In>({node.offset})
     }}
 """
@@ -567,7 +545,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-    pub fn {lname}(&self) -> Result<Option<{tname}In>> {{
+    pub fn {lname}(&self) -> Result<std::option::Option<{tname}In>> {{
         self._reader.get_table_inplace::<{tname}In>({node.offset})
     }}
 """
@@ -579,7 +557,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-    pub fn set_{lname}(&mut self, v: Option<& {tname}Out<'a, Normal>>) {{
+    pub fn set_{lname}(&mut self, v: std::option::Option<& {tname}Out<'a, Normal>>) {{
         self._slice.set_table({node.offset}, v)
     }}
 """
@@ -683,7 +661,7 @@ class Generator:
         self.output_doc(node, "    ")
         self.o(
             f"""    #[inline]
-    pub fn {lname}(&self) -> Result<Option<&str>> {{
+    pub fn {lname}(&self) -> Result<std::option::Option<&'a str>> {{
         self._reader.get_text{"_inplace" if node.inplace else ""}({node.offset})
     }}
 """
@@ -695,7 +673,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-    pub fn set_{lname}(&mut self, v: Option<&scalgoproto::TextOut<'a>>) {{
+    pub fn set_{lname}(&mut self, v: std::option::Option<&scalgoproto::TextOut<'a>>) {{
         self._slice.set_text({node.offset}, v)
     }}
 """
@@ -756,7 +734,7 @@ class Generator:
         self.output_doc(node, "    ")
         self.o(
             f"""    #[inline]
-    pub fn {lname}(&self) -> Result<Option<&[u8]>> {{
+    pub fn {lname}(&self) -> Result<std::option::Option<&[u8]>> {{
         self._reader.get_bytes{"_inplace" if node.inplace else ""}({node.offset})
     }}
 """
@@ -775,7 +753,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
-    pub fn set_{lname}(&mut self, bytes: Option<&scalgoproto::BytesOut<'a>>) {{
+    pub fn set_{lname}(&mut self, bytes: std::option::Option<&scalgoproto::BytesOut<'a>>) {{
         self._slice.set_bytes({node.offset}, bytes)
     }}
 """
@@ -928,7 +906,7 @@ pub enum {union.name}In<'a> {{
             f"""}}
 
 impl<'a> scalgoproto::UnionIn<'a> for {union.name}In<'a> {{
-    fn new(t: u16, magic: Option<u32>, offset: usize, size: usize, reader: &scalgoproto::Reader<'a>) 
+    fn new(t: u16, magic: std::option::Option<u32>, offset: usize, size: usize, reader: &scalgoproto::Reader<'a>)
         -> Result<Self> {{
         match t {{"""
         )
@@ -1314,7 +1292,7 @@ impl <'a> {name}In<'a> {{"""
             elif v.enum:
                 self.o(
                     f"""    #[inline]
-    pub fn {ident}(&self) -> Option<{v.enum.name}> {{
+    pub fn {ident}(&self) -> std::option::Option<{v.enum.name}> {{
         unsafe{{scalgoproto::to_enum(self._bytes[{v.offset}])}}
     }}
 """
@@ -1374,7 +1352,7 @@ impl <'a> {name}Out<'a> {{"""
             elif v.enum:
                 self.o(
                     f"""    #[inline]
-    pub fn {ident}(&mut self, v: Option<{v.enum.name}>) {{
+    pub fn {ident}(&mut self, v: std::option::Option<{v.enum.name}>) {{
         self._slice.set_enum({v.offset}, v)
     }}
 """

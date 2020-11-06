@@ -121,8 +121,6 @@ pub unsafe fn to_u48_usize(v: &[u8]) -> Result<usize> {
     }
 }
 
-
-
 #[derive(Copy, Clone)]
 pub struct Reader<'a> {
     full: &'a [u8],
