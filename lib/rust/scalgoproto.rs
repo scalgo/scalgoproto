@@ -29,7 +29,7 @@ pub trait Enum: Copy + std::fmt::Debug {
 #[derive(Debug)]
 pub enum Error {
     Utf8(std::str::Utf8Error),
-    InvalidPointer(),
+    InvalidPointer(usize, usize),
     Overflow(),
     BadMagic(u32, u32),
 }
@@ -42,7 +42,20 @@ impl From<std::str::Utf8Error> for Error {
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Scalgo proto error")
+        match self {
+            Error::Utf8(e) => write!(f, "Scalgo proto error: utf8 {}", e),
+            Error::InvalidPointer(offset, size) => write!(
+                f,
+                "Scalgo proto error: Invalid pointer at {} size is {}",
+                offset, size
+            ),
+            Error::Overflow() => write!(f, "Scalgo proto error: Overflow"),
+            Error::BadMagic(got, expected) => write!(
+                f,
+                "Scalgo proto error: Bad bagic got {} expected {}",
+                got, expected
+            ),
+        }
     }
 }
 
@@ -195,7 +208,7 @@ impl<'a> Reader<'a> {
             None => return Ok(None),
         };
         if self.full.len() < o + 10 {
-            return Err(Error::InvalidPointer());
+            return Err(Error::InvalidPointer(o + 10, self.full.len()));
         }
         let magic: u32 = unsafe { to_pod(&self.full[o..o + 4]) };
         let size = unsafe { to_u48_usize(&self.full[o + 4..o + 10]) }?;
@@ -223,7 +236,7 @@ impl<'a> Reader<'a> {
             }
         }
         if offset + size > self.full.len() {
-            return Err(Error::InvalidPointer());
+            return Err(Error::InvalidPointer(offset + size, self.full.len()));
         }
         Ok(T::new(Reader {
             full: self.full,
@@ -266,7 +279,7 @@ impl<'a> Reader<'a> {
             }
         }
         if offset + size > self.full.len() {
-            return Err(Error::InvalidPointer());
+            return Err(Error::InvalidPointer(offset + size, self.full.len()));
         }
         Ok(std::str::from_utf8(&self.full[offset..offset + size])?)
     }
@@ -299,7 +312,7 @@ impl<'a> Reader<'a> {
             }
         }
         if offset + size > self.full.len() {
-            return Err(Error::InvalidPointer());
+            return Err(Error::InvalidPointer(offset + size, self.full.len()));
         }
         Ok(&self.full[offset..offset + size])
     }
@@ -337,7 +350,7 @@ impl<'a> Reader<'a> {
         }
         let size_bytes = A::bytes(item_size, size);
         if offset + size_bytes > self.full.len() {
-            return Err(Error::InvalidPointer());
+            return Err(Error::InvalidPointer(offset + size_bytes, self.full.len()));
         }
         Ok(ListIn {
             reader: Reader {
@@ -374,7 +387,7 @@ impl<'a> Reader<'a> {
             return Err(Error::BadMagic(m, DIRECTLISTMAGIC));
         }
         if self.full.len() < o + 8 {
-            return Err(Error::InvalidPointer());
+            return Err(Error::InvalidPointer(o + 8, self.full.len()));
         }
 
         let table_magic: u32 = unsafe { to_pod(&self.full[o..o + 4]) };
@@ -385,8 +398,9 @@ impl<'a> Reader<'a> {
         let o = o + 8;
         let size_bytes = (item_size as usize) * size;
         if self.full.len() < o + size_bytes {
-            return Err(Error::InvalidPointer());
+            return Err(Error::InvalidPointer(o + size_bytes, self.full.len()));
         }
+
         Ok(Some(ListIn {
             reader: Reader {
                 full: self.full,
@@ -1438,7 +1452,7 @@ pub trait Table<'a> {
 /// Read a table from the given data
 pub fn read_message<'a, F: Table<'a> + 'a>(data: &'a [u8]) -> Result<F::In> {
     if data.len() < 10 {
-        return Err(Error::InvalidPointer());
+        return Err(Error::InvalidPointer(10, data.len()));
     }
     let r = Reader {
         full: data,
@@ -1447,7 +1461,7 @@ pub fn read_message<'a, F: Table<'a> + 'a>(data: &'a [u8]) -> Result<F::In> {
     match r.get_table::<F::In>(4) {
         Err(e) => Err(e),
         Ok(Some(v)) => Ok(v),
-        Ok(None) => Err(Error::InvalidPointer()),
+        Ok(None) => Err(Error::InvalidPointer(0, data.len())),
     }
 }
 
