@@ -246,7 +246,7 @@ impl<'a> Reader<'a> {
 
     pub fn get_direct_table<T: TableIn<'a> + 'a>(&self, offset: usize, size: usize) -> Result<T> {
         Ok(T::new(Reader {
-            full: self.part,
+            full: self.full,
             part: &self.part[offset..offset + size],
         }))
     }
