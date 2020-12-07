@@ -881,7 +881,7 @@ class Generator:
         name = union.name
         self.output_doc(union, "    ")
         self.o(
-            f"""#[derive(Debug)]
+            f"""#[derive(Debug, Clone, Copy)]
 pub enum {union.name}In<'a> {{
     NONE,"""
         )
@@ -1117,7 +1117,9 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
 
         self.output_doc(table, "")
         self.o(
-            f"""pub struct {name}In<'a> {{
+            f"""
+#[derive(Clone, Copy)]
+pub struct {name}In<'a> {{
     _reader: scalgoproto::Reader<'a>,
 }}
 impl<'a> {name}In<'a> {{"""
@@ -1234,14 +1236,12 @@ impl<'a> scalgoproto::Table<'a> for {name} {{
         size = node.bytes
 
         self.output_doc(node, "")
-        self.o(
-            f"""#[derive(Copy, Clone)]
-pub struct {name} {{}}
-"""
-        )
+        self.o(f"pub struct {name} {{}}")
         self.output_doc(node, "")
         self.o(
-            f"""pub struct {name}In<'a> {{
+            f"""
+#[derive(Copy, Clone)]
+pub struct {name}In<'a> {{
     _bytes: &'a [u8; {size}],
 }}
 

@@ -81,7 +81,7 @@ const BYTESMAGIC: u32 = 0xDCDBBE10;
 //========================================> READING <=========================================
 //============================================================================================
 
-pub trait StructIn<'a>: std::fmt::Debug {
+pub trait StructIn<'a>: std::fmt::Debug + Clone + Copy {
     type B;
     fn size() -> usize;
     fn new(bytes: &'a Self::B) -> Self;
@@ -443,13 +443,14 @@ impl<'a> Reader<'a> {
     }
 }
 
-pub trait ListRead<'a> {
+pub trait ListRead<'a> : Clone + Copy{
     type Output: std::fmt::Debug;
     type ItemSize: Copy;
     fn bytes(item_size: Self::ItemSize, size: usize) -> usize;
     unsafe fn get(item_size: Self::ItemSize, reader: &Reader<'a>, idx: usize) -> Self::Output;
 }
 
+#[derive(Clone, Copy)]
 pub struct ListIn<'a, A: ListRead<'a>> {
     reader: Reader<'a>,
     _len: usize,
@@ -534,6 +535,7 @@ impl<'a, A: ListRead<'a>> std::fmt::Debug for ListIn<'a, A> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct PodListRead<'a, T: Pod> {
     p: PhantomData<&'a T>,
 }
@@ -552,6 +554,7 @@ impl<'a, T: Pod> ListRead<'a> for PodListRead<'a, T> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct EnumListRead<'a, T: Enum> {
     p: PhantomData<&'a T>,
 }
@@ -569,6 +572,7 @@ impl<'a, T: Enum> ListRead<'a> for EnumListRead<'a, T> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct StructListRead<'a, S: StructIn<'a> + 'a> {
     p: PhantomData<&'a S>,
 }
@@ -586,6 +590,7 @@ impl<'a, S: StructIn<'a> + 'a> ListRead<'a> for StructListRead<'a, S> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct TextListRead<'a> {
     p: PhantomData<&'a u8>,
 }
@@ -603,6 +608,7 @@ impl<'a> ListRead<'a> for TextListRead<'a> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct BytesListRead<'a> {
     p: PhantomData<&'a u8>,
 }
@@ -620,6 +626,7 @@ impl<'a> ListRead<'a> for BytesListRead<'a> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct TableListRead<'a, T: TableIn<'a> + 'a> {
     p: PhantomData<&'a T>,
 }
@@ -637,6 +644,7 @@ impl<'a, T: TableIn<'a> + 'a> ListRead<'a> for TableListRead<'a, T> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct DirectTableListRead<'a, T: TableIn<'a> + 'a> {
     phantom: PhantomData<&'a T>,
 }
@@ -654,6 +662,7 @@ impl<'a, T: TableIn<'a> + 'a> ListRead<'a> for DirectTableListRead<'a, T> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct BoolListRead<'a> {
     p: PhantomData<&'a bool>,
 }
@@ -671,6 +680,7 @@ impl<'a> ListRead<'a> for BoolListRead<'a> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct UnionListRead<'a, U: UnionIn<'a> + 'a> {
     p: PhantomData<&'a U>,
 }
@@ -688,7 +698,7 @@ impl<'a, U: UnionIn<'a> + 'a> ListRead<'a> for UnionListRead<'a, U> {
     }
 }
 
-pub trait UnionIn<'a>: std::fmt::Debug + std::marker::Sized {
+pub trait UnionIn<'a>: std::fmt::Debug + std::marker::Sized + Clone + Copy {
     fn new(
         t: u16,
         magic: Option<u32>,
@@ -698,7 +708,7 @@ pub trait UnionIn<'a>: std::fmt::Debug + std::marker::Sized {
     ) -> Result<Self>;
 }
 
-pub trait TableIn<'a>: std::fmt::Debug {
+pub trait TableIn<'a>: std::fmt::Debug + Clone + Copy {
     fn magic() -> u32;
     fn new(reader: Reader<'a>) -> Self;
 }
