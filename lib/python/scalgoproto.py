@@ -13,7 +13,7 @@ from typing import (
     TypeVar,
     Union,
     Optional,
-    Any
+    Any,
 )
 
 MESSAGE_MAGIC = 0xB5C0C4B3
@@ -22,9 +22,11 @@ BYTES_MAGIC = 0xDCDBBE10
 LIST_MAGIC = 0x3400BB46
 DIRECT_LIST_MAGIC = 0xE2C6CC05
 
+
 class Hash(ABC):
     def update(self, data: bytes) -> None:
         pass
+
 
 def digest(h: Hash, v: Any) -> None:
     if v is None:
@@ -46,7 +48,9 @@ def digest(h: Hash, v: Any) -> None:
         else:
             assert False
 
+
 B = TypeVar("B")
+
 
 class StructType(Generic[B]):
     _WIDTH: ClassVar[int] = 0
@@ -77,8 +81,10 @@ class StructType(Generic[B]):
             digest(h, getattr(self, m))
         h.update(b"\xff\xe2")
 
+
 TI = TypeVar("TI", bound="TableIn")
 TO = TypeVar("TO", bound="TableOut")
+UI = TypeVar("UI", bound="UnionIn")
 UO = TypeVar("UO", bound="UnionOut")
 E = TypeVar("E", bound=enum.IntEnum)
 S = TypeVar("S", bound=StructType)
@@ -164,10 +170,13 @@ class ListIn(Sequence[B]):
             digest(h, v)
         h.update(b"\xff\xe4")
 
+
 class UnionIn(object):
     __slots__ = ["_reader", "_type", "_offset", "_size"]
 
-    def __init__(self, reader: "Reader", type: int, offset: int, size: Optional[int] = None):
+    def __init__(
+        self, reader: "Reader", type: int, offset: int, size: Optional[int] = None
+    ):
         """Private constructor. Use the accessor methods on tables or the root method on Reader to get an instance"""
         self._reader = reader
         self._type = type
@@ -194,7 +203,7 @@ class UnionIn(object):
         return {m: v}
 
     def _digest(self, h: Hash) -> None:
-        h.update(b"\xff\xe5%d"%(self._type))
+        h.update(b"\xff\xe5%d" % (self._type))
         if self._type == 0:
             return
         m = self._MEMBERS[self._type - 1]
@@ -408,6 +417,15 @@ class Reader(object):
                 lambda r, s, i: True,
             )
 
+    def _get_union_list(self, t: Type[UI], off: int, size: int) -> ListIn[UI]:
+        return ListIn[UI](
+            self,
+            size,
+            off,
+            lambda r, s, i: t._read(r, s + i * t._WIDTH),
+            lambda r, s, i: True,
+        )
+
     def _get_bool_list(self, off: int, size: int) -> ListIn[bool]:
         return ListIn[bool](
             self,
@@ -598,7 +616,9 @@ class TableOut(object):
         )[0]
 
     def _add_inplace_text(self, o: int, t: str) -> None:
-        assert self._writer._used == self._offset + self._SIZE, 'No object may be created between table and its implace text'
+        assert (
+            self._writer._used == self._offset + self._SIZE
+        ), "No object may be created between table and its implace text"
         tt = t.encode("utf-8")
         self._writer._put(self._offset + o, pack48_(len(tt)))
         self._writer._reserve(len(tt) + 1)
@@ -606,7 +626,9 @@ class TableOut(object):
         self._writer._write(b"\0")
 
     def _add_inplace_bytes(self, o: int, t: bytes) -> None:
-        assert self._writer._used == self._offset + self._SIZE, 'No object may be created between table and its implace bytes'
+        assert (
+            self._writer._used == self._offset + self._SIZE
+        ), "No object may be created between table and its implace bytes"
         self._writer._put(self._offset + o, pack48_(len(t)))
         self._writer._reserve(len(t))
         self._writer._write(t)
@@ -638,7 +660,9 @@ class UnionOut(object):
         self._set(idx, v._offset - 10)
 
     def _add_inplace_text(self, idx: int, v: str) -> None:
-        assert self._writer._used == self._end, 'No object may be created between table and its implace text'
+        assert (
+            self._writer._used == self._end
+        ), "No object may be created between table and its implace text"
         tt = v.encode("utf-8")
         self._set(idx, len(tt))
         self._writer._reserve(len(tt) + 1)
@@ -646,7 +670,9 @@ class UnionOut(object):
         self._writer._write(b"\0")
 
     def _add_inplace_bytes(self, idx: int, t: bytes) -> None:
-        assert self._writer._used == self._end, 'No object may be created between table and its implace bytes'
+        assert (
+            self._writer._used == self._end
+        ), "No object may be created between table and its implace bytes"
         self._set(idx, len(t))
         self._writer._reserve(len(t))
         self._writer._write(t)
@@ -783,6 +809,7 @@ class DirectTableListOut(OutList, Generic[TO]):
         for i in range(self._size):
             self[i]._copy(inp[i])
 
+
 class TextListOut(OutList):
     def __init__(self, writer: "Writer", size: int, with_header: bool = True) -> None:
         """Private constructor. Use factory methods on writer"""
@@ -883,7 +910,9 @@ class Writer:
     def construct_table_list(self, s: Type[TO], size: int) -> TableListOut[TO]:
         return TableListOut[S](self, s, size)
 
-    def construct_direct_table_list(self, s: Type[TO], size: int) -> TableListOut[TO]:
+    def construct_direct_table_list(
+        self, s: Type[TO], size: int
+    ) -> DirectTableListOut[TO]:
         return DirectTableListOut[S](self, s, size)
 
     def construct_text_list(self, size: int) -> TextListOut:

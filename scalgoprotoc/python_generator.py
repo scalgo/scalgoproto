@@ -183,7 +183,7 @@ class Generator:
         self.o("    def %s(self) -> scalgoproto.ListIn[%s]:" % (uname, tn))
         self.output_doc(node, "        ")
         self.o("        if not self.has_%s:" % uname)
-        self.o("            return []")
+        self.o("            return [] # type: ignore")
         self.o(acc)
         self.o()
 
@@ -200,7 +200,9 @@ class Generator:
         self.o()
 
     def generate_inplace_list_constructor(self, node: Value) -> None:
-        if node.type_.type in typeMap:
+        if node.type_.type == TokenType.BOOL:
+            self.o("        l = scalgoproto.BoolListOut(self._writer, size, False)")
+        elif node.type_.type in typeMap:
             ti = typeMap[node.type_.type]
             self.o(
                 "        l = scalgoproto.BasicListOut[%s](self._writer, '%s', %d, size, False)"
@@ -262,7 +264,7 @@ class Generator:
             self.o("    def %s(self, value: %s) -> None:" % (uname, it))
             self.output_doc(node, "        ")
             self.o("        assert isinstance(value, scalgoproto.ListIn)")
-            self.o("        add_%s(len(value))._copy(value)" % (uname))
+            self.o("        self.add_%s(len(value))._copy(value)" % (uname))
             self.o()
 
             self.o(
@@ -270,7 +272,9 @@ class Generator:
                 % (uname, self.out_list_type(node))
             )
             self.output_doc(node, "        ")
-            self.o("        assert self._writer._used == self._offset + self._SIZE, 'No object may be created between table and its implace list'")
+            self.o(
+                "        assert self._writer._used == self._offset + self._SIZE, 'No object may be created between table and its implace list'"
+            )
             self.generate_inplace_list_constructor(node)
             self.o("        self._set_inplace_list(%d, size)" % (node.offset))
             self.o("        return l")
@@ -306,14 +310,16 @@ class Generator:
             self.o("    def %s(self, value: %s) -> None:" % (uname, it))
             self.output_doc(node, "        ")
             self.o("        assert isinstance(value, scalgoproto.ListIn)")
-            self.o("        add_%s(len(value))._copy(value)" % (uname))
+            self.o("        self.add_%s(len(value))._copy(value)" % (uname))
             self.o()
             self.o(
                 "    def add_%s(self, size: int) -> %s:"
                 % (uname, self.out_list_type(node))
             )
             self.output_doc(node, "        ")
-            self.o("        assert self._writer._used == self._end, 'No object may be created between table and its implace list'")
+            self.o(
+                "        assert self._writer._used == self._end, 'No object may be created between table and its implace list'"
+            )
             self.o("        self._set(%d, size)" % (idx,))
             self.generate_inplace_list_constructor(node)
             self.o("        return l")
@@ -326,7 +332,7 @@ class Generator:
             self.o("    @property")
             self.o("    def has_%s(self) -> bool:" % (uname,))
             self.o(
-                "        return self._get_bit(%d, %s, 0)"
+                "        return self._get_bit(%d, %s, False)"
                 % (node.has_offset, node.has_bit)
             )
             self.o()
@@ -335,7 +341,7 @@ class Generator:
         self.output_doc(node, "        ")
         if node.optional:
             self.o("        assert self.has_%s" % uname)
-        self.o("        return self._get_bit(%d, %s, 0)" % (node.offset, node.bit))
+        self.o("        return self._get_bit(%d, %s, False)" % (node.offset, node.bit))
         self.o()
 
     def generate_bool_out(self, node: Value, uname: str) -> None:
@@ -366,7 +372,7 @@ class Generator:
                 )
             else:
                 self.o(
-                    "        return self._get_bit(%d, %s, 0)"
+                    "        return self._get_bit(%d, %s, False)"
                     % (node.has_offset, node.has_bit)
                 )
             self.o()
@@ -433,7 +439,7 @@ class Generator:
             self.o("    @property")
             self.o("    def has_%s(self) -> bool:" % (uname,))
             self.o(
-                "        return self._get_bit(%d, %s, 0)"
+                "        return self._get_bit(%d, %s, False)"
                 % (node.has_offset, node.has_bit)
             )
             self.o()
@@ -531,7 +537,9 @@ class Generator:
             self.o()
             self.o("    def add_%s(self) -> %sOut:" % (uname, node.table.name))
             self.output_doc(node, "        ")
-            self.o("        assert self._writer._used == self._offset + self._SIZE, 'No object may be created between table and its implace table'")
+            self.o(
+                "        assert self._writer._used == self._offset + self._SIZE, 'No object may be created between table and its implace table'"
+            )
             self.o(
                 "        self._set_uint48(%d, %d)"
                 % (node.offset, len(node.table.default))
@@ -587,7 +595,9 @@ class Generator:
             self.o()
             self.o("    def add_%s(self) -> %sOut:" % (uname, table.name))
             self.output_doc(node, "        ")
-            self.o("        assert self._end == self._writer._used, 'No object may be created between table and its implace table'")
+            self.o(
+                "        assert self._end == self._writer._used, 'No object may be created between table and its implace table'"
+            )
             self.o("        self._set(%d, %d)" % (idx, table.bytes))
             self.o("        return %sOut(self._writer, False)" % table.name)
             self.o()
@@ -833,7 +843,7 @@ class Generator:
 
         self.o("class %sIn(scalgoproto.UnionIn):" % union.name)
         self.output_doc(union, "    ")
-        self.o("    __slots__ = []")
+        self.o("    __slots__: typing_.List[str] = []")
         self.o("    _MEMBERS = [")
         for node in union.members:
             self.o('        "%s",' % snake(self.value(node.identifier)))
@@ -881,7 +891,7 @@ class Generator:
         self.o()
 
         self.o("class %sOut(scalgoproto.UnionOut):" % union.name)
-        self.o("    __slots__ = []")
+        self.o("    __slots__: typing_.List[str] = []")
         self.o()
         self.o(
             "    def __init__(self, writer: scalgoproto.Writer, offset: int, end: int = 0) -> None:"
@@ -909,7 +919,7 @@ class Generator:
         self.o()
 
         self.o("class %sInplaceOut(scalgoproto.UnionOut):" % union.name)
-        self.o("    __slots__ = []")
+        self.o("    __slots__: typing_.List[str] = []")
         self.o()
         self.o(
             "    def __init__(self, writer: scalgoproto.Writer, offset: int, end: int = 0) -> None:"
@@ -998,8 +1008,10 @@ class Generator:
         # Generate table reader
         self.o("class %sIn(scalgoproto.TableIn):" % table.name)
         self.output_doc(table, "    ")
-        self.o("    __slots__ = []")
-        self.o("    _MAGIC: typing_.ClassVar[int] = 0x%08X" % table.magic)
+        self.o("    __slots__: typing_.List[str] = []")
+        self.o(
+            "    _MAGIC: typing_.ClassVar[int] = 0x%08X # type: ignore" % table.magic
+        )
         self.o("    _MEMBERS = [")
         for node in table.members:
             self.o('        "%s",' % snake(self.value(node.identifier)))
@@ -1013,8 +1025,10 @@ class Generator:
         # Generate Table writer
         self.o("class %sOut(scalgoproto.TableOut):" % table.name)
         self.output_doc(table, "    ")
-        self.o("    __slots__ = []")
-        self.o("    _MAGIC: typing_.ClassVar[int] = 0x%08X" % table.magic)
+        self.o("    __slots__: typing_.List[str] = []")
+        self.o(
+            "    _MAGIC: typing_.ClassVar[int] = 0x%08X # type: ignore" % table.magic
+        )
         self.o("    _SIZE: typing_.ClassVar[int] = %d" % len(table.default))
         self.o('    _DEFAULT: typing_.ClassVar[bytes] = b"%s"' % cescape(table.default))
         self.o("    _IN = %sIn" % (table.name))
