@@ -443,7 +443,7 @@ impl<'a> Reader<'a> {
     }
 }
 
-pub trait ListRead<'a> : Clone + Copy{
+pub trait ListRead<'a>: Clone + Copy {
     type Output: std::fmt::Debug;
     type ItemSize: Copy;
     fn bytes(item_size: Self::ItemSize, size: usize) -> usize;
