@@ -177,7 +177,7 @@ class Annotater:
 
     def visit_content(
         self, name: str, values: List[Value], t: ContentType, inplace_context: bool
-    ) -> Tuple[bytes , List[Value]]:
+    ) -> Tuple[bytes, List[Value]]:
         content: Dict[str, Token] = {}
         bytes = 0
         default = []
@@ -533,7 +533,9 @@ class Annotater:
                 name = self.validate_uname(node.identifier)
                 node.name = name
                 self.attach_namespace(node)
-                default, node.members = self.visit_content(name, node.members, ContentType.STRUCT, False)
+                default, node.members = self.visit_content(
+                    name, node.members, ContentType.STRUCT, False
+                )
                 self.structs[name] = node
                 node.bytes = len(default)
             elif isinstance(node, Enum):
@@ -563,7 +565,9 @@ class Annotater:
                 name = self.validate_uname(node.identifier)
                 node.name = name
                 self.attach_namespace(node)
-                default, node.members = self.visit_content(name, node.members, ContentType.UNION, False)
+                default, node.members = self.visit_content(
+                    name, node.members, ContentType.UNION, False
+                )
                 self.unions[name] = node
             elif isinstance(node, Namespace):
                 self.namespace[node.document] = node.namespace

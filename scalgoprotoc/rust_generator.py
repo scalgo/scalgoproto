@@ -83,7 +83,9 @@ class Generator:
         elif node.enum:
             return "scalgoproto::EnumListWrite<%s>" % (node.enum.name)
         elif node.table and node.direct:
-            return "scalgoproto::DirectTableListWrite<'a, %sOut<'a, Normal>>" % (node.table.name)
+            return "scalgoproto::DirectTableListWrite<'a, %sOut<'a, Normal>>" % (
+                node.table.name
+            )
         elif node.table:
             return "scalgoproto::TableListWrite<%sOut<'a, Normal>>" % (node.table.name)
         elif node.union:
@@ -298,6 +300,7 @@ class Generator:
             # TODO We would like to return a in this method but, we cannot get the lifetimes to work out
             self.o(
                 f"""    #[inline]
+    #[allow(clippy::needless_lifetimes)]
     pub fn copy_{lname}<'b>(&mut self, i: scalgoproto::ListIn<'b, {tn}>) -> Result<()> {{
         let s: usize = i.len();
         let mut a = self.add_{lname}(s);
@@ -319,6 +322,7 @@ class Generator:
             # TODO We would like to return a in this method but, we cannot get the lifetimes to work out
             self.o(
                 f"""    #[inline]
+    #[allow(clippy::needless_lifetimes)]
     pub fn copy_{lname}<'b>(&mut self, i: scalgoproto::ListIn<'b, {tn}>) -> Result<()> {{
         let s: usize = i.len();
         let mut a = self.add_{lname}(s);
@@ -630,6 +634,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
+    #[allow(clippy::needless_lifetimes)]
     pub fn copy_{lname}<'b>(&mut self, i: {tname}In<'b>)
         -> Result<{tname}Out<'a, Normal>> {{
         let mut a = self.add_{lname}();
@@ -651,6 +656,7 @@ class Generator:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
+    #[allow(clippy::needless_lifetimes)]
     pub fn copy_{lname}<'b>(&mut self, i: {tname}In<'b>) -> Result<()> {{
         let mut a = self.add_{lname}();
         a.copy_in(i)
@@ -883,7 +889,7 @@ class Generator:
         self.o(
             f"""#[derive(Debug, Clone, Copy)]
 pub enum {union.name}In<'a> {{
-    NONE,"""
+    None,"""
         )
         for member in union.members:
             if not isinstance(member, (Table, Value)):
@@ -929,10 +935,10 @@ impl<'a> scalgoproto::UnionIn<'a> for {union.name}In<'a> {{
                     f"        {i+1} => Ok(Self::{uname}(reader.get_text_union(magic, offset, size)?)),"
                 )
             else:
-                self.o(f"        {i+1} => Ok(Self::NONE),")
+                self.o(f"        {i+1} => Ok(Self::None),")
 
         self.o(
-            f"""        _ => Ok(Self::NONE),
+            f"""        _ => Ok(Self::None),
         }}
     }}
 }}
@@ -1012,7 +1018,7 @@ impl<'a> scalgoproto::Union<'a> for {name} {{
 impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Normal> {{
     fn copy_in(&mut self, i: {name}In<'b>) -> Result<()> {{
         match i {{
-            {name}In::NONE => {{self.set_none();}},"""
+            {name}In::None => {{self.set_none();}},"""
         )
         for member in union.members:
             lname = snake(self.value(member.identifier))
@@ -1034,7 +1040,7 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Normal> {{
 impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
     fn copy_in(&mut self, i: {name}In<'b>) -> Result<()> {{
         match i {{
-            {name}In::NONE => {{}},"""
+            {name}In::None => {{}},"""
         )
         for member in union.members:
             lname = snake(self.value(member.identifier))

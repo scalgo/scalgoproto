@@ -273,7 +273,12 @@ class Parser:
         doc_comment: Token = None
         while True:
             t = self.consume_token(
-                [TokenType.RBRACE, TokenType.IDENTIFIER, TokenType.DOCCOMMENT, TokenType.REMOVED]
+                [
+                    TokenType.RBRACE,
+                    TokenType.IDENTIFIER,
+                    TokenType.DOCCOMMENT,
+                    TokenType.REMOVED,
+                ]
             )
             if t.type == TokenType.DOCCOMMENT:
                 doc_comment = t

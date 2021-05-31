@@ -54,7 +54,8 @@ def runRustSetup(schemas: List[str], main_file: str) -> bool:
     shutil.copyfile("lib/rust/scalgoproto.rs", "tmp/rust/src/scalgoproto.rs")
     shutil.copyfile("test/test_all.rs", "tmp/rust/src/test_all.rs")
     with open("tmp/rust/Cargo.toml", "w") as f:
-        f.write("""
+        f.write(
+            """
     [package]
 name = "test"
 version = "0.1.0"
@@ -67,7 +68,8 @@ path = "src/scalgoproto.rs"
 [[bin]]
 name = "ptest"
 path = "src/test_all.rs"
-""")
+"""
+        )
 
     for schema in schemas:
         subprocess.check_call(
@@ -276,7 +278,8 @@ def main():
     ):
         runTest(
             "cpp mmap stress test",
-            lambda: subprocess.check_call(["tmp/bin", "mmap_stress", "test/mmap.bin"]) or True,
+            lambda: subprocess.check_call(["tmp/bin", "mmap_stress", "test/mmap.bin"])
+            or True,
         )
         runTest(
             "cpp out default simple",
@@ -378,7 +381,8 @@ def main():
     if runTest(
         "rs setup",
         lambda: runRustSetup(
-            ["test/base.spr", "test/complex2.spr", "test/union.spr"], "test/test_base.rs"
+            ["test/base.spr", "test/complex2.spr", "test/union.spr"],
+            "test/test_base.rs",
         ),
     ):
         runTest(

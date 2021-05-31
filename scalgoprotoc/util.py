@@ -24,6 +24,7 @@ def lcamel(n: str) -> str:
     """Convert a string in upper or lower camel case to lower camel case"""
     return n[0].lower() + n[1:]
 
+
 def usnake(n: str) -> str:
     out: List[str] = []
     for c in n:
@@ -33,6 +34,7 @@ def usnake(n: str) -> str:
         else:
             out.append(c.upper())
     return "".join(out)
+
 
 def snake(n: str) -> str:
     """Convert a string in upper or lower camel case to snake case"""
