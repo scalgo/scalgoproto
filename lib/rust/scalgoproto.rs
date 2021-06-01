@@ -135,7 +135,6 @@ pub unsafe fn to_u48(v: &[u8]) -> u64 {
     out
 }
 
-
 /// # Safety
 ///
 /// Should only be called when v.len() >= 6
