@@ -129,6 +129,7 @@ class ListIn(Sequence[B]):
         offset: int,
         getter: Callable[["Reader", int, int], B],
         haser: Callable[["Reader", int, int], bool],
+        require_has: bool,
     ) -> None:
         """Private constructor. Use the accessor methods on tables to get an instance"""
         self._reader = reader
@@ -136,6 +137,7 @@ class ListIn(Sequence[B]):
         self._size = size
         self._getter = getter
         self._haser = haser
+        self._require_has = require_has
 
     def has(self, idx: int) -> bool:
         """Return True if there is an element on possision idx. Note that idx must be less than size"""
@@ -149,7 +151,7 @@ class ListIn(Sequence[B]):
             idx += self._size
         if not 0 <= idx < self._size:
             raise IndexError()
-        if not self.has(idx):
+        if self._require_has and not self.has(idx):
             raise IndexError()
         return self._getter(self._reader, self._offset, idx)
 
@@ -361,6 +363,8 @@ class TableIn(object):
 
     def _get_ptr(self, o: int, magic: int) -> Tuple[int, int]:
         off = self._get_uint48_f(o)
+        if off == 0:
+            return (0, 0)
         size = self._reader._read_size(off, magic)
         return (off + 10, size)
 
@@ -389,6 +393,8 @@ class Reader(object):
 
             def getter(r: "Reader", s: int, i: int) -> TI:
                 ooo = unpack48_(r._data[s + 6 * i : s + 6 * i + 6])
+                if ooo == 0:
+                    return t(r, 0, 0)
                 sss = r._read_size(ooo, t._MAGIC)
                 return t(r, ooo + 10, sss)
 
@@ -398,6 +404,7 @@ class Reader(object):
                 off,
                 getter,
                 lambda r, s, i: unpack48_(r._data[s + 6 * i : s + 6 * i + 6]) != 0,
+                False,
             )
         else:
             magic, item_size = struct.unpack("<II", self._data[off : off + 8])
@@ -415,6 +422,7 @@ class Reader(object):
                 off + 8,
                 lambda r, s, i: t(r, s + i * item_size, item_size),
                 lambda r, s, i: True,
+                False,
             )
 
     def _get_union_list(self, t: Type[UI], off: int, size: int) -> ListIn[UI]:
@@ -424,6 +432,7 @@ class Reader(object):
             off,
             lambda r, s, i: t._read(r, s + i * t._WIDTH),
             lambda r, s, i: True,
+            False,
         )
 
     def _get_bool_list(self, off: int, size: int) -> ListIn[bool]:
@@ -433,6 +442,7 @@ class Reader(object):
             off,
             lambda r, s, i: (r._data[s + (i >> 3)] >> (i & 7)) & 1 != 0,
             lambda r, s, i: True,
+            False,
         )
 
     def _get_int_list(self, f: str, w: int, off: int, size: int) -> ListIn[int]:
@@ -444,6 +454,7 @@ class Reader(object):
                 0
             ],
             lambda r, s, i: True,
+            False,
         )
 
     def _get_float_list(self, f: str, w: int, off: int, size: int) -> ListIn[float]:
@@ -457,6 +468,7 @@ class Reader(object):
             lambda r, s, i: not math.isnan(
                 struct.unpack("<" + f, r._data[s + i * w : s + i * w + w])[0]
             ),
+            False,
         )
 
     def _get_struct_list(self, t: Type[S], off: int, size: int) -> ListIn[S]:
@@ -466,6 +478,7 @@ class Reader(object):
             off,
             lambda r, s, i: t._read(r, s + i * t._WIDTH),
             lambda r, s, i: True,
+            False,
         )
 
     def _get_enum_list(self, t: Type[E], off: int, size: int) -> ListIn[E]:
@@ -475,11 +488,14 @@ class Reader(object):
             off,
             lambda r, s, i: t(r._data[s + i]),
             lambda r, s, i: r._data[s + i] != 255,
+            True,
         )
 
     def _get_text_list(self, off: int, size: int) -> ListIn[str]:
         def getter(r: "Reader", s: int, i: int) -> str:
             ooo = unpack48_(r._data[s + 6 * i : s + 6 * i + 6])
+            if ooo == 0:
+                return ""
             sss = r._read_size(ooo, TEXT_MAGIC)
             return r._data[ooo + 10 : ooo + 10 + sss].decode("utf-8")
 
@@ -489,6 +505,7 @@ class Reader(object):
             off,
             getter,
             lambda r, s, i: unpack48_(r._data[s + 6 * i : s + 6 * i + 6]) != 0,
+            False,
         )
 
     def _get_bytes_list(self, off: int, size: int) -> ListIn[bytes]:
@@ -503,6 +520,7 @@ class Reader(object):
             off,
             getter,
             lambda r, s, i: unpack48_(r._data[s + 6 * i : s + 6 * i + 6]) != 0,
+            False,
         )
 
     def root(self, type: Type[TI]) -> TI:

@@ -178,21 +178,31 @@ class Generator:
         self.o('%s"""' % indent)
 
     def generate_list_in(self, node: Value, uname: str) -> None:
-        self.o("    @property")
-        self.o("    def has_%s(self) -> bool:" % (uname,))
-        self.o("        return self._get_uint48(%d) != 0" % (node.offset,))
         (tn, acc) = self.in_list_help(
             node,
             f"*self._get_ptr{'_inplace' if node.inplace else ''}({node.offset}, scalgoproto.{'DIRECT_' if node.direct else ''}LIST_MAGIC)",
         )
-        self.o()
-        self.o("    @property")
-        self.o("    def %s(self) -> scalgoproto.ListIn[%s]:" % (uname, tn))
-        self.output_doc(node, "        ")
-        self.o("        if not self.has_%s:" % uname)
-        self.o("            return [] # type: ignore")
-        self.o(acc)
-        self.o()
+        if node.optional:
+            self.o("    @property")
+            self.o("    def has_%s(self) -> bool:" % (uname,))
+            self.o("        return self._get_uint48(%d) != 0" % (node.offset,))
+            self.o()
+            self.o("    @property")
+            self.o(
+                "    def %s(self) -> typing_.Optional[scalgoproto.ListIn[%s]]:"
+                % (uname, tn)
+            )
+            self.output_doc(node, "        ")
+            self.o("        if not self.has_%s:" % uname)
+            self.o("            return None")
+            self.o(acc)
+            self.o()
+        else:
+            self.o("    @property")
+            self.o("    def %s(self) -> scalgoproto.ListIn[%s]:" % (uname, tn))
+            self.output_doc(node, "        ")
+            self.o(acc)
+            self.o()
 
     def generate_union_list_in(self, node: Value, uname: str) -> None:
         (tn, acc) = self.in_list_help(
@@ -344,13 +354,23 @@ class Generator:
                 % (node.has_offset, node.has_bit)
             )
             self.o()
-        self.o("    @property")
-        self.o("    def %s(self) -> bool:" % (uname,))
-        self.output_doc(node, "        ")
-        if node.optional:
-            self.o("        assert self.has_%s" % uname)
-        self.o("        return self._get_bit(%d, %s, False)" % (node.offset, node.bit))
-        self.o()
+            self.o("    @property")
+            self.o("    def %s(self) -> typing_.Optional[bool]:" % (uname,))
+            self.output_doc(node, "        ")
+            self.o("        if not self.has_%s:" % uname)
+            self.o("            return None")
+            self.o(
+                "        return self._get_bit(%d, %s, False)" % (node.offset, node.bit)
+            )
+            self.o()
+        else:
+            self.o("    @property")
+            self.o("    def %s(self) -> bool:" % (uname,))
+            self.output_doc(node, "        ")
+            self.o(
+                "        return self._get_bit(%d, %s, False)" % (node.offset, node.bit)
+            )
+            self.o()
 
     def generate_bool_out(self, node: Value, uname: str) -> None:
         if node.inplace:
@@ -385,20 +405,37 @@ class Generator:
                     % (node.has_offset, node.has_bit)
                 )
             self.o()
-        self.o("    @property")
-        self.o("    def %s(self) -> %s:" % (uname, ti.p))
-        self.output_doc(node, "        ")
-        if node.optional:
-            self.o("        assert self.has_%s" % uname)
-        self.o(
-            "        return self._get_%s(%d, %s)"
-            % (
-                ti.n,
-                node.offset,
-                node.parsed_value if not math.isnan(node.parsed_value) else "math_.nan",
+            self.o("    @property")
+            self.o("    def %s(self) -> typing_.Optional[%s]:" % (uname, ti.p))
+            self.output_doc(node, "        ")
+            self.o("        if not self.has_%s:" % uname)
+            self.o("            return None")
+            self.o(
+                "        return self._get_%s(%d, %s)"
+                % (
+                    ti.n,
+                    node.offset,
+                    node.parsed_value
+                    if not math.isnan(node.parsed_value)
+                    else "math_.nan",
+                )
             )
-        )
-        self.o()
+            self.o()
+        else:
+            self.o("    @property")
+            self.o("    def %s(self) -> %s:" % (uname, ti.p))
+            self.output_doc(node, "        ")
+            self.o(
+                "        return self._get_%s(%d, %s)"
+                % (
+                    ti.n,
+                    node.offset,
+                    node.parsed_value
+                    if not math.isnan(node.parsed_value)
+                    else "math_.nan",
+                )
+            )
+            self.o()
 
     def generate_basic_out(self, node: Value, uname: str) -> None:
         if node.inplace:
@@ -420,14 +457,15 @@ class Generator:
         self.o("    @property")
         self.o("    def has_%s(self) -> bool:" % (uname,))
         self.o(
-            "        return self._get_uint8(%d, %d) != 255"
-            % (node.offset, node.parsed_value)
+            "        return self._get_uint8(%d, %d) < %d"
+            % (node.offset, node.parsed_value, len(node.enum.members))
         )
         self.o()
         self.o("    @property")
-        self.o("    def %s(self) -> %s:" % (uname, node.enum.name))
+        self.o("    def %s(self) -> typing_.Optional[%s]:" % (uname, node.enum.name))
         self.output_doc(node, "        ")
-        self.o("        assert self.has_%s" % uname)
+        self.o("        if not self.has_%s:" % uname)
+        self.o("            return None")
         self.o(
             "        return %s(self._get_uint8(%d, %s))"
             % (node.enum.name, node.offset, node.parsed_value)
@@ -456,16 +494,28 @@ class Generator:
                 % (node.has_offset, node.has_bit)
             )
             self.o()
-        self.o("    @property")
-        self.o("    def %s(self) -> %s:" % (uname, node.struct.name))
-        self.output_doc(node, "        ")
-        if node.optional:
-            self.o("        assert self.has_%s" % uname)
-        self.o(
-            "        return %s._read(self._reader, self._offset+%d) if %d < self._size else %s()"
-            % (node.struct.name, node.offset, node.offset, node.struct.name)
-        )
-        self.o()
+            self.o("    @property")
+            self.o(
+                "    def %s(self) -> typing_.Optional[%s]:" % (uname, node.struct.name)
+            )
+            self.output_doc(node, "        ")
+            if node.optional:
+                self.o("        if not self.has_%s:" % uname)
+                self.o("            return None")
+            self.o(
+                "        return %s._read(self._reader, self._offset+%d) if %d < self._size else %s()"
+                % (node.struct.name, node.offset, node.offset, node.struct.name)
+            )
+            self.o()
+        else:
+            self.o("    @property")
+            self.o("    def %s(self) -> %s:" % (uname, node.struct.name))
+            self.output_doc(node, "        ")
+            self.o(
+                "        return %s._read(self._reader, self._offset+%d) if %d < self._size else %s()"
+                % (node.struct.name, node.offset, node.offset, node.struct.name)
+            )
+            self.o()
 
     def generate_struct_out(self, node: Value, uname: str) -> None:
         if node.inplace:
@@ -484,15 +534,34 @@ class Generator:
 
     def generate_table_in(self, node: Value, uname: str) -> None:
         assert node.table is not None
-        self.o("    @property")
-        self.o("    def has_%s(self) -> bool:" % (uname,))
-        self.o("        return self._get_uint48(%d) != 0" % (node.offset))
-        self.o()
-        if not node.table.empty:
+        if node.optional:
+            self.o("    @property")
+            self.o("    def has_%s(self) -> bool:" % (uname,))
+            self.o("        return self._get_uint48(%d) != 0" % (node.offset))
+            self.o()
+            if not node.table.empty:
+                self.o("    @property")
+                self.o(
+                    "    def %s(self) -> typing_.Optional[%sIn]:"
+                    % (uname, node.table.name)
+                )
+                self.output_doc(node, "        ")
+                self.o("        if not self.has_%s:" % uname)
+                self.o("            return None")
+                self.o(
+                    "        return %sIn(self._reader, *self._get_ptr%s(%d, %sIn._MAGIC))"
+                    % (
+                        node.table.name,
+                        "_inplace" if node.inplace else "",
+                        node.offset,
+                        node.table.name,
+                    )
+                )
+                self.o()
+        elif not node.table.empty:
             self.o("    @property")
             self.o("    def %s(self) -> %sIn:" % (uname, node.table.name))
             self.output_doc(node, "        ")
-            self.o("        assert self.has_%s" % uname)
             self.o(
                 "        return %sIn(self._reader, *self._get_ptr%s(%d, %sIn._MAGIC))"
                 % (
@@ -622,20 +691,32 @@ class Generator:
             self.o()
 
     def generate_text_in(self, node: Value, uname: str) -> None:
-        self.o("    @property")
-        self.o("    def has_%s(self) -> bool:" % (uname,))
-        self.o("        return self._get_uint48(%d) != 0" % (node.offset,))
-        self.o()
-        self.o("    @property")
-        self.o("    def %s(self) -> str:" % (uname))
-        self.output_doc(node, "        ")
-        self.o("        assert self.has_%s" % (uname))
-        self.o(
-            "        (o, s) = self._get_ptr%s(%d, scalgoproto.TEXT_MAGIC)"
-            % ("_inplace" if node.inplace else "", node.offset)
-        )
-        self.o('        return self._reader._data[o : o + s].decode("utf-8")')
-        self.o()
+        if node.optional:
+            self.o("    @property")
+            self.o("    def has_%s(self) -> bool:" % (uname,))
+            self.o("        return self._get_uint48(%d) != 0" % (node.offset,))
+            self.o()
+            self.o("    @property")
+            self.o("    def %s(self) -> typing_.Optional[str]:" % (uname))
+            self.output_doc(node, "        ")
+            self.o("        if not self.has_%s:" % (uname))
+            self.o("            return None")
+            self.o(
+                "        (o, s) = self._get_ptr%s(%d, scalgoproto.TEXT_MAGIC)"
+                % ("_inplace" if node.inplace else "", node.offset)
+            )
+            self.o('        return self._reader._data[o : o + s].decode("utf-8")')
+            self.o()
+        else:
+            self.o("    @property")
+            self.o("    def %s(self) -> str:" % (uname))
+            self.output_doc(node, "        ")
+            self.o(
+                "        (o, s) = self._get_ptr%s(%d, scalgoproto.TEXT_MAGIC)"
+                % ("_inplace" if node.inplace else "", node.offset)
+            )
+            self.o('        return self._reader._data[o : o + s].decode("utf-8")')
+            self.o()
 
     def generate_union_text_in(self, node: Value, uname: str) -> None:
         self.o("    @property")
@@ -681,20 +762,32 @@ class Generator:
         self.o()
 
     def generate_bytes_in(self, node: Value, uname: str) -> None:
-        self.o("    @property")
-        self.o("    def has_%s(self) -> bool:" % (uname,))
-        self.o("        return self._get_uint48(%d) != 0" % (node.offset,))
-        self.o()
-        self.o("    @property")
-        self.o("    def %s(self) -> bytes:" % (uname))
-        self.output_doc(node, "        ")
-        self.o("        assert self.has_%s" % (uname))
-        self.o(
-            "        (o, s) = self._get_ptr%s(%d, scalgoproto.BYTES_MAGIC)"
-            % ("_inplace" if node.inplace else "", node.offset)
-        )
-        self.o("        return self._reader._data[o : o + s]")
-        self.o()
+        if node.optional:
+            self.o("    @property")
+            self.o("    def has_%s(self) -> bool:" % (uname,))
+            self.o("        return self._get_uint48(%d) != 0" % (node.offset,))
+            self.o()
+            self.o("    @property")
+            self.o("    def %s(self) -> typing_.Optional[bytes]:" % (uname))
+            self.output_doc(node, "        ")
+            self.o("        if not self.has_%s:" % (uname))
+            self.o("            return None")
+            self.o(
+                "        (o, s) = self._get_ptr%s(%d, scalgoproto.BYTES_MAGIC)"
+                % ("_inplace" if node.inplace else "", node.offset)
+            )
+            self.o("        return self._reader._data[o : o + s]")
+            self.o()
+        else:
+            self.o("    @property")
+            self.o("    def %s(self) -> bytes:" % (uname))
+            self.output_doc(node, "        ")
+            self.o(
+                "        (o, s) = self._get_ptr%s(%d, scalgoproto.BYTES_MAGIC)"
+                % ("_inplace" if node.inplace else "", node.offset)
+            )
+            self.o("        return self._reader._data[o : o + s]")
+            self.o()
 
     def generate_union_bytes_in(self, node: Value, uname: str) -> None:
         self.o("    @property")
@@ -741,25 +834,44 @@ class Generator:
 
     def generate_union_in(self, node: Value, uname: str, table: Table) -> None:
         assert node.union is not None
-        self.o("    @property")
-        self.o("    def has_%s(self) -> bool:" % (uname,))
-        self.o("        return self._get_uint16(%d, 0) != 0" % (node.offset,))
-        self.o()
-        self.o("    @property")
-        self.o("    def %s(self) -> %sIn:" % (uname, node.union.name))
-        self.output_doc(node, "        ")
-        self.o("        assert self.has_%s" % (uname))
-        if node.inplace:
+        if node.optional:
+            self.o("    @property")
+            self.o("    def has_%s(self) -> bool:" % (uname,))
+            self.o("        return self._get_uint16(%d, 0) != 0" % (node.offset,))
+            self.o()
+            self.o("    @property")
             self.o(
-                "        return %sIn(self._reader, self._get_uint16(%d, 0), self._offset + self._size, self._get_uint48(%d))"
-                % (node.union.name, node.offset, node.offset + 2)
+                "    def %s(self) -> typing_.Optional[%sIn]:" % (uname, node.union.name)
             )
+            self.output_doc(node, "        ")
+            self.o("        if not self.has_%s:" % (uname))
+            self.o("            return None")
+            if node.inplace:
+                self.o(
+                    "        return %sIn(self._reader, self._get_uint16(%d, 0), self._offset + self._size, self._get_uint48(%d))"
+                    % (node.union.name, node.offset, node.offset + 2)
+                )
+            else:
+                self.o(
+                    "        return %sIn(self._reader, self._get_uint16(%d, 0), self._get_uint48(%d))"
+                    % (node.union.name, node.offset, node.offset + 2)
+                )
+            self.o()
         else:
-            self.o(
-                "        return %sIn(self._reader, self._get_uint16(%d, 0), self._get_uint48(%d))"
-                % (node.union.name, node.offset, node.offset + 2)
-            )
-        self.o()
+            self.o("    @property")
+            self.o("    def %s(self) -> %sIn:" % (uname, node.union.name))
+            self.output_doc(node, "        ")
+            if node.inplace:
+                self.o(
+                    "        return %sIn(self._reader, self._get_uint16(%d, 0), self._offset + self._size, self._get_uint48(%d))"
+                    % (node.union.name, node.offset, node.offset + 2)
+                )
+            else:
+                self.o(
+                    "        return %sIn(self._reader, self._get_uint16(%d, 0), self._get_uint48(%d))"
+                    % (node.union.name, node.offset, node.offset + 2)
+                )
+            self.o()
 
     def generate_union_out(self, node: Value, uname: str, table: Table) -> None:
         assert node.union is not None
@@ -982,11 +1094,17 @@ class Generator:
                     continue
                 assert node.type_ is not None
                 if node.list_:
-                    self.o("        if i.has_%s:" % uname)
-                    self.o(
-                        "            self.add_%s(len(i.%s))._copy(i.%s)"
-                        % (uname, uname, uname)
-                    )
+                    if node.optional:
+                        self.o("        if i.%s is not None:" % uname)
+                        self.o(
+                            "            self.add_%s(len(i.%s))._copy(i.%s)"
+                            % (uname, uname, uname)
+                        )
+                    else:
+                        self.o(
+                            "        self.add_%s(len(i.%s))._copy(i.%s)"
+                            % (uname, uname, uname)
+                        )
                 elif (
                     node.type_.type in typeMap
                     or node.type_.type == TokenType.BOOL
@@ -1001,18 +1119,26 @@ class Generator:
                         or node.type_.type == TokenType.TEXT
                         or node.type_.type == TokenType.BYTES
                     ):
-                        self.o("        if i.has_%s:" % uname)
+                        self.o("        if i.%s is not None:" % uname)
                         self.o("            self.%s = i.%s" % (uname, uname))
                     else:
                         self.o("        self.%s = i.%s" % (uname, uname))
                 elif node.table:
-                    self.o("        if i.has_%s:" % (uname))
-                    if node.table.empty:
-                        self.o("            self.add_%s()")
+                    if node.optional:
+                        self.o("        if i.%s is not None:" % (uname))
+                        if node.table.empty:
+                            self.o("            self.add_%s()")
+                        else:
+                            self.o(
+                                "            self.add_%s()._copy(i.%s)" % (uname, uname)
+                            )
                     else:
-                        self.o("            self.add_%s()._copy(i.%s)" % (uname, uname))
+                        if node.table.empty:
+                            self.o("        self.add_%s()")
+                        else:
+                            self.o("        self.add_%s()._copy(i.%s)" % (uname, uname))
                 elif node.union:
-                    self.o("        if i.has_%s:" % (uname))
+                    self.o("        if i.%s is not None:" % (uname))
                     self.o("            self.%s._copy(i.%s)" % (uname, uname))
                 else:
                     raise ICE()
