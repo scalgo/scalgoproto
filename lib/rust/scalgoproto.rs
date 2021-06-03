@@ -259,7 +259,7 @@ impl<'a> Reader<'a> {
         }))
     }
 
-    pub fn get_table<T: TableIn<'a> + 'a>(&self, offset: usize) -> Result<Option<T>> {
+    pub fn get_optional_table<T: TableIn<'a> + 'a>(&self, offset: usize) -> Result<Option<T>> {
         match self.get_ptr(offset) {
             Err(e) => Err(e),
             Ok(None) => Ok(None),
@@ -267,11 +267,30 @@ impl<'a> Reader<'a> {
         }
     }
 
-    pub fn get_table_inplace<T: TableIn<'a> + 'a>(&self, offset: usize) -> Result<Option<T>> {
+    pub fn get_optional_table_inplace<T: TableIn<'a> + 'a>(
+        &self,
+        offset: usize,
+    ) -> Result<Option<T>> {
         match self.get_ptr_inplace(offset) {
             Err(e) => Err(e),
             Ok(None) => Ok(None),
             Ok(Some((o, s))) => Ok(Some(self.get_table_union::<T>(None, o, s)?)),
+        }
+    }
+
+    pub fn get_table<T: TableIn<'a> + 'a>(&self, offset: usize) -> Result<T> {
+        match self.get_ptr(offset) {
+            Err(e) => Err(e),
+            Ok(None) => self.get_direct_table(0, 0),
+            Ok(Some((o, m, s))) => self.get_table_union::<T>(Some(m), o, s),
+        }
+    }
+
+    pub fn get_table_inplace<T: TableIn<'a> + 'a>(&self, offset: usize) -> Result<T> {
+        match self.get_ptr_inplace(offset) {
+            Err(e) => Err(e),
+            Ok(None) => self.get_direct_table(0, 0),
+            Ok(Some((o, s))) => self.get_table_union::<T>(None, o, s),
         }
     }
 
@@ -292,7 +311,7 @@ impl<'a> Reader<'a> {
         Ok(std::str::from_utf8(&self.full[offset..offset + size])?)
     }
 
-    pub fn get_text(&self, offset: usize) -> Result<Option<&'a str>> {
+    pub fn get_optional_text(&self, offset: usize) -> Result<Option<&'a str>> {
         match self.get_ptr(offset) {
             Err(e) => Err(e),
             Ok(None) => Ok(None),
@@ -300,11 +319,27 @@ impl<'a> Reader<'a> {
         }
     }
 
-    pub fn get_text_inplace(&self, offset: usize) -> Result<Option<&'a str>> {
+    pub fn get_optional_text_inplace(&self, offset: usize) -> Result<Option<&'a str>> {
         match self.get_ptr_inplace(offset) {
             Err(e) => Err(e),
             Ok(None) => Ok(None),
             Ok(Some((o, s))) => Ok(Some(self.get_text_union(None, o, s)?)),
+        }
+    }
+
+    pub fn get_text(&self, offset: usize) -> Result<&'a str> {
+        match self.get_ptr(offset) {
+            Err(e) => Err(e),
+            Ok(None) => Ok(""),
+            Ok(Some((o, m, s))) => Ok(self.get_text_union(Some(m), o, s)?),
+        }
+    }
+
+    pub fn get_text_inplace(&self, offset: usize) -> Result<&'a str> {
+        match self.get_ptr_inplace(offset) {
+            Err(e) => Err(e),
+            Ok(None) => Ok(""),
+            Ok(Some((o, s))) => Ok(self.get_text_union(None, o, s)?),
         }
     }
 
@@ -325,7 +360,7 @@ impl<'a> Reader<'a> {
         Ok(&self.full[offset..offset + size])
     }
 
-    pub fn get_bytes(&self, offset: usize) -> Result<Option<&'a [u8]>> {
+    pub fn get_optional_bytes(&self, offset: usize) -> Result<Option<&'a [u8]>> {
         match self.get_ptr(offset) {
             Err(e) => Err(e),
             Ok(None) => Ok(None),
@@ -333,11 +368,27 @@ impl<'a> Reader<'a> {
         }
     }
 
-    pub fn get_bytes_inplace(&self, offset: usize) -> Result<Option<&'a [u8]>> {
+    pub fn get_optional_bytes_inplace(&self, offset: usize) -> Result<Option<&'a [u8]>> {
         match self.get_ptr_inplace(offset) {
             Err(e) => Err(e),
             Ok(None) => Ok(None),
             Ok(Some((o, s))) => Ok(Some(self.get_bytes_union(None, o, s)?)),
+        }
+    }
+
+    pub fn get_bytes(&self, offset: usize) -> Result<&'a [u8]> {
+        match self.get_ptr(offset) {
+            Err(e) => Err(e),
+            Ok(None) => Ok(b""),
+            Ok(Some((o, m, s))) => Ok(self.get_bytes_union(Some(m), o, s)?),
+        }
+    }
+
+    pub fn get_bytes_inplace(&self, offset: usize) -> Result<&'a [u8]> {
+        match self.get_ptr_inplace(offset) {
+            Err(e) => Err(e),
+            Ok(None) => Ok(b""),
+            Ok(Some((o, s))) => Ok(self.get_bytes_union(None, o, s)?),
         }
     }
 
@@ -371,7 +422,10 @@ impl<'a> Reader<'a> {
         })
     }
 
-    pub fn get_list<A: ListRead<'a> + 'a>(&self, offset: usize) -> Result<Option<ListIn<'a, A>>>
+    pub fn get_optional_list<A: ListRead<'a> + 'a>(
+        &self,
+        offset: usize,
+    ) -> Result<Option<ListIn<'a, A>>>
     where
         A::ItemSize: Void,
     {
@@ -382,7 +436,7 @@ impl<'a> Reader<'a> {
         }
     }
 
-    pub fn get_direct_table_list<T: TableIn<'a> + 'a>(
+    pub fn get_optional_direct_table_list<T: TableIn<'a> + 'a>(
         &self,
         offset: usize,
     ) -> Result<Option<ListIn<'a, DirectTableListRead<'a, T>>>> {
@@ -420,7 +474,7 @@ impl<'a> Reader<'a> {
         }))
     }
 
-    pub fn get_list_inplace<A: ListRead<'a> + 'a>(
+    pub fn get_optional_list_inplace<A: ListRead<'a> + 'a>(
         &self,
         offset: usize,
     ) -> Result<Option<ListIn<'a, A>>>
@@ -431,6 +485,62 @@ impl<'a> Reader<'a> {
             Err(e) => Err(e),
             Ok(None) => Ok(None),
             Ok(Some((o, s))) => Ok(Some(self.get_list_union::<A>(None, o, s)?)),
+        }
+    }
+
+    pub fn get_list<A: ListRead<'a> + 'a>(&self, offset: usize) -> Result<ListIn<'a, A>>
+    where
+        A::ItemSize: Void,
+    {
+        match self.get_ptr(offset) {
+            Err(e) => Err(e),
+            Ok(None) => Ok(ListIn {
+                reader: Reader {
+                    full: self.full,
+                    part: &self.full[0..0],
+                },
+                _len: 0,
+                item_size: Void::new(),
+                phantom: PhantomData,
+            }),
+            Ok(Some((o, m, s))) => Ok(self.get_list_union::<A>(Some(m), o, s)?),
+        }
+    }
+
+    pub fn get_direct_table_list<T: TableIn<'a> + 'a>(
+        &self,
+        offset: usize,
+    ) -> Result<ListIn<'a, DirectTableListRead<'a, T>>> {
+        match self.get_optional_direct_table_list(offset)? {
+            Some(v) => Ok(v),
+            None => Ok(ListIn {
+                reader: Reader {
+                    full: self.full,
+                    part: &self.full[0..0],
+                },
+                _len: 0,
+                item_size: 0,
+                phantom: PhantomData,
+            }),
+        }
+    }
+
+    pub fn get_list_inplace<A: ListRead<'a> + 'a>(&self, offset: usize) -> Result<ListIn<'a, A>>
+    where
+        A::ItemSize: Void,
+    {
+        match self.get_ptr_inplace(offset) {
+            Err(e) => Err(e),
+            Ok(None) => Ok(ListIn {
+                reader: Reader {
+                    full: self.full,
+                    part: &self.full[0..0],
+                },
+                _len: 0,
+                item_size: Void::new(),
+                phantom: PhantomData,
+            }),
+            Ok(Some((o, s))) => Ok(self.get_list_union::<A>(None, o, s)?),
         }
     }
 
@@ -614,7 +724,7 @@ pub struct TextListRead<'a> {
 }
 
 impl<'a> ListRead<'a> for TextListRead<'a> {
-    type Output = Result<Option<&'a str>>;
+    type Output = Result<&'a str>;
     type ItemSize = ();
 
     fn bytes(_: (), size: usize) -> usize {
@@ -632,7 +742,7 @@ pub struct BytesListRead<'a> {
 }
 
 impl<'a> ListRead<'a> for BytesListRead<'a> {
-    type Output = Result<Option<&'a [u8]>>;
+    type Output = Result<&'a [u8]>;
     type ItemSize = ();
 
     fn bytes(_: (), size: usize) -> usize {
@@ -650,7 +760,7 @@ pub struct TableListRead<'a, T: TableIn<'a> + 'a> {
 }
 
 impl<'a, T: TableIn<'a> + 'a> ListRead<'a> for TableListRead<'a, T> {
-    type Output = Result<Option<T>>;
+    type Output = Result<T>;
     type ItemSize = ();
 
     fn bytes(_: (), size: usize) -> usize {
@@ -1409,7 +1519,8 @@ impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, TextListRead<'b>>> for ListOut<'a, 
     fn copy_in(&mut self, i: ListIn<'b, TextListRead<'b>>) -> Result<()> {
         assert!(i.len() == self.len());
         for n in 0..i.len() {
-            if let Some(v) = i.get(n)? {
+            let v = i.get(n)?;
+            if !v.is_empty() {
                 self.add(n, v);
             }
         }
@@ -1423,7 +1534,8 @@ impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, BytesListRead<'b>>>
     fn copy_in(&mut self, i: ListIn<'b, BytesListRead<'b>>) -> Result<()> {
         assert!(i.len() == self.len());
         for n in 0..i.len() {
-            if let Some(v) = i.get(n)? {
+            let v = i.get(n)?;
+            if !v.is_empty() {
                 self.add(n, v);
             }
         }
@@ -1449,10 +1561,8 @@ impl<'a, 'b, Out: TableOut<'a, Normal> + 'a + CopyIn<In>, P: Placement, In: Tabl
     fn copy_in(&mut self, i: ListIn<'b, TableListRead<'b, In>>) -> Result<()> {
         assert!(i.len() == self.len());
         for n in 0..i.len() {
-            if let Some(v) = i.get(n)? {
-                let mut t = self.add(n);
-                t.copy_in(v)?;
-            }
+            let mut t = self.add(n);
+            t.copy_in(i.get(n)?)?;
         }
         Ok(())
     }
@@ -1508,11 +1618,7 @@ pub fn read_message<'a, F: Table<'a> + 'a>(data: &'a [u8]) -> Result<F::In> {
         full: data,
         part: &data[0..10],
     };
-    match r.get_table::<F::In>(4) {
-        Err(e) => Err(e),
-        Ok(Some(v)) => Ok(v),
-        Ok(None) => Err(Error::InvalidPointer(0, data.len())),
-    }
+    r.get_table::<F::In>(4)
 }
 
 /// Writer used to write message

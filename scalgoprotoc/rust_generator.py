@@ -236,14 +236,23 @@ class Generator:
         tn = self.list_access_type_lt(node)
         self.output_doc(node, "    ")
         directTable_ = "direct_table_" if node.direct else ""
-        an = f"{node.table.name}In" if node.direct and node.table else tn
-        self.o(
-            f"""    #[inline]
+        an = f"{node.table.name}In" if node.direct else tn
+        if node.optional:
+            self.o(
+                f"""    #[inline]
     pub fn {lname}(&self) -> Result<std::option::Option<scalgoproto::ListIn<'a, {tn}>>> {{
+        self._reader.get_optional_{directTable_}list{"_inplace" if node.inplace else ""}::<{an}>({node.offset})
+    }}
+"""
+            )
+        else:
+            self.o(
+                f"""    #[inline]
+    pub fn {lname}(&self) -> Result<scalgoproto::ListIn<'a, {tn}>> {{
         self._reader.get_{directTable_}list{"_inplace" if node.inplace else ""}::<{an}>({node.offset})
     }}
 """
-        )
+            )
 
     def generate_list_out(self, node: Value, lname: str, size: int) -> None:
         ot = self.out_list_type(node)
@@ -551,24 +560,44 @@ class Generator:
     def generate_table_in(self, node: Value, lname: str) -> None:
         assert node.table is not None
         tname = node.table.name
-        if not node.inplace:
-            self.output_doc(node, "    ")
-            self.o(
-                f"""    #[inline]
+        if node.optional:
+            if not node.inplace:
+                self.output_doc(node, "    ")
+                self.o(
+                    f"""    #[inline]
     pub fn {lname}(&self) -> Result<std::option::Option<{tname}In>> {{
+        self._reader.get_optional_table::<{tname}In>({node.offset})
+    }}
+"""
+                )
+            else:
+                self.output_doc(node, "    ")
+                self.o(
+                    f"""    #[inline]
+    pub fn {lname}(&self) -> Result<std::option::Option<{tname}In>> {{
+        self._reader.get_optional_table_inplace::<{tname}In>({node.offset})
+    }}
+"""
+                )
+        else:
+            if not node.inplace:
+                self.output_doc(node, "    ")
+                self.o(
+                    f"""    #[inline]
+    pub fn {lname}(&self) -> Result<{tname}In> {{
         self._reader.get_table::<{tname}In>({node.offset})
     }}
 """
-            )
-        else:
-            self.output_doc(node, "    ")
-            self.o(
-                f"""    #[inline]
-    pub fn {lname}(&self) -> Result<std::option::Option<{tname}In>> {{
+                )
+            else:
+                self.output_doc(node, "    ")
+                self.o(
+                    f"""    #[inline]
+    pub fn {lname}(&self) -> Result<{tname}In> {{
         self._reader.get_table_inplace::<{tname}In>({node.offset})
     }}
 """
-            )
+                )
 
     def generate_table_out(self, node: Value, lname: str) -> None:
         assert node.table is not None
@@ -677,18 +706,28 @@ class Generator:
     pub fn copy_{lname}<'b>(&mut self, i: {tname}In<'b>) -> Result<()> {{
         let mut a = self.add_{lname}();
         a.copy_in(i)
-    }}"""
+    }}
+"""
             )
 
     def generate_text_in(self, node: Value, lname: str) -> None:
         self.output_doc(node, "    ")
-        self.o(
-            f"""    #[inline]
+        if node.optional:
+            self.o(
+                f"""    #[inline]
     pub fn {lname}(&self) -> Result<std::option::Option<&'a str>> {{
+        self._reader.get_optional_text{"_inplace" if node.inplace else ""}({node.offset})
+    }}
+"""
+            )
+        else:
+            self.o(
+                f"""    #[inline]
+    pub fn {lname}(&self) -> Result<&'a str> {{
         self._reader.get_text{"_inplace" if node.inplace else ""}({node.offset})
     }}
 """
-        )
+            )
 
     def generate_text_out(self, node: Value, lname: str) -> None:
         self.output_doc(node, "    ")
@@ -755,13 +794,22 @@ class Generator:
 
     def generate_bytes_in(self, node: Value, lname: str) -> None:
         self.output_doc(node, "    ")
-        self.o(
-            f"""    #[inline]
+        if node.optional:
+            self.o(
+                f"""    #[inline]
     pub fn {lname}(&self) -> Result<std::option::Option<&[u8]>> {{
+        self._reader.get_optional_bytes{"_inplace" if node.inplace else ""}({node.offset})
+    }}
+"""
+            )
+        else:
+            self.o(
+                f"""    #[inline]
+    pub fn {lname}(&self) -> Result<&[u8]> {{
         self._reader.get_bytes{"_inplace" if node.inplace else ""}({node.offset})
     }}
 """
-        )
+            )
 
     def generate_bytes_out(self, node: Value, lname: str) -> None:
         if not node.inplace:
@@ -1094,9 +1142,17 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
                 if bool(node.inplace) != ip:
                     continue
                 assert node.type_ is not None
-                if node.list_:
+                if node.list_ and node.optional:
                     self.o(
                         f"""        if let Some(v) = i.{lname}()? {{
+            let mut w = self.add_{lname}(v.len());
+            w.copy_in(v)?;
+        }}"""
+                    )
+                elif node.list_:
+                    self.o(
+                        f"""        let v = i.{lname}()?;
+        if ! v.is_empty() {{
             let mut w = self.add_{lname}(v.len());
             w.copy_in(v)?;
         }}"""
@@ -1107,9 +1163,19 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
                     or node.enum
                 ):
                     self.o(f"        self.{lname}(i.{lname}());")
-                elif node.type_.type in (TokenType.TEXT, TokenType.BYTES):
+                elif (
+                    node.type_.type in (TokenType.TEXT, TokenType.BYTES)
+                    and node.optional
+                ):
                     self.o(
                         f"""        if let Some(v) = i.{lname}()? {{
+            self.add_{lname}(v);
+        }}"""
+                    )
+                elif node.type_.type in (TokenType.TEXT, TokenType.BYTES):
+                    self.o(
+                        f"""        let v = i.{lname}()?;
+        if !v.is_empty() {{
             self.add_{lname}(v);
         }}"""
                     )
@@ -1121,13 +1187,15 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
                     )
                 elif node.struct:
                     self.o(f"        self.{lname}().copy_in(i.{lname}())?;")
-                elif node.table:
+                elif node.table and node.optional:
                     self.o(
                         f"""        if let Some(v) = i.{lname}()? {{
             let mut w = self.add_{lname}();
             w.copy_in(v)?;
         }}"""
                     )
+                elif node.table:
+                    self.o(f"        self.add_{lname}().copy_in(i.{lname}()?)?;")
                 elif node.union:
                     self.o(f"        self.{lname}().copy_in(i.{lname}()?)?;")
                 else:

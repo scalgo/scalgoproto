@@ -19,7 +19,7 @@ macro_rules! require {
                 expected,
                 stringify!($y)
             );
-            return Err(scalgoproto::Error::InvalidPointer());
+            return Err(scalgoproto::Error::Overflow());
         }
     }};
 }
@@ -28,7 +28,7 @@ macro_rules! require_none {
     ( $x:expr ) => {{
         if $x.is_some() {
             println!("Error {} should yield None", stringify!($x),);
-            return Err(scalgoproto::Error::InvalidPointer());
+            return Err(scalgoproto::Error::Overflow());
         }
     }};
 }
@@ -38,7 +38,7 @@ macro_rules! require_some {
         match $x {
             None => {
                 println!("Error {} should yield Some", stringify!($x),);
-                return Err(scalgoproto::Error::InvalidPointer());
+                return Err(scalgoproto::Error::Overflow());
             }
             Some(v) => v,
         }
@@ -52,7 +52,7 @@ macro_rules! require_enum {
             $y => $z,
             _ => {
                 println!("Error {} should yield {}", stringify!($x), stringify!($y));
-                return Err(scalgoproto::Error::InvalidPointer());
+                return Err(scalgoproto::Error::Overflow());
             }
         }
     }};
@@ -62,7 +62,7 @@ macro_rules! require_one_list {
     ( $x:expr) => {{
         if $x.len() != 1 {
             println!("Error {} should have length 1", stringify!($x),);
-            return Err(scalgoproto::Error::InvalidPointer());
+            return Err(scalgoproto::Error::Overflow());
         }
         $x.get(0)
     }};
@@ -151,7 +151,7 @@ fn validate_out(data: &[u8], path: &str) -> scalgoproto::Result<()> {
         }
         println!("\x1b[0m");
     }
-    Err(scalgoproto::Error::InvalidPointer())
+    Err(scalgoproto::Error::Overflow())
 }
 
 fn test_out_default(path: &str) -> scalgoproto::Result<()> {
@@ -428,16 +428,16 @@ fn test_in_complex(path: &str) -> scalgoproto::Result<()> {
     let l = require_some!(ce!(s.text_list()));
     require!(l.len(), 200);
     for (i, v) in l.iter().enumerate() {
-        require!(ce!(v), if i % 2 == 0 { None } else { Some("HI THERE") });
+        require!(ce!(v), if i % 2 == 0 { "" } else { "HI THERE" });
     }
     let l = require_some!(ce!(s.bytes_list()));
     require!(l.len(), 1);
-    require!(ce!(l.get(0)), Some((b"bytes").as_ref()));
+    require!(ce!(l.get(0)), b"bytes");
     let l = require_some!(ce!(s.member_list()));
     require!(l.len(), 3);
-    require!(require_some!(ce!(l.get(0))).id(), 42);
-    require_none!(ce!(l.get(1)));
-    require!(require_some!(ce!(l.get(2))).id(), 42);
+    require!(ce!(l.get(0)).id(), 42);
+    require!(ce!(l.get(1)).id(), 0);
+    require!(ce!(l.get(2)).id(), 42);
     let l = require_some!(ce!(s.direct_member_list()));
     require!(l.len(), 3);
     require!(ce!(l.get(0)).id(), 43);
@@ -608,7 +608,7 @@ fn test_in_extend1(path: &str) -> scalgoproto::Result<()> {
     let s = scalgoproto::read_message::<base::Gen2>(&data)?;
     require!(s.aa(), 77);
     require!(s.bb(), 42);
-    require_enum!(ce!(s.u()), base::Gen2UIn::NONE, ());
+    require_enum!(ce!(s.u()), base::Gen2UIn::None, ());
     Ok(())
 }
 
@@ -944,178 +944,178 @@ fn test_in_union(path: &str) -> scalgoproto::Result<()> {
 
     let v5 = require_some!(ce!(i.v5()));
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v5.a()),
             union::Union1In::V5(v),
             v
-        )))),
+        ))),
         "text4"
     );
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v5.b()),
             union::Union1In::V5(v),
             v
-        )))),
+        ))),
         "text5"
     );
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v5.c()),
             union::Union1In::V5(v),
             v
-        )))),
+        ))),
         "text6"
     );
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v5.d()),
             union::Union1In::V5(v),
             v
-        )))),
+        ))),
         "ctext3"
     );
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v5.e()),
             union::Union1In::V5(v),
             v
-        )))),
+        ))),
         "ctext4"
     );
 
     let v6 = require_some!(ce!(i.v6()));
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v6.a()),
             union::Union1In::V6(v),
             v
-        )))),
+        ))),
         b"bytes4"
     );
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v6.b()),
             union::Union1In::V6(v),
             v
-        )))),
+        ))),
         b"bytes5"
     );
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v6.c()),
             union::Union1In::V6(v),
             v
-        )))),
+        ))),
         b"bytes6"
     );
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v6.d()),
             union::Union1In::V6(v),
             v
-        )))),
+        ))),
         b"cbytes3"
     );
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v6.e()),
             union::Union1In::V6(v),
             v
-        )))),
+        ))),
         b"cbytes4"
     );
 
     let v7 = require_some!(ce!(i.v7()));
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v7.a()),
             union::Union1In::V7(v),
             v
-        ))))
+        )))
         .a(),
         7
     );
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v7.b()),
             union::Union1In::V7(v),
             v
-        ))))
+        )))
         .a(),
         8
     );
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v7.c()),
             union::Union1In::V7(v),
             v
-        ))))
+        )))
         .a(),
         9
     );
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v7.d()),
             union::Union1In::V7(v),
             v
-        ))))
+        )))
         .a(),
         105
     );
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v7.e()),
             union::Union1In::V7(v),
             v
-        ))))
+        )))
         .a(),
         106
     );
 
     let v8 = require_some!(ce!(i.v8()));
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v8.a()),
             union::Union1In::V8(v),
             v
-        ))))
+        )))
         .a(),
         10
     );
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v8.b()),
             union::Union1In::V8(v),
             v
-        ))))
+        )))
         .a(),
         11
     );
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v8.c()),
             union::Union1In::V8(v),
             v
-        ))))
+        )))
         .a(),
         12
     );
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v8.d()),
             union::Union1In::V8(v),
             v
-        ))))
+        )))
         .a(),
         107
     );
     require!(
-        require_some!(ce!(require_one_list!(require_enum!(
+        ce!(require_one_list!(require_enum!(
             ce!(v8.e()),
             union::Union1In::V8(v),
             v
-        ))))
+        )))
         .a(),
         108
     );
