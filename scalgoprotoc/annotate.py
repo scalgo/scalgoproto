@@ -103,8 +103,8 @@ class Annotater:
         for n in [name, hasName, isName, getName, addName]:
             if n and n in seen:
                 self.error(t, "Name conflict")
-                self.error(seen[name], "Conflicts with this")
-                seen[n] = t
+                self.error(seen[n], "Conflicts with this")
+            seen[n] = t
 
     def get_int(self, value: Optional[Token], min: int, max: int, d: int) -> int:
         if value is None:
@@ -261,16 +261,21 @@ class Annotater:
             if v.direct and not v.list_:
                 self.error(v.direct, "Only lists can be direct")
 
-            if v.optional and v.type_.type in (
-                TokenType.U8,
-                TokenType.U16,
-                TokenType.UI32,
-                TokenType.UI64,
-                TokenType.I8,
-                TokenType.I16,
-                TokenType.I32,
-                TokenType.I64,
-                TokenType.BOOL,
+            if (
+                v.optional
+                and v.type_.type
+                in (
+                    TokenType.U8,
+                    TokenType.U16,
+                    TokenType.UI32,
+                    TokenType.UI64,
+                    TokenType.I8,
+                    TokenType.I16,
+                    TokenType.I32,
+                    TokenType.I64,
+                    TokenType.BOOL,
+                )
+                and not v.list_
             ):
                 if bool_bit == 8:
                     bool_bit = 0
@@ -314,8 +319,8 @@ class Annotater:
 
                 if t == ContentType.STRUCT:
                     self.error(v.list_, "Not allowed in structs")
-                if v.optional:
-                    self.error(v.optional, "Lists are alwayes optional")
+                if v.optional and t != ContentType.TABLE:
+                    self.error(v.optional, "Only allowed in tables")
                 default.append(b"\0\0\0\0\0\0")
                 v.bytes = 6
                 v.offset = bytes
@@ -409,8 +414,8 @@ class Annotater:
                 v.bytes = 8
                 v.offset = bytes
             elif v.type_.type in (TokenType.BYTES, TokenType.TEXT):
-                if v.optional:
-                    self.error(v.optional, "Are alwayes optional")
+                if v.optional and t != ContentType.TABLE:
+                    self.error(v.optional, "Only allowed in tabels")
                 if t == ContentType.STRUCT:
                     self.error(v.type_, "Not allowed in structs")
                 default.append(b"\0\0\0\0\0\0")
@@ -419,8 +424,8 @@ class Annotater:
             elif typeName in self.enums or v.direct_enum:
                 if v.inplace:
                     self.error(v.inplace, "Enums types may not be inplace")
-                if v.optional:
-                    self.error(v.optional, "Are alwayes optional")
+                if v.optional and t != ContentType.TABLE:
+                    self.error(v.optional, "Only allowed in tabels")
                 v.enum = v.direct_enum or self.enums[typeName]
                 if not v.direct_enum:
                     assert self.outer is not None
@@ -458,8 +463,8 @@ class Annotater:
             elif typeName in self.tables or v.direct_table:
                 if t == ContentType.STRUCT:
                     self.error(v.type_, "tables not allowed in structs")
-                if v.optional:
-                    self.error(v.optional, "Lists are alwayes optional")
+                if v.optional and t != ContentType.TABLE:
+                    self.error(v.optional, "Only allowed in tables")
                 default.append(b"\0\0\0\0\0\0")
                 v.bytes = 6
                 v.offset = bytes
@@ -470,8 +475,8 @@ class Annotater:
             elif typeName in self.unions or v.direct_union:
                 if t == ContentType.STRUCT:
                     self.error(v.type_, "Unions not allowed in structs")
-                if v.optional:
-                    self.error(v.optional, "Unions are alwayes optional")
+                if v.optional and t != ContentType.TABLE:
+                    self.error(v.optional, "Only allowed in tables")
                 default.append(b"\0\0\0\0\0\0\0\0")
                 v.bytes = 8
                 v.offset = bytes
