@@ -4,7 +4,6 @@ Parse a protocol description and generate an ast
 """
 import enum
 import typing as ty
-
 from .error import error
 from .sp_tokenize import Token, TokenType, tokenize
 from .documents import Documents, Document
@@ -21,16 +20,21 @@ class AstNode(object):
         "uses",
         "namespace",
     ]
-    token: Token
-    doc_comment: Token
+    token: ty.Optional[Token]
+    doc_comment: ty.Optional[Token]
     bytes: int
     offset: int
-    docstring: ty.List[str]
+    docstring: ty.Optional[ty.List[str]]
     document: int
     uses: ty.Set[ty.Union["Union", "Table", "Struct", "Enum"]]
-    namespace: str
+    namespace: ty.Optional[str]
 
-    def __init__(self, token: Token, document: int, doc_comment: Token = None) -> None:
+    def __init__(
+        self,
+        token: ty.Optional[Token],
+        document: int,
+        doc_comment: ty.Optional[Token] = None,
+    ) -> None:
         self.token = token
         self.doc_comment = doc_comment
         self.bytes = 0
@@ -51,17 +55,17 @@ class Namespace(AstNode):
 
 class Struct(AstNode):
     __slots__ = ["identifier", "members", "name"]
-    identifier: Token
+    identifier: ty.Optional[Token]
     members: ty.List["Value"]
-    name: str
+    name: ty.Optional[str]
 
     def __init__(
         self,
         token: Token,
         document: int,
-        identifier: Token,
+        identifier: ty.Optional[Token],
         members: ty.List["Value"],
-        doc_comment: Token,
+        doc_comment: ty.Optional[Token],
     ) -> None:
         super().__init__(token, document, doc_comment)
         self.identifier = identifier
@@ -71,7 +75,7 @@ class Struct(AstNode):
 
 class Enum(AstNode):
     __slots__ = ["identifier", "members", "annotatedValues", "name", "removed"]
-    identifier: Token
+    identifier: ty.Optional[Token]
     members: ty.List["Value"]
     name: ty.Optional[str]
     annotatedValues: ty.Optional[ty.Dict[str, int]]
@@ -81,9 +85,9 @@ class Enum(AstNode):
         self,
         token: Token,
         document: int,
-        identifier: Token,
+        identifier: ty.Optional[Token],
         members: ty.Optional[ty.List["Value"]],
-        doc_comment: Token,
+        doc_comment: ty.Optional[Token],
     ) -> None:
         super().__init__(token, document, doc_comment)
         self.identifier = identifier
@@ -95,11 +99,11 @@ class Enum(AstNode):
 
 class Table(AstNode):
     __slots__ = ["identifier", "id_", "members", "default", "magic", "name", "empty"]
-    identifier: Token
-    id_: Token
+    identifier: ty.Optional[Token]
+    id_: ty.Optional[Token]
     members: ty.List["Value"]
-    default: bytes
-    name: str
+    default: ty.Optional[bytes]
+    name: ty.Optional[str]
     magic: int
     empty: bool
 
@@ -107,10 +111,10 @@ class Table(AstNode):
         self,
         token: Token,
         document: int,
-        identifier: Token,
-        id_: Token,
+        identifier: ty.Optional[Token],
+        id_: ty.Optional[Token],
         members: ty.List["Value"],
-        doc_comment: Token,
+        doc_comment: ty.Optional[Token],
     ) -> None:
         super().__init__(token, document, doc_comment)
         self.identifier = identifier
@@ -125,16 +129,16 @@ class Table(AstNode):
 class Union(AstNode):
     __slots__ = ["members", "identifier", "name"]
     members: ty.List["Value"]
-    identifier: Token
-    name: str
+    identifier: ty.Optional[Token]
+    name: ty.Optional[str]
 
     def __init__(
         self,
         token: Token,
         document: int,
-        identifier: Token,
+        identifier: ty.Optional[Token],
         members: ty.List["Value"],
-        doc_comment: Token,
+        doc_comment: ty.Optional[Token],
     ) -> None:
         super().__init__(token, document, doc_comment)
         self.members = members
@@ -165,41 +169,41 @@ class Value(AstNode):
         "direct_struct",
     ]
     identifier: Token
-    value: Token
-    type_: Token
-    optional: Token
-    list_: Token
-    inplace: Token
-    direct: Token
-    direct_table: Table
-    direct_union: Union
-    direct_enum: Enum
-    direct_struct: Struct
+    value: ty.Optional[Token]
+    type_: ty.Optional[Token]
+    optional: ty.Optional[Token]
+    list_: ty.Optional[Token]
+    inplace: ty.Optional[Token]
+    direct: ty.Optional[Token]
+    direct_table: ty.Optional[Table]
+    direct_union: ty.Optional[Union]
+    direct_enum: ty.Optional[Enum]
+    direct_struct: ty.Optional[Struct]
     has_offset: int
     has_bit: int
     bit: int
-    table: Table
-    enum: Enum
-    struct: Struct
-    union: Union
+    table: ty.Optional[Table]
+    enum: ty.Optional[Enum]
+    struct: ty.Optional[Struct]
+    union: ty.Optional[Union]
     parsed_value: ty.Union[int, float]
 
     def __init__(
         self,
-        token: Token,
+        token: ty.Optional[Token],
         document: int,
         identifier: Token,
-        value: Token,
-        type_: Token,
-        optional: Token,
-        list_: Token,
-        inplace: Token,
-        direct: Token,
-        direct_table: Table,
-        direct_union: Union,
-        direct_enum: Enum,
-        direct_struct: Struct,
-        doc_comment: Token,
+        value: ty.Optional[Token],
+        type_: ty.Optional[Token],
+        optional: ty.Optional[Token],
+        list_: ty.Optional[Token],
+        inplace: ty.Optional[Token],
+        direct: ty.Optional[Token],
+        direct_table: ty.Optional[Table],
+        direct_union: ty.Optional[Union],
+        direct_enum: ty.Optional[Enum],
+        direct_struct: ty.Optional[Struct],
+        doc_comment: ty.Optional[Token],
     ) -> None:
         super().__init__(token, document, doc_comment)
         self.identifier = identifier
@@ -239,7 +243,7 @@ class ICE(Exception):
 
 
 class Parser:
-    token: Token = None
+    token: ty.Optional[Token] = None
 
     def __init__(self, documents: Documents) -> None:
         self.documents = documents
@@ -259,6 +263,7 @@ class Parser:
             )
 
     def consume_token(self, types: ty.List[TokenType]) -> Token:
+        assert self.token is not None
         t = self.token
         self.check_token(t, types)
         self.next_token()
@@ -270,7 +275,7 @@ class Parser:
     def parse_content(self) -> ty.List[Value]:
         self.consume_token([TokenType.LBRACE])
         members: ty.List[Value] = []
-        doc_comment: Token = None
+        doc_comment: ty.Optional[Token] = None
         while True:
             t = self.consume_token(
                 [
@@ -285,19 +290,20 @@ class Parser:
             elif t.type == TokenType.RBRACE:
                 break
             elif t.type in (TokenType.IDENTIFIER, TokenType.REMOVED):
+                assert self.token is not None
                 self.check_token(self.token, [TokenType.COLON, TokenType.LBRACE])
-                colon: Token = None
+                colon: ty.Optional[Token] = None
                 if self.token.type == TokenType.COLON:
                     colon = self.consume_token([TokenType.COLON])
-                optional: Token = None
-                list_: Token = None
-                inplace: Token = None
-                direct: Token = None
-                value: Token = None
-                direct_table: Table = None
-                direct_union: Union = None
-                direct_enum: Enum = None
-                direct_struct: Struct = None
+                optional: ty.Optional[Token] = None
+                list_: ty.Optional[Token] = None
+                inplace: ty.Optional[Token] = None
+                direct: ty.Optional[Token] = None
+                value: ty.Optional[Token] = None
+                direct_table: ty.Optional[Table] = None
+                direct_union: ty.Optional[Union] = None
+                direct_enum: ty.Optional[Enum] = None
+                direct_struct: ty.Optional[Struct] = None
                 modifiers = [
                     TokenType.OPTIONAL,
                     TokenType.LIST,
@@ -358,7 +364,7 @@ class Parser:
                             doc_comment,
                         )
                     elif type_.type == TokenType.TABLE:
-                        id_: Token = None
+                        id_: ty.Optional[Token] = None
                         if self.token.type == TokenType.ID:
                             id_ = self.consume_token([TokenType.ID])
                         direct_table = Table(
@@ -412,11 +418,13 @@ class Parser:
                 doc_comment = None
             else:
                 raise ICE()
+            assert self.token is not None
             if self.token.type in [TokenType.COMMA, TokenType.SEMICOLON]:
                 self.next_token()
         return members
 
     def parse_enum(self) -> ty.Optional[ty.List[Value]]:
+        assert self.token is not None
         if self.token.type == TokenType.REMOVED:
             self.consume_token([TokenType.REMOVED])
             return None
@@ -463,7 +471,8 @@ class Parser:
 
     def parse_document(self) -> ty.List[AstNode]:
         ans: ty.List[AstNode] = []
-        doc_comment: Token = None
+        doc_comment: ty.Optional[Token] = None
+        assert self.token is not None
         while self.token.type != TokenType.EOF:
             self.context = "message"
             t = self.consume_token(

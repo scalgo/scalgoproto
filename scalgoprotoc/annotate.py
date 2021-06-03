@@ -36,7 +36,7 @@ class Annotater:
     structs: Dict[str, Struct]
     tables: Dict[str, Table]
     unions: Dict[str, Union]
-    outer: AstNode
+    outer: Optional[AstNode]
     namespace: Dict[int, str]
 
     def __init__(self, documents: Documents) -> None:
@@ -46,12 +46,13 @@ class Annotater:
         self.namespace = {}
 
     def attach_namespace(self, node: AstNode):
-        node.namespace = self.namespace.get(node.document, None)
+        node.namespace = self.namespace.get(node.document)
 
     def value(self, t: Token) -> str:
         return self.documents.by_id[t.document].content[t.index : t.index + t.length]
 
-    def error(self, token: Token, message: str) -> None:
+    def error(self, token: Optional[Token], message: str) -> None:
+        assert token is not None
         self.errors += 1
         error(self.documents, self.context, token, message)
 
@@ -103,10 +104,10 @@ class Annotater:
             if n and n in seen:
                 self.error(t, "Name conflict")
                 self.error(seen[name], "Conflicts with this")
-            seen[n] = t
+                seen[n] = t
 
-    def get_int(self, value: Token, min: int, max: int, d: int) -> int:
-        if not value:
+    def get_int(self, value: Optional[Token], min: int, max: int, d: int) -> int:
+        if value is None:
             return d
         try:
             v = int(self.value(value))
@@ -117,8 +118,8 @@ class Annotater:
             self.error(value, "Must be an integer")
         return d
 
-    def get_float(self, value: Token, d: float) -> float:
-        if not value:
+    def get_float(self, value: Optional[Token], d: float) -> float:
+        if value is None:
             return d
         try:
             return float(self.value(value))
@@ -236,6 +237,7 @@ class Annotater:
                 add=v.list_ != None,
             )
 
+            assert v.type_ is not None
             type_name = self.value(v.type_)
 
             if t == ContentType.STRUCT and v.optional:
@@ -291,6 +293,7 @@ class Annotater:
                     v.struct = v.direct_struct
                 elif v.type_.type == TokenType.IDENTIFIER:
                     typeName = self.value(v.type_)
+                    assert self.outer is not None
                     if typeName in self.enums:
                         v.enum = self.enums[typeName]
                         self.outer.uses.add(v.enum)
@@ -353,7 +356,7 @@ class Annotater:
                 elif v.type_.type == TokenType.BOOL:
                     default.append(b"\0")
                 else:
-                    self.error(v.type_.type, "Internal error")
+                    self.error(v.type_, "Internal error")
                 v.bytes = 1
                 v.offset = bytes
             elif v.type_.type in (TokenType.U16, TokenType.I16):
@@ -366,7 +369,7 @@ class Annotater:
                     v.parsed_value = self.get_int(v.value, -2 ** 15, 2 ** 15 - 1, 0)
                     default.append(struct.pack("<h", v.parsed_value))
                 else:
-                    self.error(v.type_.type, "Internal error")
+                    self.error(v.type_, "Internal error")
                 v.bytes = 2
                 v.offset = bytes
             elif v.type_.type in (TokenType.UI32, TokenType.I32, TokenType.F32):
@@ -384,7 +387,7 @@ class Annotater:
                     )
                     default.append(struct.pack("<f", v.parsed_value))
                 else:
-                    self.error(v.type_.type, "Internal error")
+                    self.error(v.type_, "Internal error")
                 v.bytes = 4
                 v.offset = bytes
             elif v.type_.type in (TokenType.UI64, TokenType.I64, TokenType.F64):
@@ -402,7 +405,7 @@ class Annotater:
                     )
                     default.append(struct.pack("<d", v.parsed_value))
                 else:
-                    self.error(v.type_.type, "Internal error")
+                    self.error(v.type_, "Internal error")
                 v.bytes = 8
                 v.offset = bytes
             elif v.type_.type in (TokenType.BYTES, TokenType.TEXT):
@@ -420,11 +423,13 @@ class Annotater:
                     self.error(v.optional, "Are alwayes optional")
                 v.enum = v.direct_enum or self.enums[typeName]
                 if not v.direct_enum:
+                    assert self.outer is not None
                     self.outer.uses.add(v.enum)
                 d = 255
                 if v.value:
                     dn = self.value(v.value)
-                    if not dn in v.enum.annotatedValues:
+                    assert v.enum.annotatedValues is not None
+                    if dn not in v.enum.annotatedValues:
                         self.error(v.value, "Not member of enum")
                     d = v.enum.annotatedValues[dn]
                 v.parsed_value = d
@@ -446,6 +451,7 @@ class Annotater:
                 v.offset = bytes
                 v.struct = v.direct_struct or self.structs[typeName]
                 if not v.direct_struct:
+                    assert self.outer is not None
                     self.outer.uses.add(v.struct)
                 v.bytes = v.struct.bytes
                 default.append(b"\0" * v.bytes)
@@ -459,6 +465,7 @@ class Annotater:
                 v.offset = bytes
                 v.table = v.direct_table or self.tables[typeName]
                 if not v.direct_table:
+                    assert self.outer is not None
                     self.outer.uses.add(v.table)
             elif typeName in self.unions or v.direct_union:
                 if t == ContentType.STRUCT:
@@ -470,6 +477,7 @@ class Annotater:
                 v.offset = bytes
                 v.union = v.direct_union or self.unions[typeName]
                 if not v.direct_union:
+                    assert self.outer is not None
                     self.outer.uses.add(v.union)
             else:
                 self.error(v.type_, "Unknown identifier")
@@ -504,7 +512,10 @@ class Annotater:
                 elif v.value.type == TokenType.IDENTIFIER:
                     if not v.enum:
                         self.error(v.value, "Only allowed for enumes")
-                    elif self.value(v.value) not in v.enum.annotatedValues:
+                    elif (
+                        v.enum.annotatedValues is None
+                        or self.value(v.value) not in v.enum.annotatedValues
+                    ):
                         self.error(v.value, "Not member of enum")
                         self.error(v.enum.token, "Enum declared here")
                 else:
@@ -529,6 +540,7 @@ class Annotater:
             self.create_doc_string(node)
             self.outer = node
             if isinstance(node, Struct):
+                assert node.identifier is not None
                 self.context = "struct %s" % self.value(node.identifier)
                 name = self.validate_uname(node.identifier)
                 node.name = name
@@ -541,6 +553,7 @@ class Annotater:
             elif isinstance(node, Enum):
                 if node.removed:
                     continue
+                assert node.identifier is not None
                 self.context = "enum %s" % self.value(node.identifier)
                 name = self.validate_uname(node.identifier)
                 node.name = name
@@ -548,6 +561,7 @@ class Annotater:
                 self.visit_enum(node)
                 self.enums[name] = node
             elif isinstance(node, Table):
+                assert node.identifier is not None
                 self.context = "table %s" % self.value(node.identifier)
                 name = self.validate_uname(node.identifier)
                 node.name = name
@@ -561,6 +575,7 @@ class Annotater:
 
                 self.tables[name] = node
             elif isinstance(node, Union):
+                assert node.identifier is not None
                 self.context = "union %s" % self.value(node.identifier)
                 name = self.validate_uname(node.identifier)
                 node.name = name
@@ -570,6 +585,7 @@ class Annotater:
                 )
                 self.unions[name] = node
             elif isinstance(node, Namespace):
+                assert node.namespace is not None
                 self.namespace[node.document] = node.namespace
             else:
                 self.error(node.token, "Unknown thing")
