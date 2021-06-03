@@ -469,6 +469,72 @@ fn test_in_complex(path: &str) -> scalgoproto::Result<()> {
     Ok(())
 }
 
+
+fn test_in_complex3(path: &str) -> scalgoproto::Result<()> {
+    let data = std::fs::read(path).expect("Unable to read file");
+    let s = scalgoproto::read_message::<base::Complex3>(&data)?;
+    require!(ce!(s.nmember()).id(), 0);
+    require!(ce!(s.ntext()), "");
+    require!(ce!(s.nbytes()), b"");
+    require!(ce!(s.text()), "text");
+    require!(ce!(s.my_bytes()), b"bytes");
+    require!(ce!(s.member()).id(), 42);
+    require!(ce!(s.nint_list()).is_empty(), true);
+    let l = ce!(s.int_list());
+    require!(l.len(), 31);
+    for (i, v) in l.iter().enumerate() {
+        require!(v, (100 - 2 * i) as i32);
+    }
+    let l = ce!(s.enum_list());
+    require!(l.len(), 2);
+    require!(l.get(0), Some(base::MyEnum::A));
+    require!(l.get(1), None);
+    let l = ce!(s.struct_list());
+    require!(l.len(), 1);
+    let l = ce!(s.text_list());
+    require!(l.len(), 200);
+    for (i, v) in l.iter().enumerate() {
+        require!(ce!(v), if i % 2 == 0 { "" } else { "HI THERE" });
+    }
+    let l = ce!(s.bytes_list());
+    require!(l.len(), 1);
+    require!(ce!(l.get(0)), b"bytes");
+    let l = ce!(s.member_list());
+    require!(l.len(), 3);
+    require!(ce!(l.get(0)).id(), 42);
+    require!(ce!(l.get(1)).id(), 0);
+    require!(ce!(l.get(2)).id(), 42);
+    let l = ce!(s.direct_member_list());
+    require!(l.len(), 3);
+    require!(ce!(l.get(0)).id(), 43);
+    require!(ce!(l.get(2)).id(), 43);
+
+    let l = ce!(s.f32list());
+    require!(l.len(), 2);
+    require!(l.get(0), 0.0);
+    require!(l.get(1), 98.0);
+    let l = ce!(s.f64list());
+    require!(l.len(), 3);
+    require!(l.get(0), 0.0);
+    require!(l.get(1), 0.0);
+    require!(l.get(2), 78.0);
+    let l = ce!(s.u8list());
+    require!(l.len(), 2);
+    require!(l.get(0), 4);
+    require!(l.get(1), 0);
+    let l = ce!(s.blist());
+    require!(l.len(), 10);
+    for (v, e) in l.iter().zip(
+        [
+            true, false, true, false, false, false, false, false, true, false,
+        ]
+        .iter(),
+    ) {
+        require!(v, *e);
+    }
+    Ok(())
+}
+
 fn test_out_complex2(path: &str) -> scalgoproto::Result<()> {
     let arena = scalgoproto::Arena::new(vec![]);
     let mut writer = scalgoproto::Writer::new(&arena);
@@ -1180,6 +1246,7 @@ fn main() -> Result<(), scalgoproto::Error> {
         "in" => test_in(&file)?,
         "out_complex" => test_out_complex(&file)?,
         "in_complex" => test_in_complex(&file)?,
+        "in_complex3" => test_in_complex3(&file)?,
         "out_complex2" => test_out_complex2(&file)?,
         "in_complex2" => test_in_complex2(&file)?,
         "out_inplace" => test_out_inplace(&file)?,

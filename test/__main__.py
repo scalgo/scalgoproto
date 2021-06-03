@@ -399,6 +399,7 @@ def main():
         runTest("rs in complex", lambda: runRust("in_complex", "test/complex.bin"))
         runTest("rs out complex2", lambda: runRust("out_complex2", "test/complex2.bin"))
         runTest("rs in complex2", lambda: runRust("in_complex2", "test/complex2.bin"))
+        runTest("rs in complex3", lambda: runRust("in_complex3", "test/complex.bin"))
         runTest("rs out inplace", lambda: runRust("out_inplace", "test/inplace.bin"))
         runTest("rs in inplace", lambda: runRust("in_inplace", "test/inplace.bin"))
         runTest("rs out extend1", lambda: runRust("out_extend1", "test/extend1.bin"))
