@@ -293,7 +293,7 @@ def main():
         runTest("cpp in simple", lambda: runCpp("in", "test/simple.bin"))
         runTest("cpp out complex", lambda: runCpp("out_complex", "test/complex.bin"))
         runTest("cpp in complex", lambda: runCpp("in_complex", "test/complex.bin"))
-
+        runTest("cpp in complex3", lambda: runCpp("in_complex3", "test/complex.bin"))
         runTest("cpp out inplace", lambda: runCpp("out_inplace", "test/inplace.bin"))
         runTest("cpp in inplace", lambda: runCpp("in_inplace", "test/inplace.bin"))
         runTest("cpp out extend1", lambda: runCpp("out_extend1", "test/extend1.bin"))
