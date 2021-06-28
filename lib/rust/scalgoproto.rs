@@ -95,7 +95,7 @@ pub unsafe fn to_enum<T: Enum>(v: u8) -> Option<T> {
     if v >= T::max_value() {
         None
     } else {
-        let mut target: T = std::mem::MaybeUninit::uninit().assume_init();
+        let mut target: T = std::mem::zeroed();
         std::ptr::copy_nonoverlapping(&v as *const u8, &mut target as *mut T as *mut u8, 1);
         Some(target)
     }
@@ -106,7 +106,7 @@ pub unsafe fn to_enum<T: Enum>(v: u8) -> Option<T> {
 /// This method is safe to call if the length of v is sizeof(T)
 /// and the bit pattern described by v is a valid state for T
 pub unsafe fn to_pod<T: Pod>(v: &[u8]) -> T {
-    let mut target: T = std::mem::MaybeUninit::uninit().assume_init();
+    let mut target: T = std::mem::zeroed();
     std::ptr::copy_nonoverlapping(
         v.as_ptr(),
         &mut target as *mut T as *mut u8,
