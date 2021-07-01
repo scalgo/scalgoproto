@@ -20,22 +20,22 @@ union Union1 {
 }
 
 table Table2 @B0E60C5B {
-	a: inplace Union1;
-	b: Union1; # create using add
-	c: Union1; # create using assigin
-	d: Union1; # create using copy
-	e: Union1; # create using copy from implace
+	a: optional inplace Union1;
+	b: optional Union1; # create using add
+	c: optional Union1; # create using assigin
+	d: optional Union1; # create using copy
+	e: optional Union1; # create using copy from implace
 }
 
 table Table3 @8E5C0658 {
-	v1: Table2;
-	v2: Table2;
-	v3: Table2;
-	v4: Table2;
-	v5: Table2;
-	v6: Table2;
-	v7: Table2;
-	v8: Table2;
-	v9: Table2;
-	v10: Table2;
+	v1: optional Table2;
+	v2: optional Table2;
+	v3: optional Table2;
+	v4: optional Table2;
+	v5: optional Table2;
+	v6: optional Table2;
+	v7: optional Table2;
+	v8: optional Table2;
+	v9: optional Table2;
+	v10: optional Table2;
 }

@@ -133,6 +133,9 @@ struct MetaMagic<double> {
 	using t = PodTag;
 };
 
+template <typename T>
+struct EnumSize {};
+
 template <typename Tag, typename T>
 class ListAccessHelp {};
 
@@ -176,6 +179,7 @@ private:
 	Ptr getPtr_(std::uint64_t offset) const {
 		// Validate that the offset is within the reader boundary
 		if (offset + 10 > size) throw Error();
+		if (offset == 0) return Ptr{data, 0};
 		// Check that we have the right magic
 		std::uint32_t read_magic;
 		memcpy(&read_magic, data + offset, 4);
@@ -228,6 +232,7 @@ protected:
 	}
 
 	static std::string_view getText_(const Reader * reader, Ptr p) noexcept {
+		if (p.size == 0) return std::string_view("");
 		reader->validateTextPtr_(p);
 		return std::string_view(p.start, p.size);
 	}
@@ -309,7 +314,7 @@ struct ListAccessHelp<EnumTag, T> : public In {
 	static constexpr std::uint64_t mult = 1;
 	static constexpr int def = 255;
 	static bool has(const char * start, std::uint64_t index) noexcept {
-		return ((const unsigned char *)(start))[index] != 255;
+		return ((const unsigned char *)(start))[index] < EnumSize<T>::size();
 	}
 	static T get(const Reader *, const char * start, std::uint64_t index) noexcept {
 		T ans;
@@ -346,7 +351,6 @@ struct ListAccessHelp<TextTag, T> : public In {
 	static std::string_view get(const Reader * reader, const char * start,
 								std::uint64_t index) {
 		std::uint64_t off = read48_(start + index * 6);
-		assert(off != 0);
 		Ptr p = reader->getPtr_<TEXTMAGIC, 1, 1>(off);
 		return getText_(reader, p);
 	}
@@ -380,7 +384,6 @@ struct ListAccessHelp<BytesTag, T> : public In {
 	static Bytes get(const Reader * reader, const char * start,
 					 std::uint64_t index) noexcept {
 		std::uint64_t off = read48_(start + index * 6);
-		assert(off != 0);
 		return getBytes_(reader->getPtr_<BYTESMAGIC>(off));
 	}
 	class Setter {
@@ -414,7 +417,6 @@ struct ListAccessHelp<TableTag, T> : public In {
 	static T get(const Reader * reader, const char * start,
 				 std::uint64_t index) noexcept {
 		std::uint64_t off = read48_(start + index * 6);
-		assert(off != 0);
 		return getObject_<T>(reader, reader->getPtr_<T::MAGIC>(off));
 	}
 
@@ -455,7 +457,6 @@ struct ListAccessHelp<UnionTag, T> : public In {
 		std::uint16_t type;
 		memcpy(&type, start + index * 8, 2);
 		std::uint64_t off = read48_(start + index * 8 + 2);
-		assert(type != 0 && off != 0);
 		return getObject_<T>(reader, type, off);
 	}
 
@@ -506,7 +507,6 @@ public:
 	}
 
 	value_type operator*() const noexcept {
-		if constexpr (A::optional) assert(A::has(start, index));
 		return A::get(reader, start, index);
 	}
 
@@ -588,12 +588,12 @@ public:
 
 	bool hasFront() const noexcept { return !empty() && has(0); }
 	value_type front() const noexcept(noexceptGet) {
-		assert(hasFront());
+		assert(!empty());
 		return A::get(reader_, start_, 0);
 	}
 	bool hasBack() const noexcept { return !empty() && has(size_ - 1); }
 	value_type back() const noexcept(noexceptGet) {
-		assert(hasBack());
+		assert(!empty());
 		return A::get(reader_, start_, size_ - 1);
 	}
 	size_type size() const noexcept { return size_; }
@@ -602,11 +602,10 @@ public:
 	iterator end() const noexcept { return iterator(reader_, start_, size_); }
 	value_type at(size_type pos) const {
 		if (pos >= size_) throw std::out_of_range("out of range");
-		if (!has(pos)) throw std::out_of_range("unset member");
 		return A::get(reader_, start_, pos);
 	};
 	value_type operator[](size_type pos) const noexcept(noexceptGet) {
-		assert(pos < size_ && has(pos));
+		assert(pos < size_);
 		return A::get(reader_, start_, pos);
 	}
 

@@ -3,17 +3,17 @@ import base
 namespace scalgoprototest2;
 
 table Complex2 @76AB8115 {
-	u1: NamedUnion;
-	u2: NamedUnion;
-	u3: NamedUnion;
-	u4: NamedUnion;
-	u5: union {
+	u1: optional NamedUnion;
+	u2: optional NamedUnion;
+	u3: optional NamedUnion;
+	u4: optional NamedUnion;
+	u5: optional union {
 		a: table @DBD93EF0 {};
 	}
-	hat: inplace table {
+	hat: optional inplace table {
 		id: I16;
 	};
-	l: list struct {
+	l: optional list struct {
 		a: I16;
 		b: Bool;
 	}
@@ -25,5 +25,5 @@ table Complex2 @76AB8115 {
 			z: U8;
 		}
 	}
-	l2: list NamedUnion;
+	l2: optional list NamedUnion;
 }

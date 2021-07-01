@@ -86,6 +86,17 @@ def require(v, e) -> bool:
     print("Error expected '%s' found '%s'" % (e, v), file=sys.stderr)
     return True
 
+def require_none(v) -> bool:
+    if v is None:
+        return False
+    print("Error expected None found '%s'" % (v), file=sys.stderr)
+    return True
+
+def require_some(v) -> bool:
+    if v is not None:
+        return False
+    print("Error expected not None found '%s'" % (v), file=sys.stderr)
+    return True
 
 def require2(b, v, e) -> bool:
     if not b:
@@ -155,7 +166,7 @@ def test_out(path: str) -> bool:
 def test_in(path: str) -> bool:
     r = scalgoproto.Reader(read_in(path))
     s = r.root(base.SimpleIn)
-    if require(s.has_e, True):
+    if require_some(s.e):
         return False
     if require(s.e, base.MyEnum.c):
         return False
@@ -211,29 +222,29 @@ def test_in(path: str) -> bool:
         return False
     if require(s.d, 3.0):
         return False
-    if require(s.has_os, True):
+    if require_some(s.os):
         return False
-    if require(s.has_ob, True):
+    if require_some(s.ob):
         return False
-    if require(s.has_ou8, True):
+    if require_some(s.ou8):
         return False
-    if require(s.has_ou16, True):
+    if require_some(s.ou16):
         return False
-    if require(s.has_ou32, True):
+    if require_some(s.ou32):
         return False
-    if require(s.has_ou64, True):
+    if require_some(s.ou64):
         return False
-    if require(s.has_oi8, True):
+    if require_some(s.oi8):
         return False
-    if require(s.has_oi16, True):
+    if require_some(s.oi16):
         return False
-    if require(s.has_oi32, True):
+    if require_some(s.oi32):
         return False
-    if require(s.has_oi64, True):
+    if require_some(s.oi64):
         return False
-    if require(s.has_of, True):
+    if require_some(s.of):
         return False
-    if require(s.has_od, True):
+    if require_some(s.od):
         return False
     if require(s.os.x, 43):
         return False
@@ -263,31 +274,31 @@ def test_in(path: str) -> bool:
         return False
     if require(s.od, 6.4):
         return False
-    if require(s.has_ne, False):
+    if require_none(s.ne):
         return False
-    if require(s.has_ns, False):
+    if require_none(s.ns):
         return False
-    if require(s.has_nb, False):
+    if require_none(s.nb):
         return False
-    if require(s.has_nu8, False):
+    if require_none(s.nu8):
         return False
-    if require(s.has_nu16, False):
+    if require_none(s.nu16):
         return False
-    if require(s.has_nu32, False):
+    if require_none(s.nu32):
         return False
-    if require(s.has_nu64, False):
+    if require_none(s.nu64):
         return False
-    if require(s.has_ni8, False):
+    if require_none(s.ni8):
         return False
-    if require(s.has_ni16, False):
+    if require_none(s.ni16):
         return False
-    if require(s.has_ni32, False):
+    if require_none(s.ni32):
         return False
-    if require(s.has_ni64, False):
+    if require_none(s.ni64):
         return False
-    if require(s.has_nf, False):
+    if require_none(s.nf):
         return False
-    if require(s.has_nd, False):
+    if require_none(s.nd):
         return False
     return True
 
@@ -295,7 +306,7 @@ def test_in(path: str) -> bool:
 def test_in_default(path: str) -> bool:
     r = scalgoproto.Reader(read_in(path))
     s = r.root(base.SimpleIn)
-    if require(s.has_e, False):
+    if require_none(s.e):
         return False
     if require(s.s.e, base.MyEnum.a):
         return False
@@ -349,53 +360,53 @@ def test_in_default(path: str) -> bool:
         return False
     if require(s.d, 11.0):
         return False
-    if require(s.has_os, False):
+    if require_none(s.os):
         return False
-    if require(s.has_ob, False):
+    if require_none(s.ob):
         return False
-    if require(s.has_ou8, False):
+    if require_none(s.ou8):
         return False
-    if require(s.has_ou16, False):
+    if require_none(s.ou16):
         return False
-    if require(s.has_ou32, False):
+    if require_none(s.ou32):
         return False
-    if require(s.has_ou64, False):
+    if require_none(s.ou64):
         return False
-    if require(s.has_oi8, False):
+    if require_none(s.oi8):
         return False
-    if require(s.has_oi16, False):
+    if require_none(s.oi16):
         return False
-    if require(s.has_oi32, False):
+    if require_none(s.oi32):
         return False
-    if require(s.has_oi64, False):
+    if require_none(s.oi64):
         return False
-    if require(s.has_of, False):
+    if require_none(s.of):
         return False
-    if require(s.has_od, False):
+    if require_none(s.od):
         return False
-    if require(s.has_ns, False):
+    if require_none(s.ns):
         return False
-    if require(s.has_nb, False):
+    if require_none(s.nb):
         return False
-    if require(s.has_nu8, False):
+    if require_none(s.nu8):
         return False
-    if require(s.has_nu16, False):
+    if require_none(s.nu16):
         return False
-    if require(s.has_nu32, False):
+    if require_none(s.nu32):
         return False
-    if require(s.has_nu64, False):
+    if require_none(s.nu64):
         return False
-    if require(s.has_ni8, False):
+    if require_none(s.ni8):
         return False
-    if require(s.has_ni16, False):
+    if require_none(s.ni16):
         return False
-    if require(s.has_ni32, False):
+    if require_none(s.ni32):
         return False
-    if require(s.has_ni64, False):
+    if require_none(s.ni64):
         return False
-    if require(s.has_nf, False):
+    if require_none(s.nf):
         return False
-    if require(s.has_nd, False):
+    if require_none(s.nd):
         return False
     return True
 
@@ -470,31 +481,22 @@ def test_in_complex(path: str) -> bool:
     r = scalgoproto.Reader(read_in(path))
 
     s = r.root(base.ComplexIn)
-    if require(s.has_nmember, False):
+    if require_none(s.nmember):
         return False
-    if require(s.has_ntext, False):
+    if require_none(s.ntext):
         return False
-    if require(s.has_nbytes, False):
-        return False
-    if require(s.has_text, True):
-        return False
-    if require(s.has_my_bytes, True):
+    if require_none(s.nbytes):
         return False
     if require(s.text, "text"):
         return False
     if require(s.my_bytes, b"bytes"):
         return False
-    if require(s.has_member, True):
-        return False
     m = s.member
+    if require_some(m):
+        return False
     if require(m.id, 42):
         return False
-
-    if require(s.has_int_list, True):
-        return False
-    if require(s.has_nint_list, False):
-        return False
-    if require(len(s.nint_list), 0):
+    if require_none(s.nint_list):
         return False
     l = s.int_list
 
@@ -505,7 +507,7 @@ def test_in_complex(path: str) -> bool:
         if require(l[i], 100 - 2 * i):
             return False
 
-    if require(s.has_enum_list, True):
+    if require_some(s.enum_list):
         return False
     l2 = s.enum_list
     if require(l2.has(0), True):
@@ -517,64 +519,58 @@ def test_in_complex(path: str) -> bool:
     if require(len(l2), 2):
         return False
 
-    if require(s.has_struct_list, True):
+    if require_some(s.struct_list):
         return False
     l3 = s.struct_list
     if require(len(l3), 1):
         return False
 
-    if require(s.has_text_list, True):
+    if require_some(s.text_list):
         return False
     l4 = s.text_list
     if require(len(l4), 200):
         return False
     for i in range(len(l4)):
         if i % 2 == 0:
-            if require(l4.has(i), False):
+            if require(l4[i], ""):
                 return False
         else:
-            if require(l4.has(i), True):
-                return False
             if require(l4[i], "HI THERE"):
                 return False
 
-    if require(s.has_bytes_list, True):
+    if require_some(s.bytes_list):
         return False
     l5 = s.bytes_list
     if require(len(l5), 1):
         return False
-    if require(l5.has(0), True):
-        return False
     if require(l5[0], b"bytes"):
         return False
 
-    if require(s.has_member_list, True):
+    if require_some(s.member_list):
         return False
     l6 = s.member_list
     if require(len(l6), 3):
         return False
-    if require(l6.has(0), True):
-        return False
-    if require(l6.has(1), False):
-        return False
-    if require(l6.has(2), True):
-        return False
     if require(l6[0].id, 42):
+        return False
+    if require(l6[1].id, 0):
         return False
     if require(l6[2].id, 42):
         return False
 
-    if require(s.has_direct_member_list, True):
+    if require_some(s.direct_member_list):
         return False
     l6a = s.direct_member_list
     if require(len(l6a), 3):
         return False
     if require(l6a[0].id, 43):
         return False
+    if require(l6a[1].id, 0):
+        return False
     if require(l6a[2].id, 43):
         return False
 
-    if require(s.has_f32list, True):
+    if require_some(s.f32list):
         return False
     l7 = s.f32list
     if require(len(l7), 2):
@@ -584,7 +580,7 @@ def test_in_complex(path: str) -> bool:
     if require(l7[1], 98.0):
         return False
 
-    if require(s.has_f64list, True):
+    if require_some(s.f64list):
         return False
     l8 = s.f64list
     if require(len(l8), 3):
@@ -596,7 +592,7 @@ def test_in_complex(path: str) -> bool:
     if require(l8[2], 78.0):
         return False
 
-    if require(s.has_u8list, True):
+    if require_some(s.u8list):
         return False
     l9 = s.u8list
     if require(len(l9), 2):
@@ -606,7 +602,7 @@ def test_in_complex(path: str) -> bool:
     if require(l9[1], 0):
         return False
 
-    if require(s.has_blist, True):
+    if require_some(s.blist):
         return False
     l10 = s.blist
     if require(len(l10), 10):
@@ -634,6 +630,136 @@ def test_in_complex(path: str) -> bool:
 
     return True
 
+
+def test_in_complex3(path: str) -> bool:
+    r = scalgoproto.Reader(read_in(path))
+
+    s = r.root(base.Complex3In)
+    if require(s.nmember.id, 0):
+        return False
+    if require(s.ntext, ""):
+        return False
+    if require(s.nbytes, b""):
+        return False
+    if require(s.text, "text"):
+        return False
+    if require(s.my_bytes, b"bytes"):
+        return False
+    if require(s.member.id, 42):
+        return False
+    if require(len(s.nint_list), 0):
+        return False
+
+    l = s.int_list
+    if require(len(l), 31):
+        return False
+
+    for i in range(31):
+        if require(l[i], 100 - 2 * i):
+            return False
+
+    l2 = s.enum_list
+    if require(l2.has(0), True):
+        return False
+    if require(l2.has(1), False):
+        return False
+    if require(l2[0], base.MyEnum.a):
+        return False
+    if require(len(l2), 2):
+        return False
+
+    if require(len(s.struct_list), 1):
+        return False
+
+
+    l4 = s.text_list
+    if require(len(l4), 200):
+        return False
+    for i in range(len(l4)):
+        if i % 2 == 0:
+            if require(l4[i], ""):
+                return False
+        else:
+            if require(l4[i], "HI THERE"):
+                return False
+
+    l5 = s.bytes_list
+    if require(len(l5), 1):
+        return False
+    if require(l5[0], b"bytes"):
+        return False
+
+    l6 = s.member_list
+    if require(len(l6), 3):
+        return False
+    if require(l6[0].id, 42):
+        return False
+    if require(l6[1].id, 0):
+        return False
+    if require(l6[2].id, 42):
+        return False
+
+    l6a = s.direct_member_list
+    if require(len(l6a), 3):
+        return False
+    if require(l6a[0].id, 43):
+        return False
+    if require(l6a[1].id, 0):
+        return False
+    if require(l6a[2].id, 43):
+        return False
+
+    l7 = s.f32list
+    if require(len(l7), 2):
+        return False
+    if require(l7[0], 0.0):
+        return False
+    if require(l7[1], 98.0):
+        return False
+
+    l8 = s.f64list
+    if require(len(l8), 3):
+        return False
+    if require(l8[0], 0.0):
+        return False
+    if require(l8[1], 0.0):
+        return False
+    if require(l8[2], 78.0):
+        return False
+
+    l9 = s.u8list
+    if require(len(l9), 2):
+        return False
+    if require(l9[0], 4):
+        return False
+    if require(l9[1], 0):
+        return False
+
+    l10 = s.blist
+    if require(len(l10), 10):
+        return False
+    if require(l10[0], True):
+        return False
+    if require(l10[1], False):
+        return False
+    if require(l10[2], True):
+        return False
+    if require(l10[3], False):
+        return False
+    if require(l10[4], False):
+        return False
+    if require(l10[5], False):
+        return False
+    if require(l10[6], False):
+        return False
+    if require(l10[7], False):
+        return False
+    if require(l10[8], True):
+        return False
+    if require(l10[9], False):
+        return False
+
+    return True
 
 def test_out_complex2(path: str) -> bool:
     w = scalgoproto.Writer()
@@ -699,11 +825,11 @@ def test_in_complex2(path: str) -> bool:
         return False
     if require(s.u5.is_a, True):
         return False
-    if require(s.has_hat, True):
+    if require_some(s.hat):
         return False
     if require(s.hat.id, 43):
         return False
-    if require(s.has_l, True):
+    if require_some(s.l):
         return False
     l2 = s.l
     if require(len(l2), 1):
@@ -758,54 +884,46 @@ def test_in_inplace(path: str) -> bool:
     r = scalgoproto.Reader(o)
     s = r.root(base.InplaceRootIn)
 
-    if require(s.has_u, True):
+    if require_some(s.u):
         return False
     u = s.u
     if require(u.u.is_monkey, True):
         return False
     monkey = u.u.monkey
-    if require(monkey.has_name, True):
-        return False
     if require(monkey.name, "nilson"):
         return False
 
-    if require(s.has_u2, True):
+    if require_some(s.u2):
         return False
     u2 = s.u2
     if require(u2.u.is_text, True):
         return False
     u2t = u2.u.text
-    if require(u2t.has_t, True):
-        return False
     if require(u2t.t, "foobar"):
         return False
 
-    if require(s.has_t, True):
+    if require_some(s.t):
         return False
     t = s.t
     if require(t.id, 45):
         return False
-    if require(t.has_t, True):
-        return False
     if require(t.t, "cake"):
         return False
 
-    if require(s.has_b, True):
+    if require_some(s.b):
         return False
     b = s.b
     if require(b.id, 46):
         return False
-    if require(b.has_b, True):
-        return False
     if require(b.b, b"hi"):
         return False
 
-    if require(s.has_l, True):
+    if require_some(s.l):
         return False
     l = s.l
     if require(l.id, 47):
         return False
-    if require(l.has_l, True):
+    if require_some(l.l):
         return False
     ll = l.l
     if require(len(ll), 2):
@@ -833,7 +951,7 @@ def test_in_extend1(path: str) -> bool:
         return False
     if require(s.bb, 42):
         return False
-    if require(s.has_u, False):
+    if require_none(s.u):
         return False
     return True
 
@@ -863,7 +981,7 @@ def test_extend2_part(s: base.Gen3In) -> bool:
         return False
     if require(s.u.cake.v, 45):
         return False
-    if require(s.has_direct_member_list, True):
+    if require_some(s.direct_member_list):
         return False
     l = s.direct_member_list
     if require(len(l), 4):
@@ -914,47 +1032,47 @@ def test_extend2_part(s: base.Gen3In) -> bool:
         return False
     if require(s.d, 11):
         return False
-    if require(s.has_os, False):
+    if require_none(s.os):
         return False
-    if require(s.has_ob, False):
+    if require_none(s.ob):
         return False
-    if require(s.has_ou8, False):
+    if require_none(s.ou8):
         return False
-    if require(s.has_ou16, False):
+    if require_none(s.ou16):
         return False
-    if require(s.has_ou32, False):
+    if require_none(s.ou32):
         return False
-    if require(s.has_ou64, False):
+    if require_none(s.ou64):
         return False
-    if require(s.has_oi8, False):
+    if require_none(s.oi8):
         return False
-    if require(s.has_oi16, False):
+    if require_none(s.oi16):
         return False
-    if require(s.has_oi32, False):
+    if require_none(s.oi32):
         return False
-    if require(s.has_oi64, False):
+    if require_none(s.oi64):
         return False
-    if require(s.has_of, False):
+    if require_none(s.of):
         return False
-    if require(s.has_od, False):
+    if require_none(s.od):
         return False
-    if require(s.has_member, False):
+    if require_none(s.member):
         return False
-    if require(s.has_text, False):
+    if require_none(s.text):
         return False
-    if require(s.has_mbytes, False):
+    if require_none(s.mbytes):
         return False
-    if require(s.has_int_list, False):
+    if require_none(s.int_list):
         return False
-    if require(s.has_enum_list, False):
+    if require_none(s.enum_list):
         return False
-    if require(s.has_struct_list, False):
+    if require_none(s.struct_list):
         return False
-    if require(s.has_text_list, False):
+    if require_none(s.text_list):
         return False
-    if require(s.has_bytes_list, False):
+    if require_none(s.bytes_list):
         return False
-    if require(s.has_member_list, False):
+    if require_none(s.member_list):
         return False
     return True
 
@@ -994,6 +1112,8 @@ def main() -> None:
         ans = test_out_complex(path)
     elif test == "in_complex":
         ans = test_in_complex(path)
+    elif test == "in_complex3":
+        ans = test_in_complex3(path)
     elif test == "out_complex2":
         ans = test_out_complex2(path)
     elif test == "in_complex2":

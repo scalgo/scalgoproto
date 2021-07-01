@@ -74,6 +74,7 @@ class Generator:
         self.out: TextIO = out
 
     def out_list_type(self, node: Value) -> str:
+        assert node.type_ is not None
         if node.type_.type == TokenType.BOOL:
             return "scalgoproto::BoolListWrite"
         elif node.type_.type in typeMap:
@@ -98,6 +99,7 @@ class Generator:
             raise ICE()
 
     def out_list_constructor(self, node: Value, inplace: bool = False) -> str:
+        assert node.type_ is not None
         x = ", true" if inplace else ""
         if node.type_.type == TokenType.BOOL:
             return "constructBoolList(size%s)" % x
@@ -131,30 +133,35 @@ class Generator:
             raise ICE()
 
     def in_list_help(self, node: Value, os: str) -> Tuple[str, str]:
+        assert node.type_ is not None
         if node.type_.type == TokenType.BOOL:
             return ("boolean", "        return this._reader._getBoolList(%s)" % (os))
         elif node.type_.type in typeMap:
             ti = typeMap[node.type_.type]
             return (ti.p, "        return this._reader._get%sList(%s)" % (ti.n, os))
         elif node.struct:
+            assert node.struct.name is not None
             return (
                 node.struct.name,
                 "        return this._reader._getStructList(%s, %s)"
                 % (os, node.struct.name),
             )
         elif node.enum:
+            assert node.enum.name is not None
             return (
                 node.enum.name + " | null",
                 "        return this._reader._getEnumList<%s>(%s)"
                 % (node.enum.name, os),
             )
         elif node.table:
+            assert node.table.name is not None
             return (
                 node.table.name + "In | null",
                 "        return this._reader._getTableList(%s, %sIn)"
                 % (os, node.table.name),
             )
         elif node.union:
+            assert node.union.name is not None
             return (
                 node.union.name + "In",
                 "        return this._reader._getUnionList(%s, %sIn)"
@@ -174,6 +181,7 @@ class Generator:
             raise ICE()
 
     def list_access_type_lt(self, node: Value) -> str:
+        assert node.type_ is not None
         if node.type_.type == TokenType.BOOL:
             return "scalgoproto::BoolListRead<'a>"
         elif node.type_.type in typeMap:
@@ -229,19 +237,28 @@ class Generator:
         self.output_doc(node, "    ")
         directTable_ = "direct_table_" if node.direct else ""
         an = f"{node.table.name}In" if node.direct else tn
-        self.o(
-            f"""    #[inline]
+        if node.optional:
+            self.o(
+                f"""    #[inline]
     pub fn {lname}(&self) -> Result<std::option::Option<scalgoproto::ListIn<'a, {tn}>>> {{
+        self._reader.get_optional_{directTable_}list{"_inplace" if node.inplace else ""}::<{an}>({node.offset})
+    }}
+"""
+            )
+        else:
+            self.o(
+                f"""    #[inline]
+    pub fn {lname}(&self) -> Result<scalgoproto::ListIn<'a, {tn}>> {{
         self._reader.get_{directTable_}list{"_inplace" if node.inplace else ""}::<{an}>({node.offset})
     }}
 """
-        )
+            )
 
     def generate_list_out(self, node: Value, lname: str, size: int) -> None:
         ot = self.out_list_type(node)
         directTable = "DirectTable" if node.direct else ""
         directTable_ = "direct_table_" if node.direct else ""
-        at = f"{node.table.name}Out<'a, Normal>" if node.direct else ot
+        at = f"{node.table.name}Out<'a, Normal>" if node.direct and node.table else ot
         if not node.inplace:
             self.output_doc(node, "    ")
             self.o(
@@ -385,6 +402,7 @@ class Generator:
     def generate_basic_in(self, node: Value, lname: str) -> None:
         if node.inplace:
             raise ICE()
+        assert node.type_ is not None
         ti = typeMap[node.type_.type]
         self.output_doc(node, "    ")
         if node.optional:
@@ -393,8 +411,8 @@ class Generator:
                     f"""    #[inline]
     pub fn {lname}(&self) -> std::option::Option<{ti.p}> {{
         match self._reader.get_pod::<{ti.p}>({node.offset}) {{
-            None => None, 
-            Some(v) if v.is_nan() => None, 
+            None => None,
+            Some(v) if v.is_nan() => None,
             Some(v) => Some(v)
         }}
     }}
@@ -426,6 +444,7 @@ class Generator:
     def generate_basic_out(self, node: Value, lname: str) -> None:
         if node.inplace:
             raise ICE()
+        assert node.type_ is not None
         ti = typeMap[node.type_.type]
         self.output_doc(node, "    ")
         if node.optional and ti.p in ("f32", "f64"):
@@ -446,7 +465,7 @@ class Generator:
         match v {{
             None => self._slice.set_bit({node.has_offset}, {node.has_bit}, false),
             Some(b) => {{
-                self._slice.set_bit({node.has_offset}, {node.has_bit}, true); 
+                self._slice.set_bit({node.has_offset}, {node.has_bit}, true);
                 self._slice.set_pod({node.offset}, &b)
             }}
         }}
@@ -465,6 +484,7 @@ class Generator:
     def generate_enum_in(self, node: Value, lname: str) -> None:
         if node.inplace:
             raise ICE()
+        assert node.enum is not None and node.enum.name is not None
         self.output_doc(node, "    ")
         self.o(
             f"""    #[inline]
@@ -477,6 +497,7 @@ class Generator:
     def generate_enum_out(self, node: Value, lname: str) -> None:
         if node.inplace:
             raise ICE()
+        assert node.enum is not None and node.enum.name is not None
         self.output_doc(node, "    ")
         self.o(
             f"""    #[inline]
@@ -489,6 +510,7 @@ class Generator:
     def generate_struct_in(self, node: Value, lname: str) -> None:
         if node.inplace:
             raise ICE()
+        assert node.struct is not None and node.struct.name is not None
         self.output_doc(node, "    ")
         if node.optional:
             self.o(
@@ -514,13 +536,14 @@ class Generator:
     def generate_struct_out(self, node: Value, lname: str) -> None:
         if node.inplace:
             raise ICE()
+        assert node.struct is not None and node.struct.name is not None
         self.output_doc(node, "    ")
 
         if node.optional:
             self.o(
                 f"""    #[inline]
     pub fn {lname}(&mut self) -> {node.struct.name}Out {{
-        self._slice.set_bit({node.has_offset}, {node.has_bit}, true); 
+        self._slice.set_bit({node.has_offset}, {node.has_bit}, true);
         self._slice.get_struct::<{node.struct.name}>({node.offset})
     }}
 """
@@ -535,27 +558,49 @@ class Generator:
             )
 
     def generate_table_in(self, node: Value, lname: str) -> None:
+        assert node.table is not None
         tname = node.table.name
-        if not node.inplace:
-            self.output_doc(node, "    ")
-            self.o(
-                f"""    #[inline]
+        if node.optional:
+            if not node.inplace:
+                self.output_doc(node, "    ")
+                self.o(
+                    f"""    #[inline]
     pub fn {lname}(&self) -> Result<std::option::Option<{tname}In>> {{
+        self._reader.get_optional_table::<{tname}In>({node.offset})
+    }}
+"""
+                )
+            else:
+                self.output_doc(node, "    ")
+                self.o(
+                    f"""    #[inline]
+    pub fn {lname}(&self) -> Result<std::option::Option<{tname}In>> {{
+        self._reader.get_optional_table_inplace::<{tname}In>({node.offset})
+    }}
+"""
+                )
+        else:
+            if not node.inplace:
+                self.output_doc(node, "    ")
+                self.o(
+                    f"""    #[inline]
+    pub fn {lname}(&self) -> Result<{tname}In> {{
         self._reader.get_table::<{tname}In>({node.offset})
     }}
 """
-            )
-        else:
-            self.output_doc(node, "    ")
-            self.o(
-                f"""    #[inline]
-    pub fn {lname}(&self) -> Result<std::option::Option<{tname}In>> {{
+                )
+            else:
+                self.output_doc(node, "    ")
+                self.o(
+                    f"""    #[inline]
+    pub fn {lname}(&self) -> Result<{tname}In> {{
         self._reader.get_table_inplace::<{tname}In>({node.offset})
     }}
 """
-            )
+                )
 
     def generate_table_out(self, node: Value, lname: str) -> None:
+        assert node.table is not None
         tname = node.table.name
         if not node.inplace:
             self.output_doc(node, "    ")
@@ -599,13 +644,14 @@ class Generator:
     def generate_union_table_out(
         self, node: Value, lname: str, idx: int, inplace: bool
     ) -> None:
+        assert node.table is not None
         tname = node.table.name
         if node.table.empty:
             self.output_doc(node, "    ")
             self.o(
                 f"""    #[inline]
     pub fn add_{lname}(&mut self) {{
-        self._slice.set_pod::<u16>(0, &{idx}); 
+        self._slice.set_pod::<u16>(0, &{idx});
         self._slice.set_u48(2, 0);
     }}
 """
@@ -616,7 +662,7 @@ class Generator:
             self.o(
                 f"""    #[inline]
     pub fn set_{lname}(&mut self, v: &{tname}Out<'a, Normal>) {{
-        self._slice.set_pod::<u16>(0, &{idx}); 
+        self._slice.set_pod::<u16>(0, &{idx});
         self._slice.set_table(2, Some(v));
     }}
 """
@@ -625,7 +671,7 @@ class Generator:
             self.o(
                 f"""    #[inline]
     pub fn add_{lname}(&mut self) -> {tname}Out<'a, Normal> {{
-        let a = self._slice.arena.create_table(); 
+        let a = self._slice.arena.create_table();
         self.set_{lname}(&a); a
     }}
 """
@@ -648,7 +694,7 @@ class Generator:
             self.o(
                 f"""    #[inline]
     pub fn add_{lname}(&mut self) -> {tname}Out<'a, Inplace> {{
-        self._slice.set_pod::<u16>(0, &{idx}); 
+        self._slice.set_pod::<u16>(0, &{idx});
         self._slice.add_table_inplace::<{tname}Out<Inplace>>(2, Some(self._container_end))
     }}
 """
@@ -660,18 +706,28 @@ class Generator:
     pub fn copy_{lname}<'b>(&mut self, i: {tname}In<'b>) -> Result<()> {{
         let mut a = self.add_{lname}();
         a.copy_in(i)
-    }}"""
+    }}
+"""
             )
 
     def generate_text_in(self, node: Value, lname: str) -> None:
         self.output_doc(node, "    ")
-        self.o(
-            f"""    #[inline]
+        if node.optional:
+            self.o(
+                f"""    #[inline]
     pub fn {lname}(&self) -> Result<std::option::Option<&'a str>> {{
+        self._reader.get_optional_text{"_inplace" if node.inplace else ""}({node.offset})
+    }}
+"""
+            )
+        else:
+            self.o(
+                f"""    #[inline]
+    pub fn {lname}(&self) -> Result<&'a str> {{
         self._reader.get_text{"_inplace" if node.inplace else ""}({node.offset})
     }}
 """
-        )
+            )
 
     def generate_text_out(self, node: Value, lname: str) -> None:
         self.output_doc(node, "    ")
@@ -729,8 +785,8 @@ class Generator:
             self.o(
                 f"""    #[inline]
     pub fn add_{lname}(&mut self, v: &str) -> scalgoproto::TextOut {{
-        let a = self._slice.arena.create_text(v); 
-        self.set_{lname}(&a); 
+        let a = self._slice.arena.create_text(v);
+        self.set_{lname}(&a);
         a
     }}
 """
@@ -738,13 +794,22 @@ class Generator:
 
     def generate_bytes_in(self, node: Value, lname: str) -> None:
         self.output_doc(node, "    ")
-        self.o(
-            f"""    #[inline]
+        if node.optional:
+            self.o(
+                f"""    #[inline]
     pub fn {lname}(&self) -> Result<std::option::Option<&[u8]>> {{
+        self._reader.get_optional_bytes{"_inplace" if node.inplace else ""}({node.offset})
+    }}
+"""
+            )
+        else:
+            self.o(
+                f"""    #[inline]
+    pub fn {lname}(&self) -> Result<&[u8]> {{
         self._reader.get_bytes{"_inplace" if node.inplace else ""}({node.offset})
     }}
 """
-        )
+            )
 
     def generate_bytes_out(self, node: Value, lname: str) -> None:
         if not node.inplace:
@@ -781,7 +846,7 @@ class Generator:
             self.o(
                 f"""    #[inline]
     pub fn add_{lname}(&mut self, v: &[u8]) {{
-        self._slice.set_pod::<u16>(0, &{idx}); 
+        self._slice.set_pod::<u16>(0, &{idx});
         self._slice.add_bytes_inplace(2, v, Some(self._container_end))
     }}
 """
@@ -791,7 +856,7 @@ class Generator:
             self.o(
                 f"""    #[inline]
     pub fn set_{lname}(&mut self, v: &scalgoproto::BytesOut<'a>) {{
-        self._slice.set_pod::<u16>(0, &{idx}); 
+        self._slice.set_pod::<u16>(0, &{idx});
         self._slice.set_bytes(2, Some(v));
     }}
 """
@@ -808,6 +873,7 @@ class Generator:
             )
 
     def generate_union_in(self, node: Value, lname: str, table: Table) -> None:
+        assert node.union is not None
         self.output_doc(node, "    ")
         self.o(
             f"""    #[inline]
@@ -818,6 +884,7 @@ class Generator:
         )
 
     def generate_union_out(self, node: Value, lname: str, table: Table) -> None:
+        assert node.union is not None
         self.output_doc(node, "    ")
         self.o(
             f"""    #[inline]
@@ -829,6 +896,7 @@ class Generator:
 
     def generate_value_in(self, table: Table, node: Value) -> None:
         lname = snake(self.value(node.identifier))
+        assert node.type_ is not None
         if node.list_:
             self.generate_list_in(node, lname)
         elif node.type_.type == TokenType.BOOL:
@@ -852,7 +920,9 @@ class Generator:
 
     def generate_value_out(self, table: Table, node: Value) -> None:
         lname = snake(self.value(node.identifier))
+        assert node.type_ is not None
         if node.list_:
+            assert table.default is not None
             self.generate_list_out(node, lname, len(table.default))
         elif node.type_.type == TokenType.BOOL:
             self.generate_bool_out(node, lname)
@@ -894,6 +964,7 @@ pub enum {union.name}In<'a> {{
         for member in union.members:
             if not isinstance(member, (Table, Value)):
                 raise ICE()
+            assert member.type_ is not None
             uname = ucamel(self.value(member.identifier))
             if member.list_:
                 self.o(
@@ -917,6 +988,7 @@ impl<'a> scalgoproto::UnionIn<'a> for {union.name}In<'a> {{
         match t {{"""
         )
         for i, member in enumerate(union.members):
+            assert member.type_ is not None
             uname = ucamel(self.value(member.identifier))
             if member.list_:
                 self.o(
@@ -955,12 +1027,13 @@ impl<'a> scalgoproto::UnionIn<'a> for {union.name}In<'a> {{
 impl<'a> {union.name}Out<'a, Normal> {{
     #[inline]
     pub fn set_none(&mut self) {{
-        self._slice.set_pod::<u16>(0, &0); 
+        self._slice.set_pod::<u16>(0, &0);
         self._slice.set_u48(2, 0);
     }}
 """
         )
         for idx, member in enumerate(union.members):
+            assert member.type_ is not None
             llname = snake(self.value(member.identifier))
             if member.list_:
                 self.generate_union_list_out(member, llname, idx + 1, False)
@@ -974,16 +1047,17 @@ impl<'a> {union.name}Out<'a, Normal> {{
                 raise ICE()
         self.o(
             f"""}}
-        
+
 impl<'a> {union.name}Out<'a, Inplace> {{
     #[inline]
     pub fn set_none(&mut self) {{
-        self._slice.set_pod::<u16>(0, &0); 
+        self._slice.set_pod::<u16>(0, &0);
         self._slice.set_u48(2, 0);
     }}
 """
         )
         for idx, member in enumerate(union.members):
+            assert member.type_ is not None
             llname = snake(self.value(member.identifier))
             if member.list_:
                 self.generate_union_list_out(member, llname, idx + 1, True)
@@ -1067,10 +1141,19 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
                 lname = snake(self.value(node.identifier))
                 if bool(node.inplace) != ip:
                     continue
-                if node.list_:
+                assert node.type_ is not None
+                if node.list_ and node.optional:
                     self.o(
                         f"""        if let Some(v) = i.{lname}()? {{
-            let mut w = self.add_{lname}(v.len()); 
+            let mut w = self.add_{lname}(v.len());
+            w.copy_in(v)?;
+        }}"""
+                    )
+                elif node.list_:
+                    self.o(
+                        f"""        let v = i.{lname}()?;
+        if ! v.is_empty() {{
+            let mut w = self.add_{lname}(v.len());
             w.copy_in(v)?;
         }}"""
                     )
@@ -1080,9 +1163,19 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
                     or node.enum
                 ):
                     self.o(f"        self.{lname}(i.{lname}());")
-                elif node.type_.type in (TokenType.TEXT, TokenType.BYTES):
+                elif (
+                    node.type_.type in (TokenType.TEXT, TokenType.BYTES)
+                    and node.optional
+                ):
                     self.o(
                         f"""        if let Some(v) = i.{lname}()? {{
+            self.add_{lname}(v);
+        }}"""
+                    )
+                elif node.type_.type in (TokenType.TEXT, TokenType.BYTES):
+                    self.o(
+                        f"""        let v = i.{lname}()?;
+        if !v.is_empty() {{
             self.add_{lname}(v);
         }}"""
                     )
@@ -1094,13 +1187,15 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
                     )
                 elif node.struct:
                     self.o(f"        self.{lname}().copy_in(i.{lname}())?;")
-                elif node.table:
+                elif node.table and node.optional:
                     self.o(
                         f"""        if let Some(v) = i.{lname}()? {{
-            let mut w = self.add_{lname}(); 
+            let mut w = self.add_{lname}();
             w.copy_in(v)?;
         }}"""
                     )
+                elif node.table:
+                    self.o(f"        self.add_{lname}().copy_in(i.{lname}()?)?;")
                 elif node.union:
                     self.o(f"        self.{lname}().copy_in(i.{lname}()?)?;")
                 else:
@@ -1174,6 +1269,7 @@ impl<'a, P: Placement> {name}Out<'a, P> {{"""
         )
         for node in table.members:
             self.generate_value_out(table, node)
+        assert table.default is not None
         self.o(
             f"""}}
 
@@ -1270,6 +1366,7 @@ impl <'a> {name}In<'a> {{"""
         for v in node.members:
             if not isinstance(v, Value):
                 raise ICE()
+            assert v.type_ is not None
             ident = self.value(v.identifier)
             if v.type_.type == TokenType.BOOL:
                 self.o(
@@ -1330,6 +1427,7 @@ impl <'a> {name}Out<'a> {{"""
         for v in node.members:
             if not isinstance(v, Value):
                 raise ICE()
+            assert v.type_ is not None
             ident = self.value(v.identifier)
             if v.type_.type == TokenType.BOOL:
                 self.o(
@@ -1425,8 +1523,10 @@ impl scalgoproto::Enum for {node.name} {{
                     continue
                 i = imports.setdefault(u.document, set())
                 if isinstance(u, Struct):
+                    assert u.name is not None
                     i.add(u.name)
                 elif isinstance(u, Enum):
+                    assert u.name is not None
                     i.add(u.name)
                 elif isinstance(u, Table):
                     i.add("%s" % u.name)
@@ -1441,8 +1541,8 @@ impl scalgoproto::Enum for {node.name} {{
 
         for (d, imp) in imports.items():
             doc = self.documents.by_id[d]
-            for i in imp:
-                self.o(f"use crate::{doc.name}::{i};")
+            for ii in imp:
+                self.o(f"use crate::{doc.name}::{ii};")
 
         for node in ast:
             if node.document != 0:

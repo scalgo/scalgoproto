@@ -234,7 +234,6 @@ int main(int argc, char ** argv) {
 
 		REQUIRE(s.hasIntList(), true);
 		REQUIRE(s.hasNintList(), false);
-		REQUIRE(s.nintList().size(), 0);
 		auto l = s.intList();
 		auto rl = s.intListRaw();
 
@@ -248,8 +247,8 @@ int main(int argc, char ** argv) {
 
 		REQUIRE(s.hasEnumList(), true);
 		auto l2 = s.enumList();
-		REQUIRE(l2.has(0), true);
-		REQUIRE(l2.has(1), false);
+		REQUIREQ(l2.has(0), true);
+		REQUIREQ(l2.has(1), false);
 		REQUIREQ(l2[0], MyEnum::a);
 		REQUIRE(l2.size(), 2);
 
@@ -262,9 +261,8 @@ int main(int argc, char ** argv) {
 		REQUIRE(l4.size(), 200);
 		for (size_t i = 0; i < l4.size(); ++i) {
 			if (i % 2 == 0) {
-				REQUIRE(l4.has(i), false);
+				REQUIRE(l4[i], "");
 			} else {
-				REQUIRE(l4.has(i), true);
 				REQUIRE(l4[i], "HI THERE");
 			}
 		}
@@ -272,17 +270,14 @@ int main(int argc, char ** argv) {
 		REQUIRE(s.hasBytesList(), true);
 		auto l5 = s.bytesList();
 		REQUIRE(l5.size(), 1);
-		REQUIRE(l5.has(0), true);
 		REQUIRE(l5.front().second, 5);
 		REQUIRE(memcmp(l5.front().first, "bytes", 5), 0);
 
 		REQUIRE(s.hasMemberList(), true);
 		auto l6 = s.memberList();
 		REQUIRE(l6.size(), 3);
-		REQUIRE(l6.has(0), true);
-		REQUIRE(l6.has(1), false);
-		REQUIRE(l6.has(2), true);
 		REQUIRE(l6[0].id(), 42);
+		REQUIRE(l6[1].id(), 0);
 		REQUIRE(l6[2].id(), 42);
 
 		REQUIRE(s.hasDirectMemberList(), true);
@@ -311,6 +306,95 @@ int main(int argc, char ** argv) {
 		REQUIRE(l9[1], 0);
 
 		REQUIRE(s.hasBlist(), true);
+		auto l10 = s.blist();
+		REQUIRE(l10.size(), 10);
+		REQUIRE(l10[0], true);
+		REQUIRE(l10[1], false);
+		REQUIRE(l10[2], true);
+		REQUIRE(l10[3], false);
+		REQUIRE(l10[4], false);
+		REQUIRE(l10[5], false);
+		REQUIRE(l10[6], false);
+		REQUIRE(l10[7], false);
+		REQUIRE(l10[8], true);
+		REQUIRE(l10[9], false);
+
+		return 0;
+	} else if (!strcmp(argv[1], "in_complex3")) {
+		auto o = readIn(argv[2]);
+		scalgoproto::Reader r(o.data(), o.size());
+		auto s = r.root<Complex3In>();
+		REQUIRE(s.nmember().id(), 0);
+		REQUIRE(s.ntext(), "");
+		REQUIRE(s.nbytes().second, 0);
+		REQUIRE(s.text(), "text");
+		REQUIRE(s.myBytes().second, 5);
+		REQUIRE(memcmp(s.myBytes().first, "bytes", 5), 0);
+		auto m = s.member();
+		REQUIRE(m.id(), 42);
+
+		REQUIRE(s.nintList().size(), 0);
+		auto l = s.intList();
+		auto rl = s.intListRaw();
+
+		REQUIRE(l.size(), 31);
+		REQUIRE(rl.second, 31);
+
+		for (int i=0; i < 31; ++i) {
+			REQUIRE(rl.first[i], 100-2*i);
+			REQUIRE(l[i], 100-2*i);
+		}
+
+		auto l2 = s.enumList();
+		REQUIREQ(l2[0], MyEnum::a);
+		REQUIREQ(l2.has(1), false);
+		REQUIRE(l2.size(), 2);
+
+		auto l3 = s.structList();
+		REQUIRE(l3.size(), 1);
+
+		auto l4 = s.textList();
+		REQUIRE(l4.size(), 200);
+		for (size_t i = 0; i < l4.size(); ++i) {
+			if (i % 2 == 0) {
+				REQUIRE(l4[i], "");
+			} else {
+				REQUIRE(l4[i], "HI THERE");
+			}
+		}
+
+		auto l5 = s.bytesList();
+		REQUIRE(l5.size(), 1);
+		REQUIRE(l5.front().second, 5);
+		REQUIRE(memcmp(l5.front().first, "bytes", 5), 0);
+
+		auto l6 = s.memberList();
+		REQUIRE(l6.size(), 3);
+		REQUIRE(l6[0].id(), 42);
+		REQUIRE(l6[1].id(), 0);
+		REQUIRE(l6[2].id(), 42);
+
+		auto l6a = s.directMemberList();
+		REQUIRE(l6a.size(), 3);
+		REQUIRE(l6a[0].id(), 43);
+		REQUIRE(l6a[2].id(), 43);
+
+		auto l7 = s.f32list();
+		REQUIRE(l7.size(), 2);
+		REQUIRE(l7[0], 0.0);
+		REQUIRE(l7[1], 98.0);
+
+		auto l8 = s.f64list();
+		REQUIRE(l8.size(), 3);
+		REQUIRE(l8[0], 0.0);
+		REQUIRE(l8[1], 0.0);
+		REQUIRE(l8[2], 78.0);
+
+		auto l9 = s.u8list();
+		REQUIRE(l9.size(), 2);
+		REQUIRE(l9[0], 4);
+		REQUIRE(l9[1], 0);
+
 		auto l10 = s.blist();
 		REQUIRE(l10.size(), 10);
 		REQUIRE(l10[0], true);

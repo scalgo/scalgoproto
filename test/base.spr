@@ -83,6 +83,27 @@ table Member @836DE498 {
 }
 
 table Complex @CCDD589C {
+	member: optional Member;
+	nmember: optional Member;
+	text: optional Text;
+	myBytes: optional Bytes;
+	ntext: optional Text;
+	nbytes: optional Bytes;
+	intList: optional list I32;
+	nintList: optional list I32;
+	enumList: optional list MyEnum;
+	structList: optional list MyStruct;
+	textList: optional list Text;
+	bytesList: optional list Bytes;
+	memberList: optional list Member;
+	directMemberList: optional direct list Member;
+	f32list: optional list F32;
+	f64list: optional list F64;
+	u8list: optional list U8;
+	blist: optional list Bool;
+}
+
+table Complex3 @CCDD589C { // Note that this has the same magic as Complex, as it is compatible, the only difference is how it is read.
 	member: Member;
 	nmember: Member;
 	text: Text;
@@ -105,24 +126,24 @@ table Complex @CCDD589C {
 
 table InplaceList @793045DD {
 	id: I32;
-	l: inplace list I32;
+	l: optional inplace list I32;
 }
 
 table InplaceText @DC784D79 {
 	id: I32;
-	t: inplace Text;
+	t: optional inplace Text;
 }
 
 table InplaceBytes @259A2E79 {
 	id: I32;
-	b: inplace Bytes;
+	b: optional inplace Bytes;
 }
 
 table InplaceUnion @944099A8 {
 	id: I32;
-	u: inplace union {
+	u: optional inplace union {
 		monkey {
-			name: Text;
+			name: optional Text;
 		};
 		text: InplaceText;
 		empty {};
@@ -130,11 +151,11 @@ table InplaceUnion @944099A8 {
 }
 
 table InplaceRoot @971A3362 {
-	u: InplaceUnion;
-	u2: InplaceUnion;
-	l: InplaceList;
-	t: InplaceText;
-	b: InplaceBytes;
+	u: optional InplaceUnion;
+	u2: optional InplaceUnion;
+	l: optional InplaceList;
+	t: optional InplaceText;
+	b: optional InplaceBytes;
 }
 
 table Gen1 @B4957DF9 {
@@ -144,11 +165,11 @@ table Gen1 @B4957DF9 {
 table Gen2 @B4957DF9 {
 	aa: I32;
 	bb: I32 = 42;
-	u : inplace union {
+	u : optional inplace union {
 		 monkey {},
 		cake {v:I32},
 	}
-	directMemberList : direct list Member;
+	directMemberList : optional direct list Member;
 }
 
 table MemberV2 @836DE498 {
@@ -160,13 +181,13 @@ table Gen3 @B4957DF9 {
 	aa: I32;
 	bb: I32 = 42;
 
-	u: inplace union {
+	u: optional inplace union {
 		 monkey {},
 		 cake {v:I32},
 		 bat {}
 	}
 
-	directMemberList : direct list MemberV2;
+	directMemberList : optional direct list MemberV2;
 
 	e: MyEnum = c;
 	s: MyStruct;
@@ -195,19 +216,19 @@ table Gen3 @B4957DF9 {
 	of: optional F32;
 	od: optional F64;
 
-	member: Member;
-	nmember: Member;
-	text: Text;
-	mbytes: Bytes;
-	ntext: Text;
-	nbytes: Bytes;
-	intList: list I32;
-	nintList: list I32;
-	enumList: list MyEnum;
-	structList: list MyStruct;
-	textList: list Text;
-	bytesList: list Bytes;
-	memberList: list Member;
+	member: optional Member;
+	nmember: optional Member;
+	text: optional Text;
+	mbytes: optional Bytes;
+	ntext: optional Text;
+	nbytes: optional Bytes;
+	intList: optional list I32;
+	nintList: optional list I32;
+	enumList: optional list MyEnum;
+	structList: optional list MyStruct;
+	textList: optional list Text;
+	bytesList: optional list Bytes;
+	memberList: optional list Member;
 }
 
 union NamedUnion {
