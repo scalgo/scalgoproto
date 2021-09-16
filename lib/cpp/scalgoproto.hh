@@ -60,8 +60,32 @@ class ListAccessHelp;
 
 class Error : public std::runtime_error {
 public:
-	Error()
-		: std::runtime_error("Error") {}
+	Error(const char * what)
+		: std::runtime_error(what) {}
+};
+
+class MagicError: public Error {
+public:
+	uint32_t got;
+	uint32_t expected;
+
+	MagicError(uint32_t got, uint32_t expected): Error("magic error"), got(got), expected(expected) {}
+};
+
+class OutOfBoundsError: public Error {
+public:
+	OutOfBoundsError(): Error("out of bounds access") {}
+};
+
+class InvalidTextError: public Error {
+public:
+	InvalidTextError(): Error("text not null terminated or not utf-8") {}
+};
+
+class TooLargeItemSizeError: public Error {
+public:
+	size_t size;
+	TooLargeItemSizeError(size_t size) : Error("too large item size"), size(size) {}
 };
 
 class TextOut {
@@ -178,18 +202,18 @@ private:
 	template <std::uint32_t magic, std::uint64_t mult = 1, std::uint64_t add = 0>
 	Ptr getPtr_(std::uint64_t offset) const {
 		// Validate that the offset is within the reader boundary
-		if (offset + 10 > size) throw Error();
+		if (offset + 10 > size) throw OutOfBoundsError();
 		if (offset == 0) return Ptr{data, 0};
 		// Check that we have the right magic
 		std::uint32_t read_magic;
 		memcpy(&read_magic, data + offset, 4);
-		if (read_magic != magic) throw Error();
+		if (read_magic != magic) throw MagicError(read_magic, magic);
 		// Read size and check that the object is within the reader boundary
 		// mult * 2^48 + 2^48 + 8 + 1 >= 2^64
 		static_assert(mult < 65534,
 					  "Structs of a size greater than 65534 are currently not supported");
 		const std::uint64_t read_size = read48_(data + offset + 4);
-		if (computeSize<mult>(read_size) + offset + 10 + add > size) throw Error();
+		if (computeSize<mult>(read_size) + offset + 10 + add > size) throw OutOfBoundsError();
 		return Ptr{data + offset + 10, read_size};
 	}
 
@@ -197,12 +221,12 @@ private:
 	Ptr getPtrInplace_(const char * start, std::uint64_t s) const {
 		static_assert(mult < 65534,
 					  "Structs of a size greater than 65534 are currently not supported");
-		if (start + computeSize<mult>(s) + add > data + size) throw Error();
+		if (start + computeSize<mult>(s) + add > data + size) throw OutOfBoundsError();
 		return Ptr{start, s};
 	}
 
 	void validateTextPtr_(Ptr p) const {
-		if (p.start[p.size] != '\0') throw Error();
+		if (p.start[p.size] != '\0') throw InvalidTextError();
 	}
 
 public:
@@ -219,7 +243,7 @@ public:
 		std::uint32_t magic;
 		memcpy(&magic, data, 4);
 		std::uint64_t offset = read48_(data + 4);
-		if (magic != ROOTMAGIC) throw Error();
+		if (magic != ROOTMAGIC) throw MagicError(magic, ROOTMAGIC);
 		return T(this, getPtr_<T::MAGIC>(offset));
 	}
 };
@@ -711,15 +735,15 @@ class DirectListIn : public In {
 
 	static std::uint32_t parse_header(const Reader * reader, Ptr p) {
 		if (p.start + 8 > reader->data + reader->size)
-			throw Error();
+			throw OutOfBoundsError();
 		std::uint32_t magic, item_size;
 		memcpy(&magic, p.start, 4);
 		if (magic != T::MAGIC)
-			throw Error();
+			throw MagicError(magic, T::MAGIC);
 		memcpy(&item_size, p.start+4, 4);
-		if (item_size > 65534) throw Error(); //Items larger than this is currently not support as it might overflow the multiplication below
+		if (item_size > 65534) throw TooLargeItemSizeError(item_size); //Items larger than this is currently not support as it might overflow the multiplication below
 		if (p.start + 4 + p.size * item_size > reader->data + reader->size)
-			throw Error();
+			throw OutOfBoundsError();
 		return item_size;
 	}
 
@@ -904,7 +928,7 @@ public:
 		if constexpr (A::hasAdd)
 			return A::add(writer_, offset_, index, std::forward<TT>(vv)...);
 		else {
-			throw Error();
+			throw OutOfBoundsError();
 		}
 	}
 
