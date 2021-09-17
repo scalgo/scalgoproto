@@ -248,6 +248,14 @@ class Generator:
         else:
             self.o(
                 f"""    #[inline]
+    pub fn __opt_{lname}(&self) -> Result<std::option::Option<scalgoproto::ListIn<'a, {tn}>>> {{
+        self._reader.get_optional_{directTable_}list{"_inplace" if node.inplace else ""}::<{an}>({node.offset})
+    }}
+"""
+            )
+
+            self.o(
+                f"""    #[inline]
     pub fn {lname}(&self) -> Result<scalgoproto::ListIn<'a, {tn}>> {{
         self._reader.get_{directTable_}list{"_inplace" if node.inplace else ""}::<{an}>({node.offset})
     }}
@@ -581,6 +589,23 @@ class Generator:
                 )
         else:
             if not node.inplace:
+                self.o(
+                    f"""    #[inline]
+    pub fn __opt_{lname}(&self) -> Result<std::option::Option<{tname}In>> {{
+        self._reader.get_optional_table::<{tname}In>({node.offset})
+    }}
+"""
+                )
+            else:
+                self.o(
+                    f"""    #[inline]
+    pub fn __opt_{lname}(&self) -> Result<std::option::Option<{tname}In>> {{
+        self._reader.get_optional_table_inplace::<{tname}In>({node.offset})
+    }}
+"""
+                )
+
+            if not node.inplace:
                 self.output_doc(node, "    ")
                 self.o(
                     f"""    #[inline]
@@ -723,6 +748,14 @@ class Generator:
         else:
             self.o(
                 f"""    #[inline]
+    pub fn __opt_{lname}(&self) -> Result<std::option::Option<&'a str>> {{
+        self._reader.get_optional_text{"_inplace" if node.inplace else ""}({node.offset})
+    }}
+"""
+            )
+
+            self.o(
+                f"""    #[inline]
     pub fn {lname}(&self) -> Result<&'a str> {{
         self._reader.get_text{"_inplace" if node.inplace else ""}({node.offset})
     }}
@@ -803,6 +836,14 @@ class Generator:
 """
             )
         else:
+            self.o(
+                f"""    #[inline]
+    pub fn __opt_{lname}(&self) -> Result<std::option::Option<&[u8]>> {{
+        self._reader.get_optional_bytes{"_inplace" if node.inplace else ""}({node.offset})
+    }}
+"""
+            )
+
             self.o(
                 f"""    #[inline]
     pub fn {lname}(&self) -> Result<&[u8]> {{
@@ -1151,8 +1192,7 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
                     )
                 elif node.list_:
                     self.o(
-                        f"""        let v = i.{lname}()?;
-        if ! v.is_empty() {{
+                        f"""        if let Some(v) = i.__opt_{lname}()? {{
             let mut w = self.add_{lname}(v.len());
             w.copy_in(v)?;
         }}"""
@@ -1174,8 +1214,7 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
                     )
                 elif node.type_.type in (TokenType.TEXT, TokenType.BYTES):
                     self.o(
-                        f"""        let v = i.{lname}()?;
-        if !v.is_empty() {{
+                        f"""        if let Some(v) = i.__opt_{lname}()? {{
             self.add_{lname}(v);
         }}"""
                     )
@@ -1190,12 +1229,13 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
                 elif node.table and node.optional:
                     self.o(
                         f"""        if let Some(v) = i.{lname}()? {{
-            let mut w = self.add_{lname}();
-            w.copy_in(v)?;
+            self.add_{lname}().copy_in(v)?;
         }}"""
                     )
                 elif node.table:
-                    self.o(f"        self.add_{lname}().copy_in(i.{lname}()?)?;")
+                    self.o(f"""        if let Some(v) = i.__opt_{lname}()? {{
+            self.add_{lname}().copy_in(v)?;
+        }}""")
                 elif node.union:
                     self.o(f"        self.{lname}().copy_in(i.{lname}()?)?;")
                 else:
