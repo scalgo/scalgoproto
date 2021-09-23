@@ -574,6 +574,21 @@ pub trait ListRead<'a>: Clone + Copy {
     unsafe fn get(item_size: Self::ItemSize, reader: &Reader<'a>, idx: usize) -> Self::Output;
 }
 
+pub trait ListReadOpt<'a>: ListRead<'a> {
+    type OptOutput: std::fmt::Debug;
+
+    /// # Safety
+    ///
+    /// This is safe to call as long as the idx is less than the size of the list
+    /// and every possibly bit pattern of size sizeof::<Output> is a valid representation
+    /// of an output object
+    unsafe fn _get_opt(
+        item_size: Self::ItemSize,
+        reader: &Reader<'a>,
+        idx: usize,
+    ) -> Self::OptOutput;
+}
+
 #[derive(Clone, Copy)]
 pub struct ListIn<'a, A: ListRead<'a>> {
     reader: Reader<'a>,
@@ -604,6 +619,13 @@ impl<'a, A: ListRead<'a>> ListIn<'a, A> {
             item_size: self.item_size,
             phantom: PhantomData,
         }
+    }
+}
+
+impl<'a, A: ListReadOpt<'a>> ListIn<'a, A> {
+    fn _get_opt(&self, idx: usize) -> A::OptOutput {
+        assert!(idx < self._len);
+        unsafe { A::_get_opt(self.item_size, &self.reader, idx) }
     }
 }
 
@@ -736,6 +758,14 @@ impl<'a> ListRead<'a> for TextListRead<'a> {
     }
 }
 
+impl<'a> ListReadOpt<'a> for TextListRead<'a> {
+    type OptOutput = Result<Option<&'a str>>;
+
+    unsafe fn _get_opt(_: (), reader: &Reader<'a>, idx: usize) -> Self::OptOutput {
+        reader.get_optional_text(idx * 6)
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct BytesListRead<'a> {
     p: PhantomData<&'a u8>,
@@ -754,6 +784,14 @@ impl<'a> ListRead<'a> for BytesListRead<'a> {
     }
 }
 
+impl<'a> ListReadOpt<'a> for BytesListRead<'a> {
+    type OptOutput = Result<Option<&'a [u8]>>;
+
+    unsafe fn _get_opt(_: (), reader: &Reader<'a>, idx: usize) -> Self::OptOutput {
+        reader.get_optional_bytes(idx * 6)
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct TableListRead<'a, T: TableIn<'a> + 'a> {
     p: PhantomData<&'a T>,
@@ -769,6 +807,14 @@ impl<'a, T: TableIn<'a> + 'a> ListRead<'a> for TableListRead<'a, T> {
 
     unsafe fn get(_: (), reader: &Reader<'a>, idx: usize) -> Self::Output {
         reader.get_table::<T>(idx * 6)
+    }
+}
+
+impl<'a, T: TableIn<'a> + 'a> ListReadOpt<'a> for TableListRead<'a, T> {
+    type OptOutput = Result<Option<T>>;
+
+    unsafe fn _get_opt(_: (), reader: &Reader<'a>, idx: usize) -> Self::OptOutput {
+        reader.get_optional_table(idx * 6)
     }
 }
 
@@ -1519,8 +1565,7 @@ impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, TextListRead<'b>>> for ListOut<'a, 
     fn copy_in(&mut self, i: ListIn<'b, TextListRead<'b>>) -> Result<()> {
         assert!(i.len() == self.len());
         for n in 0..i.len() {
-            let v = i.get(n)?;
-            if !v.is_empty() {
+            if let Some(v) = i._get_opt(n)? {
                 self.add(n, v);
             }
         }
@@ -1534,8 +1579,7 @@ impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, BytesListRead<'b>>>
     fn copy_in(&mut self, i: ListIn<'b, BytesListRead<'b>>) -> Result<()> {
         assert!(i.len() == self.len());
         for n in 0..i.len() {
-            let v = i.get(n)?;
-            if !v.is_empty() {
+            if let Some(v) = i._get_opt(n)? {
                 self.add(n, v);
             }
         }
@@ -1561,8 +1605,10 @@ impl<'a, 'b, Out: TableOut<'a, Normal> + 'a + CopyIn<In>, P: Placement, In: Tabl
     fn copy_in(&mut self, i: ListIn<'b, TableListRead<'b, In>>) -> Result<()> {
         assert!(i.len() == self.len());
         for n in 0..i.len() {
-            let mut t = self.add(n);
-            t.copy_in(i.get(n)?)?;
+            if let Some(v) = i._get_opt(n)? {
+                let mut t = self.add(n);
+                t.copy_in(v)?;
+            }
         }
         Ok(())
     }
