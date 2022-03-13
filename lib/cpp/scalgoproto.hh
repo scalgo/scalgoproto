@@ -734,6 +734,8 @@ class DirectListIn : public In {
 	const std::uint32_t item_size_;
 
 	static std::uint32_t parse_header(const Reader * reader, Ptr p) {
+		if (p.start == 0)
+			return 1;
 		if (p.start + 8 > reader->data + reader->size)
 			throw OutOfBoundsError();
 		std::uint32_t magic, item_size;
