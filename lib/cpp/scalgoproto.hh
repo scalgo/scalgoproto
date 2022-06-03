@@ -751,7 +751,7 @@ class DirectListIn : public In {
 		: reader_(reader)
 		, start_(p.start+8)
 		, size_(p.size)
-		, item_size_(parse_header(reader, p)) {}
+		, item_size_(p.size == 0 ? 1 : parse_header(reader, p)) {}
 public:
 	using value_type = T;
 	using size_type = std::size_t;
