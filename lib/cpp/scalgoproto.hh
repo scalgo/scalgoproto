@@ -822,9 +822,9 @@ protected:
 			  std::uint64_t add = 0>
 	Ptr getPtr_() const {
 		if constexpr (inplace)
-			return reader_->getPtrInplace_<mult, add>(start_ + size_, read48_(start_ + o));
+			return reader_->getPtrInplace_<mult, add>(start_ + size_, get48_<o>());
 		else
-			return reader_->getPtr_<magic, mult, add>(read48_(start_ + o));
+			return reader_->getPtr_<magic, mult, add>(get48_<o>());
 	}
 
 	template <std::uint64_t o, std::uint8_t bit, std::uint8_t def>
