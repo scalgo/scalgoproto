@@ -753,7 +753,7 @@ class DirectListIn : public In {
 		: reader_(reader)
 		, start_(p.start+8)
 		, size_(p.size)
-		, item_size_(parse_header(reader, p)) {}
+		, item_size_(p.size == 0 ? 1 : parse_header(reader, p)) {}
 public:
 	using value_type = T;
 	using size_type = std::size_t;
@@ -824,9 +824,9 @@ protected:
 			  std::uint64_t add = 0>
 	Ptr getPtr_() const {
 		if constexpr (inplace)
-			return reader_->getPtrInplace_<mult, add>(start_ + size_, read48_(start_ + o));
+			return reader_->getPtrInplace_<mult, add>(start_ + size_, get48_<o>());
 		else
-			return reader_->getPtr_<magic, mult, add>(read48_(start_ + o));
+			return reader_->getPtr_<magic, mult, add>(get48_<o>());
 	}
 
 	template <std::uint64_t o, std::uint8_t bit, std::uint8_t def>
