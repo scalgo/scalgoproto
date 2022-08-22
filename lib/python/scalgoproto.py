@@ -255,7 +255,10 @@ class TableIn(object):
         h.update(b"\xff\xe7")
 
     def _get_uint48_f(self, o: int) -> int:
-        return unpack48_(self._reader._data[self._offset + o : self._offset + o + 6])
+        d = self._reader._data[self._offset + o : self._offset + o + 6]
+        if not d:
+            return 0
+        return unpack48_(d)
 
     def _get_int8(self, o: int, d: int) -> int:
         return (
@@ -381,7 +384,10 @@ class Reader(object):
         self._data = data
 
     def _read_size(self, offset: int, magic: int):
-        m, sizelow, sizehigh = struct.unpack("<IIH", self._data[offset : offset + 10])
+        d = self._data[offset : offset + 10]
+        if not d:
+            return 0
+        m, sizelow, sizehigh = struct.unpack("<IIH", d)
         if m != magic:
             raise Exception("Expected magic %08X but got %08X" % (magic, m))
         return join48_(sizelow, sizehigh)
@@ -407,19 +413,25 @@ class Reader(object):
                 False,
             )
         else:
-            magic, item_size = struct.unpack("<II", self._data[off : off + 8])
-            if magic != t._MAGIC:
-                raise Exception(
-                    "Expected scalgoproto magic %08X but got %08X" % (t._MAGIC, magic)
-                )
+            start = off + 8
+            d = self._data[off : start]
+            if not d:
+                start = 0
+                item_size = 1
+            else:
+                magic, item_size = struct.unpack("<II", d)
+                if magic != t._MAGIC:
+                    raise Exception(
+                        "Expected scalgoproto magic %08X but got %08X" % (t._MAGIC, magic)
+                    )
 
-            if off + 8 + item_size * size > len(self._data):
-                raise Exception("Invalid table size")
+                if off + 8 + item_size * size > len(self._data):
+                    raise Exception("Invalid table size")
 
             return ListIn[TI](
                 self,
                 size,
-                off + 8,
+                start,
                 lambda r, s, i: t(r, s + i * item_size, item_size),
                 lambda r, s, i: True,
                 False,
