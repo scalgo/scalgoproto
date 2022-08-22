@@ -82,6 +82,11 @@ table Member @836DE498 {
 	id: I16;
 }
 
+table MyMemberList @70B0A9F1 {
+	members: direct list Member;
+	help: list U32;
+}
+
 table Complex @CCDD589C {
 	member: optional Member;
 	nmember: optional Member;
@@ -170,6 +175,7 @@ table Gen2 @B4957DF9 {
 		cake {v:I32},
 	}
 	directMemberList : optional direct list Member;
+	nullTable: MyMemberList;
 }
 
 table MemberV2 @836DE498 {
@@ -188,6 +194,7 @@ table Gen3 @B4957DF9 {
 	}
 
 	directMemberList : optional direct list MemberV2;
+	nullTable: MyMemberList;
 
 	e: MyEnum = c;
 	s: MyStruct;
@@ -229,6 +236,7 @@ table Gen3 @B4957DF9 {
 	textList: optional list Text;
 	bytesList: optional list Bytes;
 	memberList: optional list Member;
+	missing: MyMemberList;
 }
 
 union NamedUnion {

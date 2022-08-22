@@ -631,6 +631,10 @@ int main(int argc, char ** argv) {
 		REQUIRE(s.hasTextList(), false);
 		REQUIRE(s.hasBytesList(), false);
 		REQUIRE(s.hasMemberList(), false);
+		REQUIRE(s.nullTable().members().size(), 0);
+		REQUIRE(s.nullTable().help().size(), 0);
+		REQUIRE(s.missing().members().size(), 0);
+		REQUIRE(s.missing().help().size(), 0);
 		return 0;
 	} else if (!strcmp(argv[1], "mmap_stress")) {
 		auto backing = std::make_unique<scalgoproto::FileWriterBacking>();
