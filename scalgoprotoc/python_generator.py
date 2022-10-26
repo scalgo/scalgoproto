@@ -711,6 +711,8 @@ class Generator:
             self.o("    @property")
             self.o("    def %s(self) -> str:" % (uname))
             self.output_doc(node, "        ")
+            self.o("        if self._get_uint48(%d) == 0:" % (node.offset,))
+            self.o("            return ''")
             self.o(
                 "        (o, s) = self._get_ptr%s(%d, scalgoproto.TEXT_MAGIC)"
                 % ("_inplace" if node.inplace else "", node.offset)
@@ -782,6 +784,8 @@ class Generator:
             self.o("    @property")
             self.o("    def %s(self) -> bytes:" % (uname))
             self.output_doc(node, "        ")
+            self.o("        if self._get_uint48(%d) == 0:" % (node.offset,))
+            self.o("            return b''")
             self.o(
                 "        (o, s) = self._get_ptr%s(%d, scalgoproto.BYTES_MAGIC)"
                 % ("_inplace" if node.inplace else "", node.offset)
