@@ -4,7 +4,11 @@ from .documents import Documents
 
 
 def error(
-    documents: Documents, context: str, token: Token, message: str, error: str = "Error"
+    documents: Documents,
+    context: str,
+    token: Token,
+    message: str,
+    error: str = "Error",
 ) -> None:
     data = documents.by_id[token.document].content
     cnt = 1
@@ -20,8 +24,8 @@ def error(
             t += 1
         idx += 1
     print(
-        "%s:%s: Error in %s: %s"
-        % (documents.by_id[token.document].path, cnt, context, message),
+        "%s:%s: %s in %s: %s"
+        % (documents.by_id[token.document].path, cnt, error, context, message),
         file=sys.stderr,
     )
     end = start

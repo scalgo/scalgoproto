@@ -371,7 +371,7 @@ class Annotater:
                     v.parsed_value = self.get_int(v.value, 0, 2 ** 16 - 1, 0)
                     default.append(struct.pack("<H", v.parsed_value))
                 elif v.type_.type == TokenType.I16:
-                    v.parsed_value = self.get_int(v.value, -2 ** 15, 2 ** 15 - 1, 0)
+                    v.parsed_value = self.get_int(v.value, -(2 ** 15), 2 ** 15 - 1, 0)
                     default.append(struct.pack("<h", v.parsed_value))
                 else:
                     self.error(v.type_, "Internal error")
@@ -384,7 +384,7 @@ class Annotater:
                     v.parsed_value = self.get_int(v.value, 0, 2 ** 32 - 1, 0)
                     default.append(struct.pack("<I", v.parsed_value))
                 elif v.type_.type == TokenType.I32:
-                    v.parsed_value = self.get_int(v.value, -2 ** 31, 2 ** 31 - 1, 0)
+                    v.parsed_value = self.get_int(v.value, -(2 ** 31), 2 ** 31 - 1, 0)
                     default.append(struct.pack("<i", v.parsed_value))
                 elif v.type_.type == TokenType.F32:
                     v.parsed_value = self.get_float(
@@ -402,7 +402,7 @@ class Annotater:
                     v.parsed_value = self.get_int(v.value, 0, 2 ** 64 - 1, 0)
                     default.append(struct.pack("<Q", v.parsed_value))
                 elif v.type_.type == TokenType.I64:
-                    v.parsed_value = self.get_int(v.value, -2 ** 64, 2 ** 64 - 1, 0)
+                    v.parsed_value = self.get_int(v.value, -(2 ** 64), 2 ** 64 - 1, 0)
                     default.append(struct.pack("<q", v.parsed_value))
                 elif v.type_.type == TokenType.F64:
                     v.parsed_value = self.get_float(

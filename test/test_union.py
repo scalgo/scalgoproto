@@ -218,29 +218,49 @@ def test_in_union(path: str) -> bool:
     if require_some(i.v5):
         return False
     v5 = i.v5
-    if require2(v5.a is not None and v5.a.is_v5 and len(v5.a.v5) == 1, v5.a.v5[0], "text4"):
+    if require2(
+        v5.a is not None and v5.a.is_v5 and len(v5.a.v5) == 1, v5.a.v5[0], "text4"
+    ):
         return False
-    if require2(v5.b is not None and v5.b.is_v5 and len(v5.b.v5) == 1, v5.b.v5[0], "text5"):
+    if require2(
+        v5.b is not None and v5.b.is_v5 and len(v5.b.v5) == 1, v5.b.v5[0], "text5"
+    ):
         return False
-    if require2(v5.c is not None and v5.c.is_v5 and len(v5.c.v5) == 1, v5.c.v5[0], "text6"):
+    if require2(
+        v5.c is not None and v5.c.is_v5 and len(v5.c.v5) == 1, v5.c.v5[0], "text6"
+    ):
         return False
-    if require2(v5.d is not None and v5.d.is_v5 and len(v5.d.v5) == 1, v5.d.v5[0], "ctext3"):
+    if require2(
+        v5.d is not None and v5.d.is_v5 and len(v5.d.v5) == 1, v5.d.v5[0], "ctext3"
+    ):
         return False
-    if require2(v5.e is not None and v5.e.is_v5 and len(v5.e.v5) == 1, v5.e.v5[0], "ctext4"):
+    if require2(
+        v5.e is not None and v5.e.is_v5 and len(v5.e.v5) == 1, v5.e.v5[0], "ctext4"
+    ):
         return False
 
     if require_some(i.v6):
         return False
     v6 = i.v6
-    if require2(v6.a is not None and v6.a.is_v6 and len(v6.a.v6) == 1, v6.a.v6[0], b"bytes4"):
+    if require2(
+        v6.a is not None and v6.a.is_v6 and len(v6.a.v6) == 1, v6.a.v6[0], b"bytes4"
+    ):
         return False
-    if require2(v6.b is not None and v6.b.is_v6 and len(v6.b.v6) == 1, v6.b.v6[0], b"bytes5"):
+    if require2(
+        v6.b is not None and v6.b.is_v6 and len(v6.b.v6) == 1, v6.b.v6[0], b"bytes5"
+    ):
         return False
-    if require2(v6.c is not None and v6.c.is_v6 and len(v6.c.v6) == 1, v6.c.v6[0], b"bytes6"):
+    if require2(
+        v6.c is not None and v6.c.is_v6 and len(v6.c.v6) == 1, v6.c.v6[0], b"bytes6"
+    ):
         return False
-    if require2(v6.d is not None and v6.d.is_v6 and len(v6.d.v6) == 1, v6.d.v6[0], b"cbytes3"):
+    if require2(
+        v6.d is not None and v6.d.is_v6 and len(v6.d.v6) == 1, v6.d.v6[0], b"cbytes3"
+    ):
         return False
-    if require2(v6.e is not None and v6.e.is_v6 and len(v6.e.v6) == 1, v6.e.v6[0], b"cbytes4"):
+    if require2(
+        v6.e is not None and v6.e.is_v6 and len(v6.e.v6) == 1, v6.e.v6[0], b"cbytes4"
+    ):
         return False
 
     if require_some(i.v7):
@@ -252,23 +272,37 @@ def test_in_union(path: str) -> bool:
         return False
     if require2(v7.c is not None and v7.c.is_v7 and len(v7.c.v7) == 1, v7.c.v7[0].a, 9):
         return False
-    if require2(v7.d is not None and v7.d.is_v7 and len(v7.d.v7) == 1, v7.d.v7[0].a, 105):
+    if require2(
+        v7.d is not None and v7.d.is_v7 and len(v7.d.v7) == 1, v7.d.v7[0].a, 105
+    ):
         return False
-    if require2(v7.e is not None and v7.e.is_v7 and len(v7.e.v7) == 1, v7.e.v7[0].a, 106):
+    if require2(
+        v7.e is not None and v7.e.is_v7 and len(v7.e.v7) == 1, v7.e.v7[0].a, 106
+    ):
         return False
 
     if require_some(i.v8):
         return False
     v8 = i.v8
-    if require2(v8.a is not None and v8.a.is_v8 and len(v8.a.v8) == 1, v8.a.v8[0].a, 10):
+    if require2(
+        v8.a is not None and v8.a.is_v8 and len(v8.a.v8) == 1, v8.a.v8[0].a, 10
+    ):
         return False
-    if require2(v8.b is not None and v8.b.is_v8 and len(v8.b.v8) == 1, v8.b.v8[0].a, 11):
+    if require2(
+        v8.b is not None and v8.b.is_v8 and len(v8.b.v8) == 1, v8.b.v8[0].a, 11
+    ):
         return False
-    if require2(v8.c is not None and v8.c.is_v8 and len(v8.c.v8) == 1, v8.c.v8[0].a, 12):
+    if require2(
+        v8.c is not None and v8.c.is_v8 and len(v8.c.v8) == 1, v8.c.v8[0].a, 12
+    ):
         return False
-    if require2(v8.d is not None and v8.d.is_v8 and len(v8.d.v8) == 1, v8.d.v8[0].a, 107):
+    if require2(
+        v8.d is not None and v8.d.is_v8 and len(v8.d.v8) == 1, v8.d.v8[0].a, 107
+    ):
         return False
-    if require2(v8.e is not None and v8.e.is_v8 and len(v8.e.v8) == 1, v8.e.v8[0].a, 108):
+    if require2(
+        v8.e is not None and v8.e.is_v8 and len(v8.e.v8) == 1, v8.e.v8[0].a, 108
+    ):
         return False
 
     if require_some(i.v9):
@@ -288,17 +322,25 @@ def test_in_union(path: str) -> bool:
     if require_some(i.v10):
         return False
     v10 = i.v10
-    if require2(v10.a is not None and v10.a.is_v10 and len(v10.a.v10) == 1, v10.a.v10[0], True):
+    if require2(
+        v10.a is not None and v10.a.is_v10 and len(v10.a.v10) == 1, v10.a.v10[0], True
+    ):
         return False
     if require2(
         v10.b is not None and v10.b.is_v10 and len(v10.b.v10) == 1, v10.b.v10[0], False
     ):
         return False
-    if require2(v10.c is not None and v10.c.is_v10 and len(v10.c.v10) == 1, v10.c.v10[0], True):
+    if require2(
+        v10.c is not None and v10.c.is_v10 and len(v10.c.v10) == 1, v10.c.v10[0], True
+    ):
         return False
-    if require2(v10.d is not None and v10.d.is_v10 and len(v10.d.v10) == 1, v10.d.v10[0], True):
+    if require2(
+        v10.d is not None and v10.d.is_v10 and len(v10.d.v10) == 1, v10.d.v10[0], True
+    ):
         return False
-    if require2(v10.e is not None and v10.e.is_v10 and len(v10.e.v10) == 1, v10.e.v10[0], True):
+    if require2(
+        v10.e is not None and v10.e.is_v10 and len(v10.e.v10) == 1, v10.e.v10[0], True
+    ):
         return False
 
     return True

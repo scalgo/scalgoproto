@@ -1233,9 +1233,11 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
         }}"""
                     )
                 elif node.table:
-                    self.o(f"""        if let Some(v) = i.__opt_{lname}()? {{
+                    self.o(
+                        f"""        if let Some(v) = i.__opt_{lname}()? {{
             self.add_{lname}().copy_in(v)?;
-        }}""")
+        }}"""
+                    )
                 elif node.union:
                     self.o(f"        self.{lname}().copy_in(i.{lname}()?)?;")
                 else:

@@ -42,6 +42,10 @@ class TokenType(Enum):
     IMPORT = 70
     DIRECT = 71
     REMOVED = 72
+    TABS = 73
+    SPACE = 74
+    NEWLINE = 75
+    COMMENT = 76
 
 
 Token = ty.NamedTuple(
@@ -91,7 +95,28 @@ def tokenize(data: str, document: int) -> ty.Iterator[Token]:
     }
 
     while cur < len(data):
-        if data[cur] in " \t\n\r":
+        if data[cur] == "\t":
+            start = cur
+            while cur < len(data) and data[cur] == "\t":
+                cur += 1
+            yield Token(TokenType.TABS, start, cur - start, document)
+            continue
+
+        if data[cur] == " ":
+            yield Token(TokenType.SPACE, cur, 1, document)
+            cur += 1
+            continue
+
+        if data[cur] == "\r":
+            start = cur
+            cur += 1
+            if cur < len(data) and data[cur] == "\n":
+                cur += 1
+            yield Token(TokenType.NEWLINE, start, cur - start, document)
+            continue
+
+        if data[cur] == "\n":
+            yield Token(TokenType.NEWLINE, cur, 1, document)
             cur += 1
             continue
 
@@ -136,8 +161,10 @@ def tokenize(data: str, document: int) -> ty.Iterator[Token]:
             continue
 
         if data[cur] == "#" or data[cur : cur + 2] == "//":
+            start = cur
             while cur < len(data) and data[cur] != "\n":
                 cur += 1
+            yield Token(TokenType.COMMENT, start, cur - start, document)
             continue
         if data[cur : cur + 2] == "/*":
             cnt = 1

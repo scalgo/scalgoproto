@@ -86,17 +86,20 @@ def require(v, e) -> bool:
     print("Error expected '%s' found '%s'" % (e, v), file=sys.stderr)
     return True
 
+
 def require_none(v) -> bool:
     if v is None:
         return False
     print("Error expected None found '%s'" % (v), file=sys.stderr)
     return True
 
+
 def require_some(v) -> bool:
     if v is not None:
         return False
     print("Error expected not None found '%s'" % (v), file=sys.stderr)
     return True
+
 
 def require2(b, v, e) -> bool:
     if not b:
@@ -671,7 +674,6 @@ def test_in_complex3(path: str) -> bool:
     if require(len(s.struct_list), 1):
         return False
 
-
     l4 = s.text_list
     if require(len(l4), 200):
         return False
@@ -760,6 +762,7 @@ def test_in_complex3(path: str) -> bool:
         return False
 
     return True
+
 
 def test_out_complex2(path: str) -> bool:
     w = scalgoproto.Writer()
@@ -972,6 +975,7 @@ def test_out_extend2(path: str) -> bool:
     data = w.finalize(root)
     return validate_out(data, path)
 
+
 def test_extend2_part(s: base.Gen3In) -> bool:
     if require(s.aa, 80):
         return False
@@ -1083,6 +1087,7 @@ def test_in_extend2(path: str) -> bool:
     s = r.root(base.Gen3In)
     return test_extend2_part(s)
 
+
 def test_copy_extend2(path: str) -> bool:
     data1 = read_in(path)
     reader1 = scalgoproto.Reader(data1)
@@ -1095,6 +1100,7 @@ def test_copy_extend2(path: str) -> bool:
     reader2 = scalgoproto.Reader(data2)
     root3 = reader2.root(base.Gen3In)
     return test_extend2_part(root3)
+
 
 def main() -> None:
     ans = False
