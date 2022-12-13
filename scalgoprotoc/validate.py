@@ -18,7 +18,6 @@ from .parser import (
 from .documents import Documents, addDocumentsParams
 from .sp_tokenize import Token
 from .error import error
-from itertools import zip_longest
 
 
 def ct(t: Token | None) -> Token:
@@ -26,36 +25,39 @@ def ct(t: Token | None) -> Token:
     return t
 
 
-def run(args) -> int:
+def validate(
+    schema: str,
+    strict: bool,
+    old_schema_path: str | None = None,
+    old_schema_data: str | None = None,
+) -> int:
     documents = Documents()
-    documents.read_root(args.schema)
+    documents.read_root(schema)
     p = Parser(documents)
     try:
-        ast = p.parse_document(strict=args.strict)
+        ast = p.parse_document(strict)
         checked: set[Tuple[AstNode, AstNode]] = set()
         if not annotate(documents, ast):
             return 1
-        if args.old is not None:
+
+        if old_schema_path is not None:
             try:
                 old_documents = Documents()
-                old_documents.read_root(args.old)
+                if old_schema_data:
+                    old_documents.add_root(old_schema_path, old_schema_data)
+                else:
+                    old_documents.read_root(old_schema_path)
                 old_p = Parser(old_documents)
                 old_ast = old_p.parse_document()
                 if not annotate(old_documents, old_ast):
-                    print("Old is not valid")
+                    print("Old schema is not valid")
                     return 1
             except ParseError as err:
-                print("Old is not valid")
+                print("Old schema is not valid")
                 err.describe(old_documents)
                 return 1
-            ok = True
 
-            def missing_member(old: Token, new: AstNode, name: str) -> None:
-                nonlocal ok
-                print(old)
-                error(documents, p.context, ct(new.token), f"Missing member {name}")
-                error(old_documents, old_p.context, old, "Was here")
-                ok = False
+            ok = True
 
             def invalid_type(old: AstNode, new: AstNode) -> None:
                 nonlocal ok
@@ -73,12 +75,6 @@ def run(args) -> int:
                     t.index : t.index + t.length
                 ]
 
-            def check_renamed(old: Token, new: Token) -> None:
-                if ov(old) == nv(new):
-                    return
-                error(documents, p.context, new, "Member renamed", "Warning")
-                error(old_documents, old_p.context, old, "Was", "Warning")
-
             def check_flag(
                 om: Value, nm: Value, ov: Token | None, nv: Token | None, flag: str
             ) -> None:
@@ -91,7 +87,6 @@ def run(args) -> int:
 
             def match_value(om: Value, nm: Value) -> None:
                 nonlocal ok
-                check_renamed(om.identifier, nm.identifier)
                 assert om.type_ is not None
                 assert nm.type_ is not None
                 tn = nv(nm.type_)
@@ -134,6 +129,159 @@ def run(args) -> int:
                     error(old_documents, old_p.context, om.type_, "Was")
                     ok = False
 
+            def check_members(
+                old_token: Token,
+                new_token: Token,
+                old_members: list[Value],
+                new_members: list[Value],
+                allow_append: bool = True,
+                check_types: bool = True,
+            ) -> None:
+
+                nonlocal ok
+
+                # Matchup old and new names
+                s1 = [ov(om.identifier) for om in old_members]
+                s2 = [nv(nm.identifier) for nm in new_members]
+                m: list[list[int]] = [[0 for _ in range(len(s2) + 1)]]
+                for i1, v1 in enumerate(s1):
+                    m.append([0])
+                    for (i2, v2) in enumerate(s2):
+                        m[i1 + 1].append(
+                            m[i1][i2]
+                            if v1 == v2
+                            else min(m[i1 + 1][i2] + 1, m[i1][i2 + 1] + 1)
+                        )
+                i1 = len(s1)
+                i2 = len(s2)
+                matches: list[tuple[Value, Value]] = []
+                mismatches: list[tuple[Value | None, Value | None]] = []
+                while i1 != 0 and i2 != 0:
+                    if s1[i1 - 1] == s2[i2 - 1]:
+                        i1 -= 1
+                        i2 -= 1
+                        matches.append((old_members[i1], new_members[i2]))
+                    elif m[i1 - 1][i2 - 1] + 2 == m[i1][i2]:
+                        i1 -= 1
+                        i2 -= 1
+                        mismatches.append((old_members[i1], new_members[i2]))
+                    elif m[i1 - 1][i2] + 1 == m[i1][i2]:
+                        i1 -= 1
+                        mismatches.append((old_members[i1], None))
+                    elif m[i1][i2 - 1] + 1 == m[i1][i2]:
+                        i2 -= 1
+                        mismatches.append((None, new_members[i2]))
+                    else:
+                        assert False
+                while i1 != 0:
+                    i1 -= 1
+                    mismatches.append((old_members[i1], None))
+                while i2 != 0:
+                    i2 -= 1
+                    mismatches.append((None, new_members[i2]))
+                mismatches.reverse()
+
+                old_members_by_name = dict(
+                    [(ov(om.identifier), om) for om in old_members]
+                )
+                new_members_by_name = dict(
+                    [(nv(nm.identifier), nm) for nm in new_members]
+                )
+                new_members_indexes = dict(
+                    [(nv(nm.identifier), i) for (i, nm) in enumerate(new_members)]
+                )
+                for (om, nm) in mismatches:
+                    oname = ov(om.identifier) if om else None
+                    nname = nv(nm.identifier) if nm else None
+                    if (
+                        om is not None
+                        and nm is not None
+                        and oname not in new_members_by_name
+                        and nname not in old_members_by_name
+                    ):
+                        error(
+                            documents,
+                            p.context,
+                            nm.identifier,
+                            f"Member renamed {oname} to {nname}",
+                            "Waring",
+                        )
+                        error(
+                            old_documents,
+                            old_p.context,
+                            om.identifier,
+                            "from",
+                            "Warning",
+                        )
+                        if check_types:
+                            match_value(om, nm)
+                        continue
+                    if om is not None:
+                        assert oname is not None
+                        if nnm := new_members_by_name.get(oname):
+                            error(
+                                documents,
+                                p.context,
+                                nnm.identifier,
+                                f"Member {oname} moved",
+                            )
+                            error(
+                                old_documents, old_p.context, om.identifier, "From here"
+                            )
+                            ok = False
+                        else:
+                            error(
+                                documents,
+                                p.context,
+                                new_token,
+                                f"Member {oname} removed",
+                            )
+                            error(
+                                old_documents, old_p.context, om.identifier, "Was here"
+                            )
+                            ok = False
+                    if nm is not None:
+                        assert nname is not None
+                        if oom := old_members_by_name.get(nname):
+                            # We should already have errored about the move for the member in old_members
+                            # error(documents, p.context, nm.identifier, f"Member {oname} moved")
+                            # error(old_documents, old_p.context, oom.identifier, "From here")
+                            ok = False
+                        elif new_members_indexes[nname] >= len(old_members):
+                            # We have added a new field
+                            if not allow_append:
+                                error(
+                                    documents,
+                                    p.context,
+                                    nm.identifier,
+                                    f"Member {nname} appended",
+                                )
+                                error(
+                                    old_documents,
+                                    old_p.context,
+                                    old_token,
+                                    "Was not here before",
+                                )
+                                ok = False
+                        else:
+                            error(
+                                documents,
+                                p.context,
+                                nm.identifier,
+                                f"Member {nname} inserted",
+                            )
+                            error(
+                                old_documents,
+                                old_p.context,
+                                old_token,
+                                "Was not here before",
+                            )
+                            ok = False
+
+                if check_types:
+                    for (om, nm) in matches:
+                        match_value(om, nm)
+
             def match_structs(old: AstNode, new: Struct) -> None:
                 if (old, new) in checked:
                     return
@@ -142,22 +290,13 @@ def run(args) -> int:
                 if not isinstance(old, Struct):
                     invalid_type(old, new)
                     return
-                for (om, nm) in zip_longest(old.members, new.members):
-                    if om is None:
-                        assert nm is not None
-                        error(documents, p.context, ct(nm.identifier), f"Added member")
-                        error(
-                            old_documents,
-                            old_p.context,
-                            ct(old.token),
-                            "Was not here before",
-                        )
-                        ok = False
-                        continue
-                    if nm is None:
-                        missing_member(om.identifier, new, ov(om.identifier))
-                        continue
-                    match_value(om, nm)
+                check_members(
+                    ct(old.identifier or old.token),
+                    ct(new.identifier or new.token),
+                    old.members,
+                    new.members,
+                    allow_append=False,
+                )
 
             def match_enums(old: AstNode, new: Enum) -> None:
                 if (old, new) in checked:
@@ -166,13 +305,13 @@ def run(args) -> int:
                 if not isinstance(old, Enum):
                     invalid_type(old, new)
                     return
-                for (om, nm) in zip_longest(old.members, new.members):
-                    if om is None:
-                        continue
-                    if nm is None:
-                        missing_member(om.identifier, new, ov(om.identifier))
-                        continue
-                    check_renamed(om.identifier, nm.identifier)
+                check_members(
+                    ct(old.identifier or old.token),
+                    ct(new.identifier or new.token),
+                    old.members,
+                    new.members,
+                    check_types=False,
+                )
 
             def match_tables(old: AstNode, new: Table) -> None:
                 if (old, new) in checked:
@@ -182,15 +321,27 @@ def run(args) -> int:
                     invalid_type(old, new)
                     return
                 if old.magic != new.magic:
-                    # TODO warn about magic change
+                    error(
+                        documents,
+                        p.context,
+                        ct(new.identifier or new.token),
+                        f"Magic changed is {new.magic:08X}",
+                        "Warning",
+                    )
+                    error(
+                        old_documents,
+                        old_p.context,
+                        ct(old.identifier or old.token),
+                        f"Previously was {old.magic:08X}",
+                        "Warning",
+                    )
                     return
-                for (om, nm) in zip_longest(old.members, new.members):
-                    if om is None:
-                        continue
-                    if nm is None:
-                        missing_member(om.identifier, new, ov(om.identifier))
-                        continue
-                    match_value(om, nm)
+                check_members(
+                    ct(old.identifier or old.token),
+                    ct(new.identifier or new.token),
+                    old.members,
+                    new.members,
+                )
 
             def match_unions(old: AstNode, new: Union) -> None:
                 if (old, new) in checked:
@@ -199,13 +350,12 @@ def run(args) -> int:
                 if not isinstance(old, Union):
                     invalid_type(old, new)
                     return
-                for (om, nm) in zip_longest(old.members, new.members):
-                    if om is None:
-                        continue
-                    if nm is None:
-                        missing_member(om, new, ov(om.identifier))
-                        continue
-                    match_value(om, nm)
+                check_members(
+                    ct(old.identifier or old.token),
+                    ct(new.identifier or new.token),
+                    old.members,
+                    new.members,
+                )
 
             old_global: dict[str, AstNode] = {}
             for node in old_ast:
@@ -251,10 +401,17 @@ def run(args) -> int:
                     match_unions(old_node, node)
                 elif isinstance(node, Namespace):
                     pass
+            if ok:
+                return 0
+        return 0
     except ParseError as err:
         err.describe(documents)
         pass
     return 1
+
+
+def run(args) -> int:
+    return validate(args.schema, args.strict, args.old)
 
 
 def setup(subparsers) -> None:

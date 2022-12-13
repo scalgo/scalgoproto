@@ -18,7 +18,10 @@ class Documents:
         self.lookup = []
 
     def read_root(self, path: str):
-        data = open(path, "r").read()
+        with open(path, "r") as f:
+            self.add_root(path, f.read())
+
+    def add_root(self, path: str, data: str):
         self.lookup.append(os.path.dirname(path))
         name = os.path.splitext(os.path.basename(path))[0]
         self.root = Document(0, name, path, data)

@@ -515,7 +515,7 @@ class Parser:
                             self.context,
                         )
                 expect_indent = False
-            if expect_more:
+            if expect_more or not self.strict:
                 self.check_token(
                     self.token,
                     [TokenType.RBRACE, TokenType.IDENTIFIER, TokenType.DOCCOMMENT],
