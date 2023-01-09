@@ -365,6 +365,8 @@ class TableIn(object):
         )
 
     def _get_ptr(self, o: int, magic: int) -> Tuple[int, int]:
+        if o >= self._size:
+            return (0, 0)
         off = self._get_uint48_f(o)
         if off == 0:
             return (0, 0)
