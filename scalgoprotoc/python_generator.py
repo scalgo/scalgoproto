@@ -990,7 +990,7 @@ class Generator:
         self.o("    ]")
         self.o()
         self.o(
-            "    def __init__(self, reader: scalgoproto.Reader, type: int, offset: int, size: int = None) -> None:"
+            "    def __init__(self, reader: scalgoproto.Reader, type: int, offset: int, size: int | None = None) -> None:"
         )
         self.o(
             '        """Private constructor. Call factory methods on scalgoproto.Reader to construct instances"""'
