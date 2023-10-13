@@ -1007,7 +1007,7 @@ public:
 	int open(const char * path) {
 		assert(::sysconf(_SC_PAGE_SIZE) == PAGE_SIZE);
 		if (addr != nullptr) return -1;
-		fd = ::open(path, O_TRUNC | O_CREAT | O_RDWR, 0666);
+		fd = ::open(path, O_TRUNC | O_CREAT | O_RDWR | O_CLOEXEC, 0666);
 		if (fd == -1) return -1;
 		if (::ftruncate(fd, PAGE_SIZE)) {
 			// Close the file descriptor, but set errno to the error from ftruncate.
