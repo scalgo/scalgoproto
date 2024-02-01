@@ -893,7 +893,7 @@ class Generator:
             % self.qualify(union, True)
         )
         self.o("")
-        for (inplace, prefix) in ((False, ""), (True, "Inplace")):
+        for inplace, prefix in ((False, ""), (True, "Inplace")):
             self.switch_namespace(union.namespace)
             self.o(
                 "class %s%sOut: public scalgoproto::%sUnionOut {"

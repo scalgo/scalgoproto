@@ -178,9 +178,9 @@ def main():
         os.mkdir("tmp")
 
     # Test names
-    for (bad, good) in (("monkey", "Monkey"), ("Monkey_Cat", "MonkeyCat")):
+    for bad, good in (("monkey", "Monkey"), ("Monkey_Cat", "MonkeyCat")):
         runNeg("bad table name %s" % bad, "table %s @8908828A {}", bad, good)
-    for (bad, good) in (("Cat", "cat"), ("type", "myType"), ("cat_dog", "catDog")):
+    for bad, good in (("Cat", "cat"), ("type", "myType"), ("cat_dog", "catDog")):
         runNeg(
             "bad table member name %s" % bad,
             "table Monkey @8908828A {%s : U32}",
@@ -188,7 +188,7 @@ def main():
             good,
         )
     # Test table types
-    for (bad, good) in (
+    for bad, good in (
         ("Int", "I32"),
         ("int32", "I32"),
         ("bool", "Bool"),
@@ -204,7 +204,7 @@ def main():
         )
 
     # Test struct types
-    for (bad, good) in (
+    for bad, good in (
         ("optional U32", "U32"),
         ("U64 = 7", "U64"),
         ("list Bool", "Bool"),
@@ -215,7 +215,7 @@ def main():
         runNeg("bad struct member type %s" % bad, "struct Monkey {a: %s}", bad, good)
 
     # Test table id
-    for (bad, good) in (
+    for bad, good in (
         ("0x1234567", "@8908828A"),
         ("@8908828X", "@8908828A"),
         ("@8908828a", "@8908828A"),

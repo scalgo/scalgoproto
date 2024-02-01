@@ -1144,7 +1144,7 @@ class Generator:
                 else:
                     raise ICE()
 
-        for (d, imp) in imports.items():
+        for d, imp in imports.items():
             doc = self.documents.by_id[d]
             self.o("import {%s} from '%s'" % (", ".join(imp), doc.name))
 

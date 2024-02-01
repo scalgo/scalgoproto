@@ -173,7 +173,7 @@ class Annotater:
                 self.error(node.token, "Magic required in none inline context")
         else:
             node.magic = int(self.value(node.id_)[1:], 16)
-            if not 1 <= node.magic < 2 ** 32:
+            if not 1 <= node.magic < 2**32:
                 self.error(node.id_, "Magic outside range")
 
     def visit_content(
@@ -368,10 +368,10 @@ class Annotater:
                 if v.inplace:
                     self.error(v.inplace, "Basic types may not be inplace")
                 if v.type_.type == TokenType.U16:
-                    v.parsed_value = self.get_int(v.value, 0, 2 ** 16 - 1, 0)
+                    v.parsed_value = self.get_int(v.value, 0, 2**16 - 1, 0)
                     default.append(struct.pack("<H", v.parsed_value))
                 elif v.type_.type == TokenType.I16:
-                    v.parsed_value = self.get_int(v.value, -(2 ** 15), 2 ** 15 - 1, 0)
+                    v.parsed_value = self.get_int(v.value, -(2**15), 2**15 - 1, 0)
                     default.append(struct.pack("<h", v.parsed_value))
                 else:
                     self.error(v.type_, "Internal error")
@@ -381,10 +381,10 @@ class Annotater:
                 if v.inplace:
                     self.error(v.inplace, "Basic types may not be inplace")
                 if v.type_.type == TokenType.UI32:
-                    v.parsed_value = self.get_int(v.value, 0, 2 ** 32 - 1, 0)
+                    v.parsed_value = self.get_int(v.value, 0, 2**32 - 1, 0)
                     default.append(struct.pack("<I", v.parsed_value))
                 elif v.type_.type == TokenType.I32:
-                    v.parsed_value = self.get_int(v.value, -(2 ** 31), 2 ** 31 - 1, 0)
+                    v.parsed_value = self.get_int(v.value, -(2**31), 2**31 - 1, 0)
                     default.append(struct.pack("<i", v.parsed_value))
                 elif v.type_.type == TokenType.F32:
                     v.parsed_value = self.get_float(
@@ -399,10 +399,10 @@ class Annotater:
                 if v.inplace:
                     self.error(v.inplace, "Basic types may not be inplace")
                 if v.type_.type == TokenType.UI64:
-                    v.parsed_value = self.get_int(v.value, 0, 2 ** 64 - 1, 0)
+                    v.parsed_value = self.get_int(v.value, 0, 2**64 - 1, 0)
                     default.append(struct.pack("<Q", v.parsed_value))
                 elif v.type_.type == TokenType.I64:
-                    v.parsed_value = self.get_int(v.value, -(2 ** 64), 2 ** 64 - 1, 0)
+                    v.parsed_value = self.get_int(v.value, -(2**64), 2**64 - 1, 0)
                     default.append(struct.pack("<q", v.parsed_value))
                 elif v.type_.type == TokenType.F64:
                     v.parsed_value = self.get_float(
