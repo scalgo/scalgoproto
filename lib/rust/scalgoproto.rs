@@ -211,7 +211,7 @@ impl<'a> Reader<'a> {
 
     pub fn get_ptr(&self, offset: usize) -> Result<Option<(usize, u32, usize)>> {
         let o = match self.get_48_usize(offset)? {
-            Some(v) if v == 0 => return Ok(None),
+            Some(0) => return Ok(None),
             Some(v) => v,
             None => return Ok(None),
         };

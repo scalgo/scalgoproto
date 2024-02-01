@@ -8,7 +8,7 @@ import random
 def run(args) -> int:
     rng = random.SystemRandom()
     for x in range(10):
-        print("@%08X" % rng.randint(0, 2 ** 32))
+        print("@%08X" % rng.randint(0, 2**32))
     return 0
 
 

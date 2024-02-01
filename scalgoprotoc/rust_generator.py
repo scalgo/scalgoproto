@@ -1581,7 +1581,7 @@ impl scalgoproto::Enum for {node.name} {{
                 else:
                     raise ICE()
 
-        for (d, imp) in imports.items():
+        for d, imp in imports.items():
             doc = self.documents.by_id[d]
             for ii in imp:
                 self.o(f"use crate::{doc.name}::{ii};")

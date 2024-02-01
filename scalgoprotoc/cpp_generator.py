@@ -2,7 +2,7 @@
 """
 Validate a schema
 """
-import math, io, os
+import math, io, os, sys
 from typing import List, Tuple, Optional
 import typing
 from .annotate import annotate
@@ -893,7 +893,7 @@ class Generator:
             % self.qualify(union, True)
         )
         self.o("")
-        for (inplace, prefix) in ((False, ""), (True, "Inplace")):
+        for inplace, prefix in ((False, ""), (True, "Inplace")):
             self.switch_namespace(union.namespace)
             self.o(
                 "class %s%sOut: public scalgoproto::%sUnionOut {"
@@ -1173,7 +1173,11 @@ template <> struct EnumSize<%s> {static constexpr size_t size() noexcept {return
             self.current_file = name
 
     def generate(
-        self, ast: List[AstNode], output: str, single: bool, *, dir_strip: int = None
+        self, ast: List[AstNode], output: str, single: bool,
+        expected: List[str],
+        expected_only: bool,
+        schema: str,
+        *, dir_strip: int = None,
     ) -> None:
         if single:
             if dir_strip is not None:
@@ -1202,6 +1206,8 @@ template <> struct EnumSize<%s> {static constexpr size_t size() noexcept {return
             assert ".." not in ns
             return "/".join(ns + [name])
 
+        err = False
+        found = set()
         for node in ast:
             if node.document != 0:
                 continue
@@ -1214,6 +1220,11 @@ template <> struct EnumSize<%s> {static constexpr size_t size() noexcept {return
                     or isinstance(node, Union)
                 ):
                     name = node_path(node)
+                    short_name = name.split("/")[-1]
+                    found.add(short_name)
+                    if expected_only and short_name not in expected:
+                        ParseError(node.identifier, f"Unexpected output {short_name}", schema).describe(self.documents)
+                        err = True
                     self.switch_file(name, output)
                     for use in sorted(node.uses, key=lambda u: u.name):
                         n = node_path(use)
@@ -1235,7 +1246,15 @@ template <> struct EnumSize<%s> {static constexpr size_t size() noexcept {return
             else:
                 raise ICE()
         self.switch_file(None, output)
-
+        for name in expected:
+            if name not in found:
+                print(
+                    f"Missing output {name} in {schema}",
+                    file=sys.stderr,
+                )
+                err = True
+        if err:
+            exit(1)
 
 def run(args) -> int:
     documents = Documents()
@@ -1247,7 +1266,8 @@ def run(args) -> int:
             print("Invalid schema is valid")
             return 1
         g = Generator(documents)
-        g.generate(ast, args.output, args.single, dir_strip=args.dir_strip)
+        g.generate(ast, args.output, args.single, dir_strip=args.dir_strip,
+                expected=args.expected, expected_only=args.expected_only, schema=args.schema)
         return 0
     except ParseError as err:
         err.describe(documents)
@@ -1264,5 +1284,17 @@ def setup(subparsers) -> None:
         type=int,
         metavar="N",
         help="output in subdir formed by removing first N components of namespace",
+    )
+    cmd.add_argument(
+        "--expect",
+        action='append',
+        help="Check that this table is defined",
+        dest="expected",
+        default=[],
+    )
+    cmd.add_argument(
+        "--expected-only",
+        action='store_true',
+        help="Check that only --expect tables exist",
     )
     cmd.set_defaults(func=run)

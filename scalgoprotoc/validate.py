@@ -76,7 +76,11 @@ def validate(
                 ]
 
             def check_flag(
-                om: Value, nm: Value, ov: Optional[Token], nv: Optional[Token], flag: str
+                om: Value,
+                nm: Value,
+                ov: Optional[Token],
+                nv: Optional[Token],
+                flag: str,
             ) -> None:
                 nonlocal ok
                 if (ov is None) == (nv is None):
@@ -137,7 +141,6 @@ def validate(
                 allow_append: bool = True,
                 check_types: bool = True,
             ) -> None:
-
                 nonlocal ok
 
                 # Matchup old and new names
@@ -146,7 +149,7 @@ def validate(
                 m: List[List[int]] = [[0 for _ in range(len(s2) + 1)]]
                 for i1, v1 in enumerate(s1):
                     m.append([0])
-                    for (i2, v2) in enumerate(s2):
+                    for i2, v2 in enumerate(s2):
                         m[i1 + 1].append(
                             m[i1][i2]
                             if v1 == v2
@@ -190,7 +193,7 @@ def validate(
                 new_members_indexes = dict(
                     [(nv(nm.identifier), i) for (i, nm) in enumerate(new_members)]
                 )
-                for (om, nm) in mismatches:
+                for om, nm in mismatches:
                     oname = ov(om.identifier) if om else None
                     nname = nv(nm.identifier) if nm else None
                     if (
@@ -279,7 +282,7 @@ def validate(
                             ok = False
 
                 if check_types:
-                    for (om, nm) in matches:
+                    for om, nm in matches:
                         match_value(om, nm)
 
             def match_structs(old: AstNode, new: Struct) -> None:
