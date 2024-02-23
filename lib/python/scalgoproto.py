@@ -4,16 +4,18 @@ import math
 import struct
 from abc import abstractmethod, ABC
 from typing import (
+    Any,
     Callable,
     ClassVar,
     Generic,
+    Optional,
+    Self,
     Sequence,
     Tuple,
     Type,
     TypeVar,
     Union,
-    Optional,
-    Any,
+    overload,
 )
 
 MESSAGE_MAGIC = 0xB5C0C4B3
@@ -119,6 +121,25 @@ class Adder(Generic[B]):
         self.fset(obj, value)
 
 
+class LazySubsequence(Sequence[B]):
+    def __init__(self, xs: Sequence[B], indices: range) -> None:
+        self._xs = xs
+        self._indices = indices
+
+    @overload
+    def __getitem__(self, idx: int) -> B:
+        pass
+
+    @overload
+    def __getitem__(self, idx: slice) -> Self:
+        pass
+
+    def __getitem__(self, idx):
+        if isinstance(idx, slice):
+            return LazySubsequence(self._xs, self._indices[idx])
+        return self._xs[self._indices[idx]]
+
+
 class ListIn(Sequence[B]):
     """Class for reading a list of B"""
 
@@ -146,7 +167,17 @@ class ListIn(Sequence[B]):
     def __len__(self) -> int:
         return self._size
 
+    @overload
     def __getitem__(self, idx: int) -> B:
+        pass
+
+    @overload
+    def __getitem__(self, idx: slice) -> Sequence[B]:
+        pass
+
+    def __getitem__(self, idx):
+        if isinstance(idx, slice):
+            return LazySubsequence(self, range(*idx.indices(self._size)))
         if idx < 0:
             idx += self._size
         if not 0 <= idx < self._size:
