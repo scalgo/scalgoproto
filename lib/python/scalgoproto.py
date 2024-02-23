@@ -173,6 +173,67 @@ class ListIn(Sequence[B]):
         h.update(b"\xff\xe4")
 
 
+class TableListIn(ListIn[B]):
+    def __init__(
+        self,
+        reader: "Reader",
+        size: int,
+        offset: int,
+        haser: Callable[["Reader", int, int], bool],
+        t: Type[B],
+    ) -> None:
+        """Private constructor. Use the accessor methods on tables to get an instance"""
+        require_has = False
+        self._table_type = t
+        super().__init__(
+            reader,
+            size,
+            offset,
+            self._table_list_getter,
+            self._table_list_haser,
+            require_has,
+        )
+
+    def _table_list_getter(self, r: "Reader", s: int, i: int) -> B:
+        ooo = unpack48_(r._data[s + 6 * i : s + 6 * i + 6])
+        if ooo == 0:
+            return self._table_type(r, 0, 0)
+        sss = r._read_size(ooo, self._table_type._MAGIC)
+        return self._table_type(r, ooo + 10, sss)
+
+    def _table_list_haser(self, r: "Reader", s: int, i: int) -> bool:
+        return unpack48_(r._data[s + 6 * i : s + 6 * i + 6]) != 0
+
+
+class DirectTableListIn(ListIn[B]):
+    def __init__(
+        self,
+        reader: "Reader",
+        size: int,
+        offset: int,
+        t: Type[B],
+        item_size: int,
+    ) -> None:
+        """Private constructor. Use the accessor methods on tables to get an instance"""
+        require_has = False
+        self._table_type = t
+        self._item_size = item_size
+        super().__init__(
+            reader,
+            size,
+            offset,
+            self._direct_table_list_getter,
+            self._direct_table_list_haser,
+            require_has,
+        )
+
+    def _direct_table_list_getter(self, r: "Reader", s: int, i: int) -> B:
+        return self._table_type(r, s + i * self._item_size, self._item_size)
+
+    def _direct_table_list_haser(self, r: "Reader", s: int, i: int) -> bool:
+        return True
+
+
 class UnionIn(object):
     __slots__ = ["_reader", "_type", "_offset", "_size"]
 
@@ -390,22 +451,7 @@ class Reader(object):
         self, t: Type[TI], off: int, size: int, direct: bool = False
     ) -> ListIn[TI]:
         if not direct:
-
-            def getter(r: "Reader", s: int, i: int) -> TI:
-                ooo = unpack48_(r._data[s + 6 * i : s + 6 * i + 6])
-                if ooo == 0:
-                    return t(r, 0, 0)
-                sss = r._read_size(ooo, t._MAGIC)
-                return t(r, ooo + 10, sss)
-
-            return ListIn[TI](
-                self,
-                size,
-                off,
-                getter,
-                lambda r, s, i: unpack48_(r._data[s + 6 * i : s + 6 * i + 6]) != 0,
-                False,
-            )
+            return TableListIn[TI](self, size, off, t)
         else:
             magic, item_size = struct.unpack("<II", self._data[off : off + 8])
             if magic != t._MAGIC:
@@ -416,14 +462,7 @@ class Reader(object):
             if off + 8 + item_size * size > len(self._data):
                 raise Exception("Invalid table size")
 
-            return ListIn[TI](
-                self,
-                size,
-                off + 8,
-                lambda r, s, i: t(r, s + i * item_size, item_size),
-                lambda r, s, i: True,
-                False,
-            )
+            return DirectTableListIn[TI](self, size, off + 8, t, item_size)
 
     def _get_union_list(self, t: Type[UI], off: int, size: int) -> ListIn[UI]:
         return ListIn[UI](
