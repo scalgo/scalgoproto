@@ -903,9 +903,11 @@ class Generator:
             self.o("protected:")
             self.o("\tusing scalgoproto::%sUnionOut::%sUnionOut;" % (prefix, prefix))
             self.o("public:")
+            self.o("\tusing Type = %sType;" % union.name)
             self.o(
                 "\tusing IN=%sIn<%s>;" % (union.name, "true" if inplace else "false")
             )
+            self.o("\tType type() const noexcept {return (Type)this->getType_();}")
             idx = 1
             for member in union.members:
                 assert member.type_ is not None

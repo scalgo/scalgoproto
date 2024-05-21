@@ -1122,6 +1122,12 @@ private:
 		return T(*this, o);
 	}
 
+	template <typename T>
+	T read(std::uint64_t offset) {
+		T v;
+		memcpy(&v, data+offset, sizeof(T));
+		return v;
+	}
 public:
 	Writer(size_t capacity = 256, std::unique_ptr<WriterBacking> backing = nullptr)
 		: backing(std::move(backing)), size(10) {
@@ -1332,6 +1338,7 @@ protected:
 	std::uint64_t offset_;
 
 	void setType_(std::uint16_t type) noexcept { writer_.write(type, offset_); }
+	std::uint16_t getType_() const noexcept {return  writer_.read<uint16_t>(offset_); }
 
 	void setObject_(std::uint64_t p) noexcept { writer_.write48_(p, offset_ + 2); }
 
@@ -1351,6 +1358,7 @@ protected:
 	std::uint64_t next_;
 
 	void setType_(std::uint16_t type) noexcept { writer_.write(type, offset_); }
+	std::uint16_t getType_() const noexcept { return writer_.read<uint16_t>(offset_); }
 
 	void setSize_(std::uint64_t size) noexcept { writer_.write48_(size, offset_ + 2); }
 
