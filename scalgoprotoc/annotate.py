@@ -199,7 +199,7 @@ class Annotater:
             if not removed and v.direct_table:
                 v.direct_table.name = name + ucamel(val)
                 self.attach_namespace(v.direct_table)
-                ip = v.inplace != None if t == ContentType.TABLE else inplace_context
+                ip = v.inplace is not None if t == ContentType.TABLE else inplace_context
                 self.assign_magic(v.direct_table, not ip)
                 v.direct_table.default, v.direct_table.members = self.visit_content(
                     v.direct_table.name, v.direct_table.members, ContentType.TABLE, ip
@@ -214,7 +214,7 @@ class Annotater:
                     v.direct_union.name,
                     v.direct_union.members,
                     ContentType.UNION,
-                    v.inplace != None,
+                    v.inplace is not None,
                 )
 
             if not removed and v.direct_struct:
@@ -233,8 +233,8 @@ class Annotater:
                 val,
                 content,
                 get=False,
-                has=v.optional != None,
-                add=v.list_ != None,
+                has=v.optional is not None,
+                add=v.list_ is not None,
             )
 
             assert v.type_ is not None
@@ -484,6 +484,11 @@ class Annotater:
                 if not v.direct_union:
                     assert self.outer is not None
                     self.outer.uses.add(v.union)
+            elif v.type_.type == TokenType.REMOVED:
+                # Removed type much be either table, union, list, text or bytes
+                v.bytes = 6
+                v.offset = bytes
+                default.append(b"\0\0\0\0\0\0")
             else:
                 self.error(v.type_, "Unknown identifier")
                 v.bytes = 0

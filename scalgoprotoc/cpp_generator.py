@@ -815,6 +815,8 @@ class Generator:
         self.o("\t\tswitch (i.type()) {")
         for node in union.members:
             assert node.type_ is not None
+            if node.type_.type == TokenType.REMOVED:
+                continue
             lname = lcamel(self.value(node.identifier))
             uname = ucamel(lname)
             c = "%sType::%s" % (union.name, lname)
@@ -872,6 +874,8 @@ class Generator:
         self.o("\tType type() const noexcept {return (Type)this->type_;}")
         for member in union.members:
             assert member.type_ is not None
+            if member.type_.type == TokenType.REMOVED:
+                continue
             n = self.value(member.identifier)
             uname = ucamel(n)
             self.o(
@@ -911,6 +915,8 @@ class Generator:
             idx = 1
             for member in union.members:
                 assert member.type_ is not None
+                if member.type_.type == TokenType.REMOVED:
+                    continue
                 n = self.value(member.identifier)
                 uname = ucamel(n)
                 if member.list_:
