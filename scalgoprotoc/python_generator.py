@@ -949,6 +949,8 @@ class Generator:
         self.o("            pass")
         for node in union.members:
             assert node.type_ is not None
+            if node.type_.type == TokenType.REMOVED:
+                continue
             uuname = snake(self.value(node.identifier))
             self.o("        elif i.is_%s:" % uuname)
             if node.list_:
@@ -1001,6 +1003,9 @@ class Generator:
         self.o("        NONE = 0")
         idx = 1
         for member in union.members:
+            assert member.type_ is not None
+            if member.type_.type == TokenType.REMOVED:
+                continue
             if not isinstance(member, (Table, Value)):
                 raise ICE()
             self.o("        %s = %d" % (self.value(member.identifier).upper(), idx))
@@ -1013,6 +1018,8 @@ class Generator:
         self.o()
         for member in union.members:
             assert member.type_ is not None
+            if member.type_.type == TokenType.REMOVED:
+                continue
             n = self.value(member.identifier)
             uuname = snake(n)
             self.o("    @property")
@@ -1045,6 +1052,8 @@ class Generator:
         idx = 1
         for member in union.members:
             assert member.type_ is not None
+            if member.type_.type == TokenType.REMOVED:
+                continue
             uuname = snake(self.value(member.identifier))
             if member.list_:
                 self.generate_union_list_out(member, uuname, idx, False)
@@ -1074,6 +1083,8 @@ class Generator:
         idx = 1
         for member in union.members:
             assert member.type_ is not None
+            if member.type_.type == TokenType.REMOVED:
+                continue
             uuname = snake(self.value(member.identifier))
             if member.list_:
                 self.generate_union_list_out(member, uuname, idx, True)

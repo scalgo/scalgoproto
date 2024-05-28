@@ -1018,6 +1018,8 @@ pub enum {union.name}In<'a> {{
                 self.o("    %s(&'a [u8])," % (uname))
             elif member.type_.type == TokenType.TEXT:
                 self.o("    %s(&'a str)," % (uname))
+            elif member.type_.type == TokenType.REMOVED:
+                continue
             else:
                 raise ICE()
         self.o(
@@ -1047,6 +1049,8 @@ impl<'a> scalgoproto::UnionIn<'a> for {union.name}In<'a> {{
                 self.o(
                     f"        {i+1} => Ok(Self::{uname}(reader.get_text_union(magic, offset, size)?)),"
                 )
+            elif member.type_.type == TokenType.REMOVED:
+                continue
             else:
                 self.o(f"        {i+1} => Ok(Self::None),")
 
@@ -1084,6 +1088,8 @@ impl<'a> {union.name}Out<'a, Normal> {{
                 self.generate_union_bytes_out(member, llname, idx + 1, False)
             elif member.type_.type == TokenType.TEXT:
                 self.generate_union_text_out(member, llname, idx + 1, False)
+            elif member.type_.type == TokenType.REMOVED:
+                continue
             else:
                 raise ICE()
         self.o(
@@ -1108,6 +1114,8 @@ impl<'a> {union.name}Out<'a, Inplace> {{
                 self.generate_union_bytes_out(member, llname, idx + 1, True)
             elif member.type_.type == TokenType.TEXT:
                 self.generate_union_text_out(member, llname, idx + 1, True)
+            elif member.type_.type == TokenType.REMOVED:
+                continue
             else:
                 raise ICE()
 
@@ -1144,6 +1152,8 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Normal> {{
                 self.o(
                     f"            {name}In::{uname}(v) => {{self.copy_{lname}(v)?;}},"
                 )
+            elif member.type_.type == TokenType.REMOVED:
+                continue
             else:
                 self.o(f"            {name}In::{uname}(v) => {{self.add_{lname}(v);}},")
         self.o(
@@ -1166,6 +1176,8 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
                 self.o(
                     f"            {name}In::{uname}(v) => {{self.copy_{lname}(v)?;}},"
                 )
+            elif member.type_.type == TokenType.REMOVED:
+                continue
             else:
                 self.o(f"            {name}In::{uname}(v) => {{self.add_{lname}(v);}},")
         self.o(
