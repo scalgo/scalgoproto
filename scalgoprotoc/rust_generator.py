@@ -444,7 +444,7 @@ class Generator:
     pub fn {lname}(&self) -> {ti.p} {{
         self._reader.get_pod({node.offset}).unwrap_or({node.parsed_value
                     if not math.isnan(node.parsed_value)
-                    else "std::%s::NAN" % ti.p})
+                    else "%s::NAN" % ti.p})
     }}
 """
             )
@@ -460,7 +460,7 @@ class Generator:
                 f"""    #[inline]
     pub fn {lname}(&mut self, v : std::option::Option<{ti.p}>) {{
         match v {{
-            None => self._slice.set_pod({node.offset}, &std::{ti.p}::NAN),
+            None => self._slice.set_pod({node.offset}, &{ti.p}::NAN),
             Some(b) => self._slice.set_pod({node.offset}, &b)
         }}
     }}
