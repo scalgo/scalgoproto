@@ -912,8 +912,7 @@ class Generator:
                 "\tusing IN=%sIn<%s>;" % (union.name, "true" if inplace else "false")
             )
             self.o("\tType type() const noexcept {return (Type)this->getType_();}")
-            idx = 1
-            for member in union.members:
+            for idx, member in enumerate(union.members):
                 assert member.type_ is not None
                 if member.type_.type == TokenType.REMOVED:
                     continue
@@ -929,7 +928,6 @@ class Generator:
                     self.generate_union_text_out(member, uname, inplace, idx)
                 else:
                     raise ICE()
-                idx += 1
             self.generate_union_copy(union, inplace)
             self.o("};")
             self.output_metamagic(
