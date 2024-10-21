@@ -825,9 +825,10 @@ class Generator:
         self.o("\t\tsuper(writer, offset, end);")
         self.o("\t}")
         self.o()
-        idx = 1
-        for member in union.members:
+        for idx, member in enumerate(union.members):
             llname = lcamel(self.value(member.identifier))
+            if member.type_.type == TokenType.REMOVED:
+                continue
             if member.list_:
                 self.generate_union_list_out(member, llname, idx, False)
             elif member.table:
@@ -838,7 +839,6 @@ class Generator:
                 self.generate_union_text_out(member, llname, idx, False)
             else:
                 raise ICE()
-            idx += 1
         self.generate_union_copy(union)
         self.o("}")
         self.o()

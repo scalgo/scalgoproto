@@ -1049,8 +1049,7 @@ class Generator:
         )
         self.o("        super().__init__(writer, offset, end)")
         self.o()
-        idx = 1
-        for member in union.members:
+        for idx, member in enumerate(union.members):
             assert member.type_ is not None
             if member.type_.type == TokenType.REMOVED:
                 continue
@@ -1065,7 +1064,6 @@ class Generator:
                 self.generate_union_text_out(member, uuname, idx, False)
             else:
                 raise ICE()
-            idx += 1
         self.generate_union_copy(union)
         self.o()
 
