@@ -919,13 +919,13 @@ class Generator:
                 n = self.value(member.identifier)
                 uname = ucamel(n)
                 if member.list_:
-                    self.generate_union_list_out(member, uname, inplace, idx)
+                    self.generate_union_list_out(member, uname, inplace, idx+1)
                 elif member.table:
-                    self.generate_union_table_out(member, uname, inplace, idx)
+                    self.generate_union_table_out(member, uname, inplace, idx+1)
                 elif member.type_.type == TokenType.BYTES:
-                    self.generate_union_bytes_out(member, uname, inplace, idx)
+                    self.generate_union_bytes_out(member, uname, inplace, idx+1)
                 elif member.type_.type == TokenType.TEXT:
-                    self.generate_union_text_out(member, uname, inplace, idx)
+                    self.generate_union_text_out(member, uname, inplace, idx+1)
                 else:
                     raise ICE()
             self.generate_union_copy(union, inplace)
