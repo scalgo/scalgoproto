@@ -1567,9 +1567,7 @@ impl<'b, P: Placement> CopyIn<ListIn<'b, TextListRead<'b>>> for ListOut<'_, Text
     }
 }
 
-impl<'b, P: Placement> CopyIn<ListIn<'b, BytesListRead<'b>>>
-    for ListOut<'_, BytesListWrite, P>
-{
+impl<'b, P: Placement> CopyIn<ListIn<'b, BytesListRead<'b>>> for ListOut<'_, BytesListWrite, P> {
     fn copy_in(&mut self, i: ListIn<'b, BytesListRead<'b>>) -> Result<()> {
         assert!(i.len() == self.len());
         for n in 0..i.len() {
