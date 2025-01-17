@@ -169,10 +169,7 @@ impl<'a> Reader<'a> {
     }
 
     pub fn get_48(&self, offset: usize) -> Option<u64> {
-        let s = match self.slice(offset, 6) {
-            Some(v) => v,
-            None => return None,
-        };
+        let s = self.slice(offset, 6)?;
         Some(unsafe { to_u48(s) })
     }
 
@@ -195,10 +192,7 @@ impl<'a> Reader<'a> {
     }
 
     pub fn get_pod<T: Pod>(&self, offset: usize) -> Option<T> {
-        let s = match self.slice(offset, std::mem::size_of::<T>()) {
-            Some(s) => s,
-            None => return None,
-        };
+        let s = self.slice(offset, std::mem::size_of::<T>())?;
         unsafe { Some(to_pod(s)) }
     }
 
@@ -1011,7 +1005,7 @@ impl ListWrite for BytesListWrite {
 pub struct TableListWrite<'a, T> {
     p: PhantomData<&'a T>,
 }
-impl<'a, T> ListWrite for TableListWrite<'a, T> {
+impl<T> ListWrite for TableListWrite<'_, T> {
     fn list_bytes(len: usize) -> usize {
         len * 6
     }
@@ -1053,7 +1047,7 @@ pub struct ListOut<'a, T: ListWrite, P: Placement> {
     p1: PhantomData<T>,
     p2: PhantomData<P>,
 }
-impl<'a, T: ListWrite, P: Placement> ListOut<'a, T, P> {
+impl<T: ListWrite, P: Placement> ListOut<'_, T, P> {
     pub fn len(&self) -> usize {
         self._len
     }
@@ -1062,7 +1056,7 @@ impl<'a, T: ListWrite, P: Placement> ListOut<'a, T, P> {
     }
 }
 
-impl<'a, T: Pod, P: Placement> ListOut<'a, PodListWrite<T>, P> {
+impl<T: Pod, P: Placement> ListOut<'_, PodListWrite<T>, P> {
     pub fn set(&mut self, idx: usize, v: T) {
         assert!(idx < self._len);
         unsafe {
@@ -1072,14 +1066,14 @@ impl<'a, T: Pod, P: Placement> ListOut<'a, PodListWrite<T>, P> {
     }
 }
 
-impl<'a, P: Placement> ListOut<'a, BoolListWrite, P> {
+impl<P: Placement> ListOut<'_, BoolListWrite, P> {
     pub fn set(&mut self, idx: usize, v: bool) {
         assert!(idx < self._len);
         unsafe { self.slice.set_bit_unsafe(idx >> 3, idx & 7, v) }
     }
 }
 
-impl<'a, T: Enum, P: Placement> ListOut<'a, EnumListWrite<T>, P> {
+impl<T: Enum, P: Placement> ListOut<'_, EnumListWrite<T>, P> {
     pub fn set(&mut self, idx: usize, v: Option<T>) {
         assert!(idx < self._len);
         unsafe { self.slice.set_enum_unsafe(idx, v) }
@@ -1527,8 +1521,8 @@ pub trait CopyIn<In> {
     fn copy_in(&mut self, i: In) -> Result<()>;
 }
 
-impl<'a, 'b, T: Pod + 'b, P: Placement> CopyIn<ListIn<'b, PodListRead<'b, T>>>
-    for ListOut<'a, PodListWrite<T>, P>
+impl<'b, T: Pod + 'b, P: Placement> CopyIn<ListIn<'b, PodListRead<'b, T>>>
+    for ListOut<'_, PodListWrite<T>, P>
 {
     fn copy_in(&mut self, i: ListIn<'b, PodListRead<'b, T>>) -> Result<()> {
         assert!(i.len() == self.len());
@@ -1539,7 +1533,7 @@ impl<'a, 'b, T: Pod + 'b, P: Placement> CopyIn<ListIn<'b, PodListRead<'b, T>>>
     }
 }
 
-impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, BoolListRead<'b>>> for ListOut<'a, BoolListWrite, P> {
+impl<'b, P: Placement> CopyIn<ListIn<'b, BoolListRead<'b>>> for ListOut<'_, BoolListWrite, P> {
     fn copy_in(&mut self, i: ListIn<'b, BoolListRead<'b>>) -> Result<()> {
         assert!(i.len() == self.len());
         for n in 0..i.len() {
@@ -1549,8 +1543,8 @@ impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, BoolListRead<'b>>> for ListOut<'a, 
     }
 }
 
-impl<'a, 'b, T: Enum + 'b, P: Placement> CopyIn<ListIn<'b, EnumListRead<'b, T>>>
-    for ListOut<'a, EnumListWrite<T>, P>
+impl<'b, T: Enum + 'b, P: Placement> CopyIn<ListIn<'b, EnumListRead<'b, T>>>
+    for ListOut<'_, EnumListWrite<T>, P>
 {
     fn copy_in(&mut self, i: ListIn<'b, EnumListRead<'b, T>>) -> Result<()> {
         assert!(i.len() == self.len());
@@ -1561,7 +1555,7 @@ impl<'a, 'b, T: Enum + 'b, P: Placement> CopyIn<ListIn<'b, EnumListRead<'b, T>>>
     }
 }
 
-impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, TextListRead<'b>>> for ListOut<'a, TextListWrite, P> {
+impl<'b, P: Placement> CopyIn<ListIn<'b, TextListRead<'b>>> for ListOut<'_, TextListWrite, P> {
     fn copy_in(&mut self, i: ListIn<'b, TextListRead<'b>>) -> Result<()> {
         assert!(i.len() == self.len());
         for n in 0..i.len() {
@@ -1573,8 +1567,8 @@ impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, TextListRead<'b>>> for ListOut<'a, 
     }
 }
 
-impl<'a, 'b, P: Placement> CopyIn<ListIn<'b, BytesListRead<'b>>>
-    for ListOut<'a, BytesListWrite, P>
+impl<'b, P: Placement> CopyIn<ListIn<'b, BytesListRead<'b>>>
+    for ListOut<'_, BytesListWrite, P>
 {
     fn copy_in(&mut self, i: ListIn<'b, BytesListRead<'b>>) -> Result<()> {
         assert!(i.len() == self.len());

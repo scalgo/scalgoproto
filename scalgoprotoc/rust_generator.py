@@ -1025,6 +1025,7 @@ pub enum {union.name}In<'a> {{
         self.o(
             f"""}}
 
+#[allow(clippy::needless_lifetimes)]
 impl<'a> scalgoproto::UnionIn<'a> for {union.name}In<'a> {{
     fn new(t: u16, magic: std::option::Option<u32>, offset: usize, size: usize, reader: &scalgoproto::Reader<'a>)
         -> Result<Self> {{
@@ -1069,6 +1070,8 @@ impl<'a> scalgoproto::UnionIn<'a> for {union.name}In<'a> {{
     _container_end: usize,
     _p: PhantomData<P>,
 }}
+
+#[allow(clippy::needless_lifetimes)]
 impl<'a> {union.name}Out<'a, Normal> {{
     #[inline]
     pub fn set_none(&mut self) {{
@@ -1095,6 +1098,7 @@ impl<'a> {union.name}Out<'a, Normal> {{
         self.o(
             f"""}}
 
+#[allow(clippy::needless_lifetimes)]
 impl<'a> {union.name}Out<'a, Inplace> {{
     #[inline]
     pub fn set_none(&mut self) {{
@@ -1138,6 +1142,7 @@ impl<'a> scalgoproto::Union<'a> for {name} {{
     }}
 }}
 
+#[allow(clippy::needless_lifetimes)]
 impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Normal> {{
     fn copy_in(&mut self, i: {name}In<'b>) -> Result<()> {{
         match i {{
@@ -1162,6 +1167,7 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Normal> {{
     }}
 }}
 
+#[allow(clippy::needless_lifetimes)]
 impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
     fn copy_in(&mut self, i: {name}In<'b>) -> Result<()> {{
         match i {{
@@ -1277,6 +1283,7 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
 pub struct {name}In<'a> {{
     _reader: scalgoproto::Reader<'a>,
 }}
+#[allow(clippy::needless_lifetimes)]
 impl<'a> {name}In<'a> {{"""
         )
 
@@ -1293,11 +1300,13 @@ impl<'a> {name}In<'a> {{"""
         self.o(
             f"""}}
 
-impl<'a> fmt::Debug for {name}In<'a> {{
+impl fmt::Debug for {name}In<'_> {{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {{
         write!(f, "{name} {{{{ {format_str} }}}}", {format_args})
     }}
 }}
+
+#[allow(clippy::needless_lifetimes)]
 impl<'a> scalgoproto::TableIn<'a> for {name}In<'a> {{
     #[inline]
     fn magic() -> u32 {{
@@ -1319,6 +1328,7 @@ impl<'a> scalgoproto::TableIn<'a> for {name}In<'a> {{
     _p: PhantomData<P>,
 }}
 
+#[allow(clippy::needless_lifetimes)]
 impl<'a, P: Placement> {name}Out<'a, P> {{"""
         )
         for node in table.members:
@@ -1359,6 +1369,7 @@ impl<'a, P: Placement> scalgoproto::TableOut<'a, P> for {name}Out<'a, P> {{
     }}
 }}
 
+#[allow(clippy::needless_lifetimes)]
 impl<'a, 'b, P: Placement> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, P> {{
     fn copy_in(&mut self, i: {name}In<'b>) -> Result<()> {{"""
         )
@@ -1415,6 +1426,7 @@ impl<'a> scalgoproto::StructIn<'a> for {name}In<'a> {{
     }}
 }}
 
+#[allow(clippy::needless_lifetimes)]
 impl <'a> {name}In<'a> {{"""
         )
         for v in node.members:
@@ -1466,7 +1478,7 @@ impl <'a> {name}In<'a> {{"""
         self.o(
             f"""}}
 
-impl<'a> fmt::Debug for {name}In<'a> {{
+impl fmt::Debug for {name}In<'_> {{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {{
         write!(f, "{name} {{{{ {format_string} }}}}", {format_args})
     }}
@@ -1476,6 +1488,7 @@ pub struct {name}Out<'a> {{
     _slice: ArenaSlice<'a>,
 }}
 
+#[allow(clippy::needless_lifetimes)]
 impl <'a> {name}Out<'a> {{"""
         )
         for v in node.members:
@@ -1536,7 +1549,7 @@ impl<'a> scalgoproto::StructOut<'a> for {name}Out<'a> {{
     }}
 }}
 
-impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a> {{
+impl<'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'_> {{
     fn copy_in(&mut self, i: {name}In<'b>) -> Result<()> {{
         self._slice.set_data(i._bytes);
         Ok(())
