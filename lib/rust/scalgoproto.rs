@@ -95,9 +95,11 @@ pub unsafe fn to_enum<T: Enum>(v: u8) -> Option<T> {
     if v >= T::max_value() {
         None
     } else {
-        let mut target: T = std::mem::zeroed();
-        std::ptr::copy_nonoverlapping(&v as *const u8, &mut target as *mut T as *mut u8, 1);
-        Some(target)
+        unsafe {
+            let mut target: T = std::mem::zeroed();
+            std::ptr::copy_nonoverlapping(&v as *const u8, &mut target as *mut T as *mut u8, 1);
+            Some(target)
+        }
     }
 }
 
@@ -106,20 +108,22 @@ pub unsafe fn to_enum<T: Enum>(v: u8) -> Option<T> {
 /// This method is safe to call if the length of v is sizeof(T)
 /// and the bit pattern described by v is a valid state for T
 pub unsafe fn to_pod<T: Pod>(v: &[u8]) -> T {
-    let mut target: T = std::mem::zeroed();
-    std::ptr::copy_nonoverlapping(
-        v.as_ptr(),
-        &mut target as *mut T as *mut u8,
-        std::mem::size_of::<T>(),
-    );
-    target
+    unsafe {
+        let mut target: T = std::mem::zeroed();
+        std::ptr::copy_nonoverlapping(
+            v.as_ptr(),
+            &mut target as *mut T as *mut u8,
+            std::mem::size_of::<T>(),
+        );
+        target
+    }
 }
 
 /// # Safety
 ///
 /// Should only be called if s is at least of size sizeof(S::B)
 pub unsafe fn to_struct<'a, S: StructIn<'a> + 'a>(s: &[u8]) -> S {
-    S::new(&*(s as *const [u8] as *const S::B))
+    unsafe { S::new(&*(s as *const [u8] as *const S::B)) }
 }
 
 pub fn to_bool(v: u8) -> bool {
@@ -130,18 +134,22 @@ pub fn to_bool(v: u8) -> bool {
 ///
 /// Should only be called when v.len() >= 6
 pub unsafe fn to_u48(v: &[u8]) -> u64 {
-    let mut out: u64 = 0;
-    std::ptr::copy_nonoverlapping(v.as_ptr(), &mut out as *mut u64 as *mut u8, 6);
-    out
+    unsafe {
+        let mut out: u64 = 0;
+        std::ptr::copy_nonoverlapping(v.as_ptr(), &mut out as *mut u64 as *mut u8, 6);
+        out
+    }
 }
 
 /// # Safety
 ///
 /// Should only be called when v.len() >= 6
 pub unsafe fn to_u48_usize(v: &[u8]) -> Result<usize> {
-    match std::convert::TryFrom::try_from(to_u48(v)) {
-        Ok(v) => Ok(v),
-        Err(_) => Err(Error::Overflow()),
+    unsafe {
+        match std::convert::TryFrom::try_from(to_u48(v)) {
+            Ok(v) => Ok(v),
+            Err(_) => Err(Error::Overflow()),
+        }
     }
 }
 
@@ -1254,8 +1262,10 @@ impl<'a> ArenaSlice<'a> {
     /// This is safe as long as o is within the arena, the pointer
     /// will be valid util the arena, resizes or is dropped.
     unsafe fn data(&self, o: usize) -> *mut u8 {
-        let data = &mut *self.arena.data.get();
-        data.as_mut_ptr().add(self.offset + o)
+        unsafe {
+            let data = &mut *self.arena.data.get();
+            data.as_mut_ptr().add(self.offset + o)
+        }
     }
 
     fn check_offset(&self, o: usize, size: usize) {
@@ -1276,11 +1286,13 @@ impl<'a> ArenaSlice<'a> {
     ///
     /// This is safe if offset..offset+sizeof<T> is within the arena
     pub unsafe fn set_pod_unsafe<T: Copy + std::fmt::Debug>(&mut self, offset: usize, value: &T) {
-        std::ptr::copy_nonoverlapping(
-            value as *const T as *const u8,
-            self.data(offset),
-            std::mem::size_of::<T>(),
-        );
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                value as *const T as *const u8,
+                self.data(offset),
+                std::mem::size_of::<T>(),
+            );
+        }
     }
 
     pub fn set_pod<T: Copy + std::fmt::Debug>(&mut self, offset: usize, value: &T) {
@@ -1292,11 +1304,13 @@ impl<'a> ArenaSlice<'a> {
     ///
     /// This is safe if offset is within the arena and bit < 8
     pub unsafe fn set_bit_unsafe(&mut self, offset: usize, bit: usize, value: bool) {
-        let d = self.data(offset);
-        if value {
-            *d |= 1 << bit;
-        } else {
-            *d &= !(1 << bit);
+        unsafe {
+            let d = self.data(offset);
+            if value {
+                *d |= 1 << bit;
+            } else {
+                *d &= !(1 << bit);
+            }
         }
     }
 
@@ -1310,7 +1324,7 @@ impl<'a> ArenaSlice<'a> {
     ///
     /// This is safe if offset is within the arena
     pub unsafe fn set_bool_unsafe(&mut self, offset: usize, value: bool) {
-        *self.data(offset) = if value { 1 } else { 0 }
+        unsafe { *self.data(offset) = if value { 1 } else { 0 } }
     }
 
     pub fn set_bool(&mut self, offset: usize, value: bool) {
@@ -1322,7 +1336,9 @@ impl<'a> ArenaSlice<'a> {
     ///
     /// This is safe if offset,offset+6 is in the arena, and value is less than 1 << 42
     pub unsafe fn set_u48_unsafe(&mut self, offset: usize, value: u64) {
-        std::ptr::copy_nonoverlapping(&value as *const u64 as *const u8, self.data(offset), 6);
+        unsafe {
+            std::ptr::copy_nonoverlapping(&value as *const u64 as *const u8, self.data(offset), 6);
+        }
     }
 
     pub fn set_u48(&mut self, offset: usize, value: u64) {
@@ -1335,11 +1351,15 @@ impl<'a> ArenaSlice<'a> {
     ///
     /// This is safe if std::mem::size_of::<T>() == 1 and offset is within the arena
     pub unsafe fn set_enum_unsafe<T: Enum>(&mut self, offset: usize, value: Option<T>) {
-        match value {
-            Some(vv) => {
-                std::ptr::copy_nonoverlapping(&vv as *const T as *const u8, self.data(offset), 1)
+        unsafe {
+            match value {
+                Some(vv) => std::ptr::copy_nonoverlapping(
+                    &vv as *const T as *const u8,
+                    self.data(offset),
+                    1,
+                ),
+                None => *self.data(offset) = 255,
             }
-            None => *self.data(offset) = 255,
         }
     }
 
