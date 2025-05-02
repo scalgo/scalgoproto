@@ -1272,6 +1272,7 @@ def run(args) -> int:
             print("Invalid schema is valid")
             return 1
         g = Generator(documents)
+        os.makedirs(args.output, exist_ok=True)
         g.generate(ast, args.output, args.single, dir_strip=args.dir_strip,
                 expected=args.expected, expected_only=args.expected_only, schema=args.schema)
         return 0
