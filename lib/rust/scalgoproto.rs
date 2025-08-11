@@ -240,11 +240,10 @@ impl<'a> Reader<'a> {
         offset: usize,
         size: usize,
     ) -> Result<T> {
-        if let Some(m) = magic {
-            if m != T::magic() {
+        if let Some(m) = magic
+            && m != T::magic() {
                 return Err(Error::BadMagic(m, T::magic()));
             }
-        }
         if offset + size > self.full.len() {
             return Err(Error::InvalidPointer(offset + size, self.full.len()));
         }
@@ -302,11 +301,10 @@ impl<'a> Reader<'a> {
         offset: usize,
         size: usize,
     ) -> Result<&'a str> {
-        if let Some(m) = magic {
-            if m != TEXTMAGIC {
+        if let Some(m) = magic
+            && m != TEXTMAGIC {
                 return Err(Error::BadMagic(m, TEXTMAGIC));
             }
-        }
         if offset + size > self.full.len() {
             return Err(Error::InvalidPointer(offset + size, self.full.len()));
         }
@@ -351,11 +349,10 @@ impl<'a> Reader<'a> {
         offset: usize,
         size: usize,
     ) -> Result<&'a [u8]> {
-        if let Some(m) = magic {
-            if m != BYTESMAGIC {
+        if let Some(m) = magic
+            && m != BYTESMAGIC {
                 return Err(Error::BadMagic(m, BYTESMAGIC));
             }
-        }
         if offset + size > self.full.len() {
             return Err(Error::InvalidPointer(offset + size, self.full.len()));
         }
@@ -404,11 +401,10 @@ impl<'a> Reader<'a> {
         A::ItemSize: Void,
     {
         let item_size = Void::new();
-        if let Some(m) = magic {
-            if m != LISTMAGIC {
+        if let Some(m) = magic
+            && m != LISTMAGIC {
                 return Err(Error::BadMagic(m, LISTMAGIC));
             }
-        }
         let size_bytes = A::bytes(item_size, size);
         if offset + size_bytes > self.full.len() {
             return Err(Error::InvalidPointer(offset + size_bytes, self.full.len()));
@@ -1143,7 +1139,7 @@ impl<'a, F: Union<'a>, P: Placement> ListOut<'a, UnionListWrite<'a, F>, P> {
 }
 
 impl PArena {
-    fn allocate(&self, size: usize, fill: u8) -> ArenaSlice {
+    fn allocate(&self, size: usize, fill: u8) -> ArenaSlice<'_> {
         let d = unsafe { &mut *self.data.get() };
         let offset = d.len();
         d.resize(offset + size, fill);
@@ -1154,7 +1150,7 @@ impl PArena {
         }
     }
 
-    fn allocate_default(&self, head: usize, default: &[u8]) -> ArenaSlice {
+    fn allocate_default(&self, head: usize, default: &[u8]) -> ArenaSlice<'_> {
         let d = unsafe { &mut *self.data.get() };
         let offset = d.len();
         d.reserve(offset + head + default.len());
@@ -1196,7 +1192,7 @@ impl PArena {
         }
     }
 
-    pub fn create_list<T: ListWrite>(&self, len: usize) -> ListOut<T, Normal> {
+    pub fn create_list<T: ListWrite>(&self, len: usize) -> ListOut<'_, T, Normal> {
         let mut slice = self.allocate(T::list_bytes(len) + 10, T::list_def());
         unsafe {
             slice.set_pod_unsafe(0, &LISTMAGIC);
@@ -1213,7 +1209,7 @@ impl PArena {
     pub fn create_direct_table_list<'a, T: TableOut<'a, Normal> + 'a>(
         &self,
         len: usize,
-    ) -> ListOut<DirectTableListWrite<'a, T>, Normal> {
+    ) -> ListOut<'_, DirectTableListWrite<'a, T>, Normal> {
         let mut slice = self.allocate(T::size() * len + 18, 0);
         unsafe {
             slice.set_pod_unsafe(0, &DIRECTLISTMAGIC);

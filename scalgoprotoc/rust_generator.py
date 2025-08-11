@@ -88,9 +88,9 @@ class Generator:
                 node.table.name
             )
         elif node.table:
-            return "scalgoproto::TableListWrite<%sOut<'a, Normal>>" % (node.table.name)
+            return "scalgoproto::TableListWrite<'_, %sOut<'a, Normal>>" % (node.table.name)
         elif node.union:
-            return "scalgoproto::UnionListWrite<%s>" % (node.union.name)
+            return "scalgoproto::UnionListWrite<'_, %s>" % (node.union.name)
         elif node.type_.type == TokenType.TEXT:
             return "scalgoproto::TextListWrite"
         elif node.type_.type == TokenType.BYTES:
@@ -523,7 +523,7 @@ class Generator:
         if node.optional:
             self.o(
                 f"""    #[inline]
-    pub fn {lname}(&self) -> std::option::Option<{node.struct.name}In> {{
+    pub fn {lname}(&self) -> std::option::Option<{node.struct.name}In<'_>> {{
         if self._reader.get_bit({node.has_offset}, {node.has_bit}) {{
             Some(self._reader.get_struct::<{node.struct.name}In>({node.offset}))
         }} else {{
@@ -535,7 +535,7 @@ class Generator:
         else:
             self.o(
                 f"""    #[inline]
-    pub fn {lname}(&self) -> {node.struct.name}In {{
+    pub fn {lname}(&self) -> {node.struct.name}In<'_> {{
         self._reader.get_struct::<{node.struct.name}In>({node.offset})
     }}
 """
@@ -550,7 +550,7 @@ class Generator:
         if node.optional:
             self.o(
                 f"""    #[inline]
-    pub fn {lname}(&mut self) -> {node.struct.name}Out {{
+    pub fn {lname}(&mut self) -> {node.struct.name}Out<'_> {{
         self._slice.set_bit({node.has_offset}, {node.has_bit}, true);
         self._slice.get_struct::<{node.struct.name}>({node.offset})
     }}
@@ -559,7 +559,7 @@ class Generator:
         else:
             self.o(
                 f"""    #[inline]
-    pub fn {lname}(&mut self) -> {node.struct.name}Out {{
+    pub fn {lname}(&mut self) -> {node.struct.name}Out<'_> {{
         self._slice.get_struct::<{node.struct.name}>({node.offset})
     }}
 """
@@ -573,7 +573,7 @@ class Generator:
                 self.output_doc(node, "    ")
                 self.o(
                     f"""    #[inline]
-    pub fn {lname}(&self) -> Result<std::option::Option<{tname}In>> {{
+    pub fn {lname}(&self) -> Result<std::option::Option<{tname}In<'_>>> {{
         self._reader.get_optional_table::<{tname}In>({node.offset})
     }}
 """
@@ -582,7 +582,7 @@ class Generator:
                 self.output_doc(node, "    ")
                 self.o(
                     f"""    #[inline]
-    pub fn {lname}(&self) -> Result<std::option::Option<{tname}In>> {{
+    pub fn {lname}(&self) -> Result<std::option::Option<{tname}In<'_>>> {{
         self._reader.get_optional_table_inplace::<{tname}In>({node.offset})
     }}
 """
@@ -591,7 +591,7 @@ class Generator:
             if not node.inplace:
                 self.o(
                     f"""    #[inline]
-    pub fn __opt_{lname}(&self) -> Result<std::option::Option<{tname}In>> {{
+    pub fn __opt_{lname}(&self) -> Result<std::option::Option<{tname}In<'_>>> {{
         self._reader.get_optional_table::<{tname}In>({node.offset})
     }}
 """
@@ -599,7 +599,7 @@ class Generator:
             else:
                 self.o(
                     f"""    #[inline]
-    pub fn __opt_{lname}(&self) -> Result<std::option::Option<{tname}In>> {{
+    pub fn __opt_{lname}(&self) -> Result<std::option::Option<{tname}In<'_>>> {{
         self._reader.get_optional_table_inplace::<{tname}In>({node.offset})
     }}
 """
@@ -609,7 +609,7 @@ class Generator:
                 self.output_doc(node, "    ")
                 self.o(
                     f"""    #[inline]
-    pub fn {lname}(&self) -> Result<{tname}In> {{
+    pub fn {lname}(&self) -> Result<{tname}In<'_>> {{
         self._reader.get_table::<{tname}In>({node.offset})
     }}
 """
@@ -618,7 +618,7 @@ class Generator:
                 self.output_doc(node, "    ")
                 self.o(
                     f"""    #[inline]
-    pub fn {lname}(&self) -> Result<{tname}In> {{
+    pub fn {lname}(&self) -> Result<{tname}In<'_>> {{
         self._reader.get_table_inplace::<{tname}In>({node.offset})
     }}
 """
@@ -929,7 +929,7 @@ class Generator:
         self.output_doc(node, "    ")
         self.o(
             f"""    #[inline]
-    pub fn {lname}(&mut self) -> {node.union.name}Out<{"Inplace" if node.inplace else "Normal"}> {{
+    pub fn {lname}(&mut self) -> {node.union.name}Out<'_, {"Inplace" if node.inplace else "Normal"}> {{
         self._slice.get_union{"_inplace" if node.inplace else ""}::<{node.union.name}>({node.offset})
     }}
 """
