@@ -241,9 +241,10 @@ impl<'a> Reader<'a> {
         size: usize,
     ) -> Result<T> {
         if let Some(m) = magic
-            && m != T::magic() {
-                return Err(Error::BadMagic(m, T::magic()));
-            }
+            && m != T::magic()
+        {
+            return Err(Error::BadMagic(m, T::magic()));
+        }
         if offset + size > self.full.len() {
             return Err(Error::InvalidPointer(offset + size, self.full.len()));
         }
@@ -302,9 +303,10 @@ impl<'a> Reader<'a> {
         size: usize,
     ) -> Result<&'a str> {
         if let Some(m) = magic
-            && m != TEXTMAGIC {
-                return Err(Error::BadMagic(m, TEXTMAGIC));
-            }
+            && m != TEXTMAGIC
+        {
+            return Err(Error::BadMagic(m, TEXTMAGIC));
+        }
         if offset + size > self.full.len() {
             return Err(Error::InvalidPointer(offset + size, self.full.len()));
         }
@@ -350,9 +352,10 @@ impl<'a> Reader<'a> {
         size: usize,
     ) -> Result<&'a [u8]> {
         if let Some(m) = magic
-            && m != BYTESMAGIC {
-                return Err(Error::BadMagic(m, BYTESMAGIC));
-            }
+            && m != BYTESMAGIC
+        {
+            return Err(Error::BadMagic(m, BYTESMAGIC));
+        }
         if offset + size > self.full.len() {
             return Err(Error::InvalidPointer(offset + size, self.full.len()));
         }
@@ -402,9 +405,10 @@ impl<'a> Reader<'a> {
     {
         let item_size = Void::new();
         if let Some(m) = magic
-            && m != LISTMAGIC {
-                return Err(Error::BadMagic(m, LISTMAGIC));
-            }
+            && m != LISTMAGIC
+        {
+            return Err(Error::BadMagic(m, LISTMAGIC));
+        }
         let size_bytes = A::bytes(item_size, size);
         if offset + size_bytes > self.full.len() {
             return Err(Error::InvalidPointer(offset + size_bytes, self.full.len()));
