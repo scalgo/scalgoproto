@@ -1850,4 +1850,10 @@ impl<'a> Writer<'a> {
     pub fn add_bool_list(&mut self, size: usize) -> ListOut<'a, BoolListWrite, Normal> {
         self.slice.arena.create_list::<BoolListWrite>(size)
     }
+
+    pub fn len(&mut self) -> usize {
+        unsafe {
+            (*self.slice.arena.data.get()).len()
+        }
+    }
 }

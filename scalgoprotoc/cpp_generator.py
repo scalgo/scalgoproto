@@ -919,13 +919,13 @@ class Generator:
                 n = self.value(member.identifier)
                 uname = ucamel(n)
                 if member.list_:
-                    self.generate_union_list_out(member, uname, inplace, idx+1)
+                    self.generate_union_list_out(member, uname, inplace, idx + 1)
                 elif member.table:
-                    self.generate_union_table_out(member, uname, inplace, idx+1)
+                    self.generate_union_table_out(member, uname, inplace, idx + 1)
                 elif member.type_.type == TokenType.BYTES:
-                    self.generate_union_bytes_out(member, uname, inplace, idx+1)
+                    self.generate_union_bytes_out(member, uname, inplace, idx + 1)
                 elif member.type_.type == TokenType.TEXT:
-                    self.generate_union_text_out(member, uname, inplace, idx+1)
+                    self.generate_union_text_out(member, uname, inplace, idx + 1)
                 else:
                     raise ICE()
             self.generate_union_copy(union, inplace)
@@ -1179,11 +1179,15 @@ template <> struct EnumSize<%s> {static constexpr size_t size() noexcept {return
             self.current_file = name
 
     def generate(
-        self, ast: List[AstNode], output: str, single: bool,
+        self,
+        ast: List[AstNode],
+        output: str,
+        single: bool,
         expected: List[str],
         expected_only: bool,
         schema: str,
-        *, dir_strip: int = None,
+        *,
+        dir_strip: int = None,
     ) -> None:
         if single:
             if dir_strip is not None:
@@ -1229,7 +1233,9 @@ template <> struct EnumSize<%s> {static constexpr size_t size() noexcept {return
                     short_name = name.split("/")[-1]
                     found.add(short_name)
                     if expected_only and short_name not in expected:
-                        ParseError(node.identifier, f"Unexpected output {short_name}", schema).describe(self.documents)
+                        ParseError(
+                            node.identifier, f"Unexpected output {short_name}", schema
+                        ).describe(self.documents)
                         err = True
                     self.switch_file(name, output)
                     for use in sorted(node.uses, key=lambda u: u.name):
@@ -1273,8 +1279,15 @@ def run(args) -> int:
             return 1
         g = Generator(documents)
         os.makedirs(args.output, exist_ok=True)
-        g.generate(ast, args.output, args.single, dir_strip=args.dir_strip,
-                expected=args.expected, expected_only=args.expected_only, schema=args.schema)
+        g.generate(
+            ast,
+            args.output,
+            args.single,
+            dir_strip=args.dir_strip,
+            expected=args.expected,
+            expected_only=args.expected_only,
+            schema=args.schema,
+        )
         return 0
     except ParseError as err:
         err.describe(documents)
@@ -1294,14 +1307,14 @@ def setup(subparsers) -> None:
     )
     cmd.add_argument(
         "--expect",
-        action='append',
+        action="append",
         help="Check that this table is defined",
         dest="expected",
         default=[],
     )
     cmd.add_argument(
         "--expected-only",
-        action='store_true',
+        action="store_true",
         help="Check that only --expect tables exist",
     )
     cmd.set_defaults(func=run)

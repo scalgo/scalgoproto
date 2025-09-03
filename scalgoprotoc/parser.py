@@ -324,25 +324,31 @@ class Parser:
                 doc_comment = t
             elif t.type == TokenType.RBRACE:
                 break
-            elif t.type == TokenType.REMOVED and self.token is not None and self.token.type in (TokenType.COMMA, TokenType.SEMICOLON, TokenType.RBRACE) and is_union:
+            elif (
+                t.type == TokenType.REMOVED
+                and self.token is not None
+                and self.token.type
+                in (TokenType.COMMA, TokenType.SEMICOLON, TokenType.RBRACE)
+                and is_union
+            ):
                 members.append(
                     Value(
-                            None,
-                            self.document.id,
-                            t,
-                            None,
-                            t,
-                            None,
-                            None,
-                            None,
-                            None,
-                            None,
-                            None,
-                            None,
-                            None,
-                            None,
-                        )
+                        None,
+                        self.document.id,
+                        t,
+                        None,
+                        t,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
                     )
+                )
             elif t.type in (TokenType.IDENTIFIER, TokenType.REMOVED):
                 assert self.token is not None
                 self.check_token(

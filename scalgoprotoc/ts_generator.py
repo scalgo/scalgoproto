@@ -834,7 +834,7 @@ class Generator:
             elif member.table:
                 self.generate_union_table_out(member, llname, idx + 1, False)
             elif member.type_.type == TokenType.BYTES:
-                self.generate_union_bytes_out(member, llname, idx + 1 , False)
+                self.generate_union_bytes_out(member, llname, idx + 1, False)
             elif member.type_.type == TokenType.TEXT:
                 self.generate_union_text_out(member, llname, idx + 1, False)
             else:

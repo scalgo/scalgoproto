@@ -199,7 +199,9 @@ class Annotater:
             if not removed and v.direct_table:
                 v.direct_table.name = name + ucamel(val)
                 self.attach_namespace(v.direct_table)
-                ip = v.inplace is not None if t == ContentType.TABLE else inplace_context
+                ip = (
+                    v.inplace is not None if t == ContentType.TABLE else inplace_context
+                )
                 self.assign_magic(v.direct_table, not ip)
                 v.direct_table.default, v.direct_table.members = self.visit_content(
                     v.direct_table.name, v.direct_table.members, ContentType.TABLE, ip
