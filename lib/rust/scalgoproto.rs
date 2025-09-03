@@ -43,17 +43,15 @@ impl From<std::str::Utf8Error> for Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::Utf8(e) => write!(f, "Scalgo proto error: utf8 {}", e),
+            Error::Utf8(e) => write!(f, "Scalgo proto error: utf8 {e}"),
             Error::InvalidPointer(offset, size) => write!(
                 f,
-                "Scalgo proto error: Invalid pointer at {} size is {}",
-                offset, size
+                "Scalgo proto error: Invalid pointer at {offset} size is {size}"
             ),
             Error::Overflow() => write!(f, "Scalgo proto error: Overflow"),
             Error::BadMagic(got, expected) => write!(
                 f,
-                "Scalgo proto error: Bad bagic got {} expected {}",
-                got, expected
+                "Scalgo proto error: Bad bagic got {got} expected {expected}"
             ),
         }
     }
@@ -1852,8 +1850,6 @@ impl<'a> Writer<'a> {
     }
 
     pub fn len(&mut self) -> usize {
-        unsafe {
-            (*self.slice.arena.data.get()).len()
-        }
+        unsafe { (*self.slice.arena.data.get()).len() }
     }
 }
