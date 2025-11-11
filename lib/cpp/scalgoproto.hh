@@ -251,20 +251,20 @@ public:
 class In {
 protected:
 	template <typename T, typename... TT>
-	static T getObject_(TT &&... tt) noexcept {
+	static T getObject_(TT &&... tt) {
 		return T(std::forward<TT>(tt)...);
 	}
 
-	static std::string_view getText_(const Reader * reader, Ptr p) noexcept {
+	static std::string_view getText_(const Reader * reader, Ptr p) {
 		if (p.size == 0) return std::string_view("");
 		reader->validateTextPtr_(p);
 		return std::string_view(p.start, p.size);
 	}
 
-	static Bytes getBytes_(Ptr p) noexcept { return Bytes(p.start, p.size); }
+	static Bytes getBytes_(Ptr p) { return Bytes(p.start, p.size); }
 
 	template <typename T>
-	static std::pair<const T *, size_t> getListRaw_(Ptr p) noexcept {
+	static std::pair<const T *, size_t> getListRaw_(Ptr p) {
 		return {reinterpret_cast<const T *>(p.start), (size_t)p.size};
 	}
 };
