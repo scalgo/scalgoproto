@@ -251,11 +251,11 @@ public:
 class In {
 protected:
 	template <typename T, typename... TT>
-	static T getObject_(TT &&... tt) noexcept {
+	static T getObject_(TT &&... tt) noexcept(noexcept(T(std::forward<TT>(tt)...))) {
 		return T(std::forward<TT>(tt)...);
 	}
 
-	static std::string_view getText_(const Reader * reader, Ptr p) noexcept {
+	static std::string_view getText_(const Reader * reader, Ptr p) {
 		if (p.size == 0) return std::string_view("");
 		reader->validateTextPtr_(p);
 		return std::string_view(p.start, p.size);
@@ -406,7 +406,7 @@ struct ListAccessHelp<BytesTag, T> : public In {
 		return off != 0;
 	}
 	static Bytes get(const Reader * reader, const char * start,
-					 std::uint64_t index) noexcept {
+					 std::uint64_t index) {
 		std::uint64_t off = read48_(start + index * 6);
 		return getBytes_(reader->getPtr_<BYTESMAGIC>(off));
 	}
@@ -439,7 +439,7 @@ struct ListAccessHelp<TableTag, T> : public In {
 	}
 
 	static T get(const Reader * reader, const char * start,
-				 std::uint64_t index) noexcept {
+				 std::uint64_t index) {
 		std::uint64_t off = read48_(start + index * 6);
 		return getObject_<T>(reader, reader->getPtr_<T::MAGIC>(off));
 	}
@@ -477,7 +477,7 @@ struct ListAccessHelp<UnionTag, T> : public In {
 	}
 
 	static T get(const Reader * reader, const char * start,
-				 std::uint64_t index) noexcept {
+				 std::uint64_t index) noexcept(noexcept(getObject_<T>(reader, uint16_t(), uint64_t()))) {
 		std::uint16_t type;
 		memcpy(&type, start + index * 8, 2);
 		std::uint64_t off = read48_(start + index * 8 + 2);
@@ -670,7 +670,7 @@ public:
 	DirectListInIterator & operator=(const DirectListInIterator &) = default;
 	DirectListInIterator & operator=(DirectListInIterator &&) = default;
 
-	value_type operator*() const noexcept {
+	value_type operator*() const noexcept(noexcept(getObject_<T>(reader, Ptr{0,0}))) {
 		return getObject_<T>(reader, Ptr{start + index * item_size, item_size});
 	}
 
@@ -771,7 +771,7 @@ public:
 		if (pos >= size_) throw std::out_of_range("out of range");
 		return (*this)[pos];
 	};
-	value_type operator[](size_type pos) const noexcept {
+	value_type operator[](size_type pos) const noexcept(noexcept(getObject_<T>(reader_, Ptr{0,0}))) {
 		assert(pos < size_);
 		return getObject_<T>(reader_, Ptr{start_ + pos * item_size_, item_size_});
 	}
@@ -1113,17 +1113,17 @@ private:
 	}
 
 	template <typename T>
-	void write(const T & t, std::uint64_t offset) {
+	void write(const T & t, std::uint64_t offset) noexcept {
 		memcpy(data + offset, &t, sizeof(T));
 	}
 
 	template <typename T>
-	T accessTable(std::uint64_t o) {
+	T accessTable(std::uint64_t o) { //TODO noexcept
 		return T(*this, o);
 	}
 
 	template <typename T>
-	T read(std::uint64_t offset) {
+	T read(std::uint64_t offset) noexcept {
 		T v;
 		memcpy(&v, data+offset, sizeof(T));
 		return v;
@@ -1170,11 +1170,11 @@ public:
 	inline Bytes finalize(const TableOut & root);
 
 	template <typename T>
-	T construct() {
+	T construct() noexcept {
 		return T(*this, true);
 	}
 
-	void write48_(std::uint64_t value, std::uint64_t offset) {
+	void write48_(std::uint64_t value, std::uint64_t offset) noexcept {
 		scalgoproto::write48_(data + offset, value);
 	}
 
@@ -1398,7 +1398,7 @@ protected:
 	}
 
 	template <std::uint64_t o>
-	void set48_(std::uint64_t v) {
+	void set48_(std::uint64_t v) noexcept {
 		writer_.write48_(v, offset_ + o);
 	}
 
@@ -1408,12 +1408,12 @@ protected:
 	}
 
 	template <std::uint64_t o, std::uint8_t b>
-	void setBit_() {
+	void setBit_() noexcept {
 		*(std::uint8_t *)(writer_.data + offset_ + o) |= (1 << b);
 	}
 
 	template <std::uint64_t o, std::uint8_t b>
-	void unsetBit_() {
+	void unsetBit_() noexcept {
 		*(std::uint8_t *)(writer_.data + offset_ + o) &= ~(1 << b);
 	}
 

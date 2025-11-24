@@ -431,7 +431,7 @@ class Generator:
         if not node.table.empty:
             self.output_doc(node, "\t")
             self.o(
-                "\t%sIn %s() const noexcept {"
+                "\t%sIn %s() const {"
                 % (self.qualify(node.table), lcamel(uname))
             )
             self.o("\t\tassert(is%s());" % (uname))
