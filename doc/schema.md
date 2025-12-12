@@ -175,6 +175,19 @@ Tabels elements an also be lists. In the example below several lists are declare
         d: list table {x:U32, y:U32};
     }
 
+##### Direct list table
+
+It is possible to use direct list table. This is more efficient than regular list tables:
+
+    table MyTable @5D99E0AD {
+        d: direct list table {x:U32, y:U32};
+    }
+
+
+For regular list tabels. The list stores a pointer to a table. At the pointer location the magic
+and size of the table is stored. With a direct list table the table content is stored directly
+in the list. So the pointer indirection, magic and size is saved.
+
 ##### Inplace
 
 Within a table atmost one table, union, text or bytes, member may be declared inplace. An inplace member in encoded directly after its table, and 8 bytes are saved. In the example below an inplace union is used;
