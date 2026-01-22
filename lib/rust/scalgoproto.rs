@@ -672,16 +672,11 @@ impl<'a, A: ListRead<'a> + 'a> std::iter::IntoIterator for ListIn<'a, A> {
 
 impl<'a, A: ListRead<'a>> std::fmt::Debug for ListIn<'a, A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("[")?;
-        let l = self.len();
-        for i in 0..l {
-            if i != 0 {
-                f.write_str(", ")?;
-            }
-            write!(f, "{:?}", self.get(0))?;
+        let mut l = f.debug_list();
+        for i in 0..self.len() {
+            l.entry(&self.get(i));
         }
-        f.write_str("]")?;
-        Ok(())
+        l.finish()
     }
 }
 

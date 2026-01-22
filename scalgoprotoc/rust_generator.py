@@ -1290,11 +1290,8 @@ impl<'a> {name}In<'a> {{"""
         for node in table.members:
             self.generate_value_in(table, node)
 
-        format_str = ", ".join(
-            ["%s: {:?}" % snake(self.value(v.identifier)) for v in table.members]
-        )
-        format_args = ", ".join(
-            ["self.%s()" % snake(self.value(v.identifier)) for v in table.members]
+        debug = "".join(
+            [f"\n            .field(\"{snake(self.value(v.identifier))}\", & self.{snake(self.value(v.identifier))}())" for v in table.members]
         )
 
         self.o(
@@ -1302,7 +1299,8 @@ impl<'a> {name}In<'a> {{"""
 
 impl fmt::Debug for {name}In<'_> {{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {{
-        write!(f, "{name} {{{{ {format_str} }}}}", {format_args})
+        f.debug_struct("{name}"){debug}
+            .finish()
     }}
 }}
 
@@ -1468,11 +1466,8 @@ impl <'a> {name}In<'a> {{"""
                 )
             else:
                 raise ICE()
-        format_string = ", ".join(
-            ["%s: {:?}" % self.value(v.identifier) for v in node.members]
-        )
-        format_args = ", ".join(
-            ["self.%s()" % self.value(v.identifier) for v in node.members]
+        debug = "".join(
+            [f"\n            .field(\"{self.value(v.identifier)}\", & self.{self.value(v.identifier)}())" for v in node.members]
         )
 
         self.o(
@@ -1480,7 +1475,8 @@ impl <'a> {name}In<'a> {{"""
 
 impl fmt::Debug for {name}In<'_> {{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {{
-        write!(f, "{name} {{{{ {format_string} }}}}", {format_args})
+        f.debug_struct("{name}"){debug}
+            .finish()
     }}
 }}
 
