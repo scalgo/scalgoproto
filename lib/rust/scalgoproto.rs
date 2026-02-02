@@ -1844,7 +1844,11 @@ impl<'a> Writer<'a> {
         self.slice.arena.create_list::<BoolListWrite>(size)
     }
 
-    pub fn len(&mut self) -> usize {
+    pub fn len(&self) -> usize {
         unsafe { (*self.slice.arena.data.get()).len() }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        unsafe { (*self.slice.arena.data.get()).is_empty() }
     }
 }
