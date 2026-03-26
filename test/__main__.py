@@ -59,7 +59,7 @@ def runRustSetup(schemas: List[str], main_file: str) -> bool:
     [package]
 name = "test"
 version = "0.1.0"
-edition = "2018"
+edition = "2024"
 
 [lib]
 name = "scalgoproto"
