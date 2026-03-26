@@ -1,4 +1,3 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: nil; python-indent-offset: 4; coding: utf-8 -*-
 """
 Validate a schema
 """
@@ -7,8 +6,6 @@ import math
 import io
 import os
 import sys
-from typing import List, Tuple, Optional
-import typing
 from .annotate import annotate
 from .parser import (
     AstNode,
@@ -40,21 +37,21 @@ typeMap = {
 }
 
 
-def bs(v: Optional[Token]) -> str:
+def bs(v: Token | None) -> str:
     return "true" if v else "false"
 
 
 class Generator:
-    out: Optional[io.StringIO] = None
+    out: io.StringIO | None = None
 
     def __init__(self, documents: Documents) -> None:
         self.documents = documents
-        self.current_namespace: Optional[str] = None
-        self.current_file: Optional[str] = None
+        self.current_namespace: str | None = None
+        self.current_file: str | None = None
 
-    def in_list_types(self, node: Value) -> Tuple[str, Optional[str]]:
-        typeName: Optional[str] = None
-        rawType: Optional[str] = None
+    def in_list_types(self, node: Value) -> tuple[str, str | None]:
+        typeName: str | None = None
+        rawType: str | None = None
         assert node.type_ is not None
         if node.type_.type in typeMap:
             typeName = typeMap[node.type_.type]
@@ -112,8 +109,8 @@ class Generator:
         self,
         node: AstNode,
         indent: str = "",
-        prefix: List[str] = [],
-        suffix: List[str] = [],
+        prefix: list[str] = [],
+        suffix: list[str] = [],
     ):
         if not node.docstring and not suffix and not prefix:
             return
@@ -1140,7 +1137,7 @@ template <> struct EnumSize<%s> {static constexpr size_t size() noexcept {return
         )
         self.o()
 
-    def switch_namespace(self, namespace: Optional[str]) -> None:
+    def switch_namespace(self, namespace: str | None) -> None:
         if namespace == self.current_namespace:
             return
         if self.current_namespace:
@@ -1149,9 +1146,7 @@ template <> struct EnumSize<%s> {static constexpr size_t size() noexcept {return
             self.o("namespace %s {" % namespace)
         self.current_namespace = namespace
 
-    def qualify(
-        self, node: typing.Union[Union, Table, Struct, Enum], full: bool = False
-    ) -> str:
+    def qualify(self, node: Union | Table | Struct | Enum, full: bool = False) -> str:
         if node.namespace and (full or node.namespace != self.current_namespace):
             return "%s::%s" % (node.namespace, node.name)
         else:
@@ -1159,13 +1154,13 @@ template <> struct EnumSize<%s> {static constexpr size_t size() noexcept {return
                 raise ICE()
             return node.name
 
-    def switch_file(self, name: Optional[str], output: str):
+    def switch_file(self, name: str | None, output: str):
         if self.current_file:
             assert self.out is not None
             self.switch_namespace(None)
             self.o("#endif //__SCALGOPROTO_%s__" % self.current_file)
             po = os.path.join(output, "%s.hh" % self.current_file)
-            if not os.path.exists(po) or open(po, "r").read() != self.out.getvalue():
+            if not os.path.exists(po) or open(po).read() != self.out.getvalue():
                 open(po, "w").write(self.out.getvalue())
         if name:
             guard_name = name.replace("/", "_")
@@ -1178,10 +1173,10 @@ template <> struct EnumSize<%s> {static constexpr size_t size() noexcept {return
 
     def generate(
         self,
-        ast: List[AstNode],
+        ast: list[AstNode],
         output: str,
         single: bool,
-        expected: List[str],
+        expected: list[str],
         expected_only: bool,
         schema: str,
         *,
@@ -1204,7 +1199,7 @@ template <> struct EnumSize<%s> {static constexpr size_t size() noexcept {return
             for i in sorted(list(imports)):
                 self.o('#include "%s.hh"' % i)
 
-        def node_path(node: typing.Union[Struct, Enum, Table, Union]) -> str:
+        def node_path(node: Struct | Enum | Table | Union) -> str:
             name = node.name
             assert name is not None
             if dir_strip is None:

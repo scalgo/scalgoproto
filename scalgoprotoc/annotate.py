@@ -1,11 +1,9 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: t; python-indent-offset: 4; coding: utf-8 -*-
 """
 Perform validation of the ast, and assign offsets and such
 """
 
 import enum
 import struct
-from typing import Dict, List, Optional, Tuple
 
 from .documents import Documents
 from .error import error
@@ -32,12 +30,12 @@ class ContentType(enum.Enum):
 
 
 class Annotater:
-    enums: Dict[str, Enum]
-    structs: Dict[str, Struct]
-    tables: Dict[str, Table]
-    unions: Dict[str, Union]
-    outer: Optional[AstNode]
-    namespace: Dict[int, str]
+    enums: dict[str, Enum]
+    structs: dict[str, Struct]
+    tables: dict[str, Table]
+    unions: dict[str, Union]
+    outer: AstNode | None
+    namespace: dict[int, str]
 
     def __init__(self, documents: Documents) -> None:
         self.documents = documents
@@ -51,7 +49,7 @@ class Annotater:
     def value(self, t: Token) -> str:
         return self.documents.by_id[t.document].content[t.index : t.index + t.length]
 
-    def error(self, token: Optional[Token], message: str) -> None:
+    def error(self, token: Token | None, message: str) -> None:
         assert token is not None
         self.errors += 1
         error(self.documents, self.context, token, message)
@@ -83,7 +81,7 @@ class Annotater:
         self,
         t: Token,
         name: str,
-        seen: Dict[str, Token],
+        seen: dict[str, Token],
         has: bool = False,
         is_: bool = False,
         add: bool = False,
@@ -106,7 +104,7 @@ class Annotater:
                 self.error(seen[n], "Conflicts with this")
             seen[n] = t
 
-    def get_int(self, value: Optional[Token], min: int, max: int, d: int) -> int:
+    def get_int(self, value: Token | None, min: int, max: int, d: int) -> int:
         if value is None:
             return d
         try:
@@ -118,7 +116,7 @@ class Annotater:
             self.error(value, "Must be an integer")
         return d
 
-    def get_float(self, value: Optional[Token], d: float) -> float:
+    def get_float(self, value: Token | None, d: float) -> float:
         if value is None:
             return d
         try:
@@ -153,7 +151,7 @@ class Annotater:
 
     def visit_enum(self, node: Enum):
         self.create_doc_string(node)
-        enumValues: Dict[str, int] = {}
+        enumValues: dict[str, int] = {}
         index = 0
         for ev in node.members:
             self.create_doc_string(ev)
@@ -177,15 +175,15 @@ class Annotater:
                 self.error(node.id_, "Magic outside range")
 
     def visit_content(
-        self, name: str, values: List[Value], t: ContentType, inplace_context: bool
-    ) -> Tuple[bytes, List[Value]]:
-        content: Dict[str, Token] = {}
+        self, name: str, values: list[Value], t: ContentType, inplace_context: bool
+    ) -> tuple[bytes, list[Value]]:
+        content: dict[str, Token] = {}
         bytes = 0
         default = []
         bool_bit = 8
         bool_offset = 0
-        inplace: Optional[Value] = None
-        out_values: List[Value] = []
+        inplace: Value | None = None
+        out_values: list[Value] = []
         for v in values:
             self.create_doc_string(v)
             removed = v.identifier.type == TokenType.REMOVED
@@ -541,7 +539,7 @@ class Annotater:
             raise ICE()
         return (default2, out_values)
 
-    def annotate(self, ast: List[AstNode]) -> None:
+    def annotate(self, ast: list[AstNode]) -> None:
         self.enums = {}
         self.structs = {}
         self.tables = {}
@@ -603,7 +601,7 @@ class Annotater:
                 continue
 
 
-def annotate(documents: Documents, ast: List[AstNode]) -> bool:
+def annotate(documents: Documents, ast: list[AstNode]) -> bool:
     a = Annotater(documents)
     a.annotate(ast)
     return a.errors == 0

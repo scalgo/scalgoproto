@@ -1,11 +1,10 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: nil; python-indent-offset: 4; coding: utf-8 -*-
 """
 Generate python reader/wirter
 """
 
 import math
 import os
-from typing import Dict, List, NamedTuple, Set, TextIO, Tuple
+from typing import NamedTuple, TextIO
 from .documents import Documents
 
 from .annotate import annotate
@@ -24,9 +23,15 @@ from .parser import (
 from .sp_tokenize import Token, TokenType
 from .util import cescape, snake
 
-TypeInfo = NamedTuple("TypeInfo", [("n", str), ("p", str), ("s", str), ("w", int)])
 
-typeMap: Dict[TokenType, TypeInfo] = {
+class TypeInfo(NamedTuple):
+    n: str
+    p: str
+    s: str
+    w: int
+
+
+typeMap: dict[TokenType, TypeInfo] = {
     TokenType.I8: TypeInfo("int8", "int", "b", 1),
     TokenType.I16: TypeInfo("int16", "int", "h", 2),
     TokenType.I32: TypeInfo("int32", "int", "i", 4),
@@ -95,7 +100,7 @@ class Generator:
         else:
             raise ICE()
 
-    def in_list_help(self, node: Value, os: str) -> Tuple[str, str]:
+    def in_list_help(self, node: Value, os: str) -> tuple[str, str]:
         assert node.type_ is not None
         if node.type_.type == TokenType.BOOL:
             return ("bool", "        return self._reader._get_bool_list(%s)" % (os))
@@ -157,8 +162,8 @@ class Generator:
         self,
         node: AstNode,
         indent: str = "",
-        prefix: List[str] = [],
-        suffix: List[str] = [],
+        prefix: list[str] = [],
+        suffix: list[str] = [],
     ) -> None:
         if not node.docstring and not suffix and not prefix:
             return
@@ -1285,8 +1290,8 @@ class Generator:
         self.o()
         self.o()
 
-    def generate(self, ast: List[AstNode]) -> None:
-        imports: Dict[int, Set[str]] = {}
+    def generate(self, ast: list[AstNode]) -> None:
+        imports: dict[int, set[str]] = {}
         for node in ast:
             if node.document != 0:
                 continue

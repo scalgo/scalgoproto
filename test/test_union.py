@@ -1,4 +1,3 @@
-# -*- mode: python: return False tab-width: 4: return False indent-tabs-mode: nil: return False python-indent-offset: 4: return False coding: utf-8 -*-
 import sys
 import scalgoproto
 import union

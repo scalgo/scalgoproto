@@ -1,20 +1,14 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: nil; python-indent-offset: 4; coding: utf-8 -*-
 import enum
 import math
 import struct
 from abc import abstractmethod, ABC
 from typing import (
-    Callable,
     ClassVar,
     Generic,
-    Sequence,
-    Tuple,
-    Type,
     TypeVar,
-    Union,
-    Optional,
     Any,
 )
+from collections.abc import Callable, Sequence
 
 MESSAGE_MAGIC = 0xB5C0C4B3
 TEXT_MAGIC = 0xD812C8F5
@@ -91,7 +85,7 @@ S = TypeVar("S", bound=StructType)
 TT = TypeVar("TT")
 
 
-def split48_(v: int) -> Tuple[int, int]:
+def split48_(v: int) -> tuple[int, int]:
     return (v & 0xFFFFFFFF, v >> 32)
 
 
@@ -172,11 +166,11 @@ class ListIn(Sequence[B]):
         h.update(b"\xff\xe4")
 
 
-class UnionIn(object):
+class UnionIn:
     __slots__ = ["_reader", "_type", "_offset", "_size"]
 
     def __init__(
-        self, reader: "Reader", type: int, offset: int, size: Optional[int] = None
+        self, reader: "Reader", type: int, offset: int, size: int | None = None
     ):
         """Private constructor. Use the accessor methods on tables or the root method on Reader to get an instance"""
         self._reader = reader
@@ -210,13 +204,13 @@ class UnionIn(object):
         m = self._MEMBERS[self._type - 1]
         digest(h, getattr(self, m, None))
 
-    def _get_ptr(self, magic: int) -> Tuple[int, int]:
+    def _get_ptr(self, magic: int) -> tuple[int, int]:
         if self._size is not None:
             return (self._offset, self._size)
         return (self._offset + 10, self._reader._read_size(self._offset, magic))
 
 
-class TableIn(object):
+class TableIn:
     """Base class for reading a table"""
 
     __slots__ = ["_reader", "_offset", "_size"]
@@ -360,19 +354,19 @@ class TableIn(object):
             else d
         )
 
-    def _get_ptr(self, o: int, magic: int) -> Tuple[int, int]:
+    def _get_ptr(self, o: int, magic: int) -> tuple[int, int]:
         off = self._get_uint48_f(o)
         if off == 0:
             return (0, 0)
         size = self._reader._read_size(off, magic)
         return (off + 10, size)
 
-    def _get_ptr_inplace(self, o: int, magic: int) -> Tuple[int, int]:
+    def _get_ptr_inplace(self, o: int, magic: int) -> tuple[int, int]:
         size = self._get_uint48_f(o)
         return (self._offset + self._size, size)
 
 
-class Reader(object):
+class Reader:
     """Responsible for reading a message"""
 
     def __init__(self, data: bytes) -> None:
@@ -386,7 +380,7 @@ class Reader(object):
         return join48_(sizelow, sizehigh)
 
     def _get_table_list(
-        self, t: Type[TI], off: int, size: int, direct: bool = False
+        self, t: type[TI], off: int, size: int, direct: bool = False
     ) -> ListIn[TI]:
         if not direct:
 
@@ -424,7 +418,7 @@ class Reader(object):
                 False,
             )
 
-    def _get_union_list(self, t: Type[UI], off: int, size: int) -> ListIn[UI]:
+    def _get_union_list(self, t: type[UI], off: int, size: int) -> ListIn[UI]:
         def getter(r: "Reader", s: int, i: int) -> UI:
             base = s + i * 8
             utype = struct.unpack_from("<H", r._data, base)[0]
@@ -476,7 +470,7 @@ class Reader(object):
             False,
         )
 
-    def _get_struct_list(self, t: Type[S], off: int, size: int) -> ListIn[S]:
+    def _get_struct_list(self, t: type[S], off: int, size: int) -> ListIn[S]:
         return ListIn[S](
             self,
             size,
@@ -486,7 +480,7 @@ class Reader(object):
             False,
         )
 
-    def _get_enum_list(self, t: Type[E], off: int, size: int) -> ListIn[E]:
+    def _get_enum_list(self, t: type[E], off: int, size: int) -> ListIn[E]:
         return ListIn[E](
             self,
             size,
@@ -528,7 +522,7 @@ class Reader(object):
             False,
         )
 
-    def root(self, type: Type[TI]) -> TI:
+    def root(self, type: type[TI]) -> TI:
         """Return root node of message, of type type"""
         magic, offsetlow, offsethigh = struct.unpack("<IIH", self._data[0:10])
         offset = join48_(offsetlow, offsethigh)
@@ -546,24 +540,24 @@ class Reader(object):
         return type(self, offset + 10, size)
 
 
-class TextOut(object):
+class TextOut:
     def __init__(self, offset: int) -> None:
         self._offset = offset
 
 
-class BytesOut(object):
+class BytesOut:
     def __init__(self, offset: int) -> None:
         self._offset = offset
 
 
-class TableOut(object):
+class TableOut:
     __slots__ = ["_writer", "_offset"]
     _MAGIC: ClassVar[int] = 0
     _SIZE: ClassVar[int] = 0
     _DEFAULT: ClassVar[bytes] = b""
 
     def __init__(
-        self, writer: "Writer", with_header: bool = True, offset: Optional[int] = None
+        self, writer: "Writer", with_header: bool = True, offset: int | None = None
     ) -> None:
         """Private constructor. Use factory methods on writer"""
         assert self._SIZE == len(self._DEFAULT)
@@ -620,12 +614,12 @@ class TableOut(object):
     def _set_table(self, o: int, v: TO) -> None:
         self._writer._put(self._offset + o, pack48_(v._offset - 10))
 
-    def _set_text(self, o: int, v: Union[TextOut, str]) -> None:
+    def _set_text(self, o: int, v: TextOut | str) -> None:
         if not isinstance(v, TextOut):
             v = self._writer.construct_text(v)
         self._writer._put(self._offset + o, pack48_(v._offset - 10))
 
-    def _set_bytes(self, o: int, v: Union[BytesOut, bytes]) -> None:
+    def _set_bytes(self, o: int, v: BytesOut | bytes) -> None:
         if not isinstance(v, BytesOut):
             v = self._writer.construct_bytes(v)
         self._writer._put(self._offset + o, pack48_(v._offset - 10))
@@ -660,7 +654,7 @@ class TableOut(object):
         self._writer._put(self._offset + o, pack48_(size))
 
 
-class UnionOut(object):
+class UnionOut:
     __slots__ = ["_writer", "_offset", "_end"]
 
     def __init__(self, writer: "Writer", offset: int, end: int) -> None:
@@ -672,12 +666,12 @@ class UnionOut(object):
         offsetlow, offsethigh = split48_(offset)
         self._writer._put(self._offset, struct.pack("<HIH", idx, offsetlow, offsethigh))
 
-    def _set_text(self, idx: int, v: Union[TextOut, str]) -> None:
+    def _set_text(self, idx: int, v: TextOut | str) -> None:
         if not isinstance(v, TextOut):
             v = self._writer.construct_text(v)
         self._set(idx, v._offset - 10)
 
-    def _set_bytes(self, idx: int, v: Union[BytesOut, bytes]) -> None:
+    def _set_bytes(self, idx: int, v: BytesOut | bytes) -> None:
         if not isinstance(v, BytesOut):
             v = self._writer.construct_bytes(v)
         self._set(idx, v._offset - 10)
@@ -758,7 +752,7 @@ class BoolListOut(OutList):
 
 class EnumListOut(OutList, Generic[E]):
     def __init__(
-        self, writer: "Writer", e: Type[E], size: int, withHeader: bool = True
+        self, writer: "Writer", e: type[E], size: int, withHeader: bool = True
     ) -> None:
         """Private constructor. Use factory methods on writer"""
         super().__init__(writer, b"\xff" * size, size, withHeader)
@@ -770,7 +764,7 @@ class EnumListOut(OutList, Generic[E]):
 
 class StructListOut(OutList, Generic[S]):
     def __init__(
-        self, writer: "Writer", s: Type[S], size: int, with_header: bool = True
+        self, writer: "Writer", s: type[S], size: int, with_header: bool = True
     ) -> None:
         """Private constructor. Use factory methods on writer"""
         super().__init__(writer, b"\0" * s._WIDTH * size, size, with_header)
@@ -784,7 +778,7 @@ class StructListOut(OutList, Generic[S]):
 
 class TableListOut(OutList, Generic[TO]):
     def __init__(
-        self, writer: "Writer", t: Type[TO], size: int, with_header: bool = True
+        self, writer: "Writer", t: type[TO], size: int, with_header: bool = True
     ) -> None:
         """Private constructor. Use factory methods on writer"""
         super().__init__(writer, b"\0\0\0\0\0\0" * size, size, with_header)
@@ -808,7 +802,7 @@ class TableListOut(OutList, Generic[TO]):
 
 class DirectTableListOut(OutList, Generic[TO]):
     def __init__(
-        self, writer: "Writer", t: Type[TO], size: int, with_header: bool = True
+        self, writer: "Writer", t: type[TO], size: int, with_header: bool = True
     ) -> None:
         self._writer = writer
 
@@ -838,7 +832,7 @@ class TextListOut(OutList):
         """Private constructor. Use factory methods on writer"""
         super().__init__(writer, b"\0\0\0\0\0\0" * size, size, with_header)
 
-    def __setitem__(self, index: int, value: Union[TextOut, str]) -> None:
+    def __setitem__(self, index: int, value: TextOut | str) -> None:
         """Add value to list at index"""
         assert 0 <= index < self._size
         if not isinstance(value, TextOut):
@@ -851,7 +845,7 @@ class BytesListOut(OutList):
         """Private constructor. Use factory methods on writer"""
         super().__init__(writer, b"\0\0\0\0\0\0" * size, size, with_header)
 
-    def __setitem__(self, index: int, value: Union[BytesOut, bytes]) -> None:
+    def __setitem__(self, index: int, value: BytesOut | bytes) -> None:
         """Add value to list at index"""
         assert 0 <= index < self._size
         if not isinstance(value, BytesOut):
@@ -861,7 +855,7 @@ class BytesListOut(OutList):
 
 class UnionListOut(OutList, Generic[UO]):
     def __init__(
-        self, writer: "Writer", u: Type[UO], size: int, with_header: bool = True
+        self, writer: "Writer", u: type[UO], size: int, with_header: bool = True
     ) -> None:
         """Private constructor. Use factory methods on writer"""
         super().__init__(writer, b"\0\0\0\0\0\0\0\0" * size, size, with_header)
@@ -890,7 +884,7 @@ class Writer:
         self._data = bytearray(b"\0" * 256)
         self._used = 10
 
-    def construct_table(self, t: Type[TO]) -> TO:
+    def construct_table(self, t: type[TO]) -> TO:
         """Construct a table of the given type"""
         return t(self, True)
 
@@ -924,17 +918,17 @@ class Writer:
     def construct_float64_list(self, size: int) -> BasicListOut[float]:
         return BasicListOut[float](self, "d", 8, size)
 
-    def construct_enum_list(self, e: Type[E], size: int) -> EnumListOut[E]:
+    def construct_enum_list(self, e: type[E], size: int) -> EnumListOut[E]:
         return EnumListOut[E](self, e, size)
 
-    def construct_struct_list(self, s: Type[S], size: int) -> StructListOut[S]:
+    def construct_struct_list(self, s: type[S], size: int) -> StructListOut[S]:
         return StructListOut[S](self, s, size)
 
-    def construct_table_list(self, s: Type[TO], size: int) -> TableListOut[TO]:
+    def construct_table_list(self, s: type[TO], size: int) -> TableListOut[TO]:
         return TableListOut[S](self, s, size)
 
     def construct_direct_table_list(
-        self, s: Type[TO], size: int
+        self, s: type[TO], size: int
     ) -> DirectTableListOut[TO]:
         return DirectTableListOut[S](self, s, size)
 
@@ -947,7 +941,7 @@ class Writer:
     def construct_bool_list(self, size: int) -> BoolListOut:
         return BoolListOut(self, size)
 
-    def construct_union_list(self, u: Type[UO], size: int) -> UnionListOut[UO]:
+    def construct_union_list(self, u: type[UO], size: int) -> UnionListOut[UO]:
         return UnionListOut[UO](self, u, size)
 
     def construct_bytes(self, b: bytes) -> BytesOut:
@@ -968,7 +962,7 @@ class Writer:
         self._write(b"\0")
         return TextOut(o)
 
-    def copy(self, t: Type[TO], i: TI) -> TO:
+    def copy(self, t: type[TO], i: TI) -> TO:
         res = t(self, True)
         res._copy(i)
         return res

@@ -1,11 +1,10 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: nil; python-indent-offset: 4; coding: utf-8 -*-
 """
 Generate python reader/wirter
 """
 
 import math
 import os
-from typing import Dict, List, NamedTuple, Set, TextIO, Tuple
+from typing import NamedTuple, TextIO
 from .documents import Documents
 
 from .annotate import annotate
@@ -24,9 +23,13 @@ from .parser import (
 from .sp_tokenize import Token, TokenType
 from .util import snake, ucamel
 
-TypeInfo = NamedTuple("TypeInfo", [("n", str), ("p", str)])
 
-typeMap: Dict[TokenType, TypeInfo] = {
+class TypeInfo(NamedTuple):
+    n: str
+    p: str
+
+
+typeMap: dict[TokenType, TypeInfo] = {
     TokenType.I8: TypeInfo("Int8", "i8"),
     TokenType.I16: TypeInfo("Int16", "i16"),
     TokenType.I32: TypeInfo("Int32", "i32"),
@@ -133,7 +136,7 @@ class Generator:
         else:
             raise ICE()
 
-    def in_list_help(self, node: Value, os: str) -> Tuple[str, str]:
+    def in_list_help(self, node: Value, os: str) -> tuple[str, str]:
         assert node.type_ is not None
         if node.type_.type == TokenType.BOOL:
             return ("boolean", "        return this._reader._getBoolList(%s)" % (os))
@@ -214,8 +217,8 @@ class Generator:
         self,
         node: AstNode,
         indent: str = "",
-        prefix: List[str] = [],
-        suffix: List[str] = [],
+        prefix: list[str] = [],
+        suffix: list[str] = [],
     ):
         if not node.docstring and not suffix and not prefix:
             return
@@ -1583,8 +1586,8 @@ impl scalgoproto::Enum for {node.name} {{
 """
         )
 
-    def generate(self, ast: List[AstNode]) -> None:
-        imports: Dict[int, Set[str]] = {}
+    def generate(self, ast: list[AstNode]) -> None:
+        imports: dict[int, set[str]] = {}
 
         for node in ast:
             if node.document != 0:

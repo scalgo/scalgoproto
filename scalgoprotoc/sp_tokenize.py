@@ -48,15 +48,17 @@ class TokenType(Enum):
     COMMENT = 76
 
 
-Token = ty.NamedTuple(
-    "Token", [("type", TokenType), ("index", int), ("length", int), ("document", int)]
-)
+class Token(ty.NamedTuple):
+    type: TokenType
+    index: int
+    length: int
+    document: int
 
 
 def tokenize(data: str, document: int) -> ty.Iterator[Token]:
     cur: int = 0
     end: int = 0
-    ops: ty.Dict[str, TokenType] = {
+    ops: dict[str, TokenType] = {
         ":": TokenType.COLON,
         ";": TokenType.SEMICOLON,
         ",": TokenType.COMMA,
@@ -65,7 +67,7 @@ def tokenize(data: str, document: int) -> ty.Iterator[Token]:
         "}": TokenType.RBRACE,
     }
 
-    keywords: ty.Dict[str, TokenType] = {
+    keywords: dict[str, TokenType] = {
         "Bool": TokenType.BOOL,
         "Bytes": TokenType.BYTES,
         "F32": TokenType.F32,

@@ -1,4 +1,3 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: nil; python-indent-offset: 4; coding: utf-8 -*-
 """
 Parse a protocol description and generate an ast
 """
@@ -9,7 +8,7 @@ from .sp_tokenize import Token, TokenType, tokenize
 from .documents import Documents
 
 
-class AstNode(object):
+class AstNode:
     __slots__ = [
         "token",
         "doc_comment",
@@ -20,20 +19,20 @@ class AstNode(object):
         "uses",
         "namespace",
     ]
-    token: ty.Optional[Token]
-    doc_comment: ty.Optional[Token]
+    token: Token | None
+    doc_comment: Token | None
     bytes: int
     offset: int
-    docstring: ty.Optional[ty.List[str]]
+    docstring: list[str] | None
     document: int
-    uses: ty.Set[ty.Union["Union", "Table", "Struct", "Enum"]]
-    namespace: ty.Optional[str]
+    uses: set[ty.Union["Union", "Table", "Struct", "Enum"]]
+    namespace: str | None
 
     def __init__(
         self,
-        token: ty.Optional[Token],
+        token: Token | None,
         document: int,
-        doc_comment: ty.Optional[Token] = None,
+        doc_comment: Token | None = None,
     ) -> None:
         self.token = token
         self.doc_comment = doc_comment
@@ -55,17 +54,17 @@ class Namespace(AstNode):
 
 class Struct(AstNode):
     __slots__ = ["identifier", "members", "name"]
-    identifier: ty.Optional[Token]
-    members: ty.List["Value"]
-    name: ty.Optional[str]
+    identifier: Token | None
+    members: list["Value"]
+    name: str | None
 
     def __init__(
         self,
         token: Token,
         document: int,
-        identifier: ty.Optional[Token],
-        members: ty.List["Value"],
-        doc_comment: ty.Optional[Token],
+        identifier: Token | None,
+        members: list["Value"],
+        doc_comment: Token | None,
     ) -> None:
         super().__init__(token, document, doc_comment)
         self.identifier = identifier
@@ -75,19 +74,19 @@ class Struct(AstNode):
 
 class Enum(AstNode):
     __slots__ = ["identifier", "members", "annotatedValues", "name", "removed"]
-    identifier: ty.Optional[Token]
-    members: ty.List["Value"]
-    name: ty.Optional[str]
-    annotatedValues: ty.Optional[ty.Dict[str, int]]
+    identifier: Token | None
+    members: list["Value"]
+    name: str | None
+    annotatedValues: dict[str, int] | None
     removed: bool
 
     def __init__(
         self,
         token: Token,
         document: int,
-        identifier: ty.Optional[Token],
-        members: ty.Optional[ty.List["Value"]],
-        doc_comment: ty.Optional[Token],
+        identifier: Token | None,
+        members: list["Value"] | None,
+        doc_comment: Token | None,
     ) -> None:
         super().__init__(token, document, doc_comment)
         self.identifier = identifier
@@ -99,11 +98,11 @@ class Enum(AstNode):
 
 class Table(AstNode):
     __slots__ = ["identifier", "id_", "members", "default", "magic", "name", "empty"]
-    identifier: ty.Optional[Token]
-    id_: ty.Optional[Token]
-    members: ty.List["Value"]
-    default: ty.Optional[bytes]
-    name: ty.Optional[str]
+    identifier: Token | None
+    id_: Token | None
+    members: list["Value"]
+    default: bytes | None
+    name: str | None
     magic: int
     empty: bool
 
@@ -111,10 +110,10 @@ class Table(AstNode):
         self,
         token: Token,
         document: int,
-        identifier: ty.Optional[Token],
-        id_: ty.Optional[Token],
-        members: ty.List["Value"],
-        doc_comment: ty.Optional[Token],
+        identifier: Token | None,
+        id_: Token | None,
+        members: list["Value"],
+        doc_comment: Token | None,
     ) -> None:
         super().__init__(token, document, doc_comment)
         self.identifier = identifier
@@ -128,17 +127,17 @@ class Table(AstNode):
 
 class Union(AstNode):
     __slots__ = ["members", "identifier", "name"]
-    members: ty.List["Value"]
-    identifier: ty.Optional[Token]
-    name: ty.Optional[str]
+    members: list["Value"]
+    identifier: Token | None
+    name: str | None
 
     def __init__(
         self,
         token: Token,
         document: int,
-        identifier: ty.Optional[Token],
-        members: ty.List["Value"],
-        doc_comment: ty.Optional[Token],
+        identifier: Token | None,
+        members: list["Value"],
+        doc_comment: Token | None,
     ) -> None:
         super().__init__(token, document, doc_comment)
         self.members = members
@@ -169,41 +168,41 @@ class Value(AstNode):
         "direct_struct",
     ]
     identifier: Token
-    value: ty.Optional[Token]
-    type_: ty.Optional[Token]
-    optional: ty.Optional[Token]
-    list_: ty.Optional[Token]
-    inplace: ty.Optional[Token]
-    direct: ty.Optional[Token]
-    direct_table: ty.Optional[Table]
-    direct_union: ty.Optional[Union]
-    direct_enum: ty.Optional[Enum]
-    direct_struct: ty.Optional[Struct]
+    value: Token | None
+    type_: Token | None
+    optional: Token | None
+    list_: Token | None
+    inplace: Token | None
+    direct: Token | None
+    direct_table: Table | None
+    direct_union: Union | None
+    direct_enum: Enum | None
+    direct_struct: Struct | None
     has_offset: int
     has_bit: int
     bit: int
-    table: ty.Optional[Table]
-    enum: ty.Optional[Enum]
-    struct: ty.Optional[Struct]
-    union: ty.Optional[Union]
-    parsed_value: ty.Union[int, float]
+    table: Table | None
+    enum: Enum | None
+    struct: Struct | None
+    union: Union | None
+    parsed_value: int | float
 
     def __init__(
         self,
-        token: ty.Optional[Token],
+        token: Token | None,
         document: int,
         identifier: Token,
-        value: ty.Optional[Token],
-        type_: ty.Optional[Token],
-        optional: ty.Optional[Token],
-        list_: ty.Optional[Token],
-        inplace: ty.Optional[Token],
-        direct: ty.Optional[Token],
-        direct_table: ty.Optional[Table],
-        direct_union: ty.Optional[Union],
-        direct_enum: ty.Optional[Enum],
-        direct_struct: ty.Optional[Struct],
-        doc_comment: ty.Optional[Token],
+        value: Token | None,
+        type_: Token | None,
+        optional: Token | None,
+        list_: Token | None,
+        inplace: Token | None,
+        direct: Token | None,
+        direct_table: Table | None,
+        direct_union: Union | None,
+        direct_enum: Enum | None,
+        direct_struct: Struct | None,
+        doc_comment: Token | None,
     ) -> None:
         super().__init__(token, document, doc_comment)
         self.identifier = identifier
@@ -243,7 +242,7 @@ class ICE(Exception):
 
 
 class Parser:
-    token: ty.Optional[Token] = None
+    token: Token | None = None
 
     def __init__(self, documents: Documents) -> None:
         self.strict = False
@@ -252,11 +251,11 @@ class Parser:
         self.tokenizer = tokenize(self.document.content, self.document.id)
         self.docstack = [(self.document, self.tokenizer)]
         self.token = None
-        self.parked_token: ty.Optional[Token] = None
+        self.parked_token: Token | None = None
         self.next_token()
         self.context = ""
 
-    def check_token(self, t: Token, types: ty.List[TokenType]) -> None:
+    def check_token(self, t: Token, types: list[TokenType]) -> None:
         if t.type not in types:
             raise ParseError(
                 t,
@@ -264,7 +263,7 @@ class Parser:
                 self.context,
             )
 
-    def consume_token(self, types: ty.List[TokenType]) -> Token:
+    def consume_token(self, types: list[TokenType]) -> Token:
         assert self.token is not None
         t = self.token
         self.check_token(t, types)
@@ -288,14 +287,14 @@ class Parser:
             ):
                 break
 
-    def parse_content(self, indent: int, is_union: bool) -> ty.List[Value]:
+    def parse_content(self, indent: int, is_union: bool) -> list[Value]:
         self.consume_token([TokenType.LBRACE])
         if self.token and self.token.type == TokenType.RBRACE:
             self.next_token()
             return []
         self.handle_end_of_line(indent)
-        members: ty.List[Value] = []
-        doc_comment: ty.Optional[Token] = None
+        members: list[Value] = []
+        doc_comment: Token | None = None
         while True:
             if self.strict:
                 if not self.token or self.token.type != TokenType.RBRACE or indent != 1:
@@ -354,7 +353,7 @@ class Parser:
                 self.check_token(
                     self.token, [TokenType.COLON, TokenType.LBRACE, TokenType.SPACE]
                 )
-                colon: ty.Optional[Token] = None
+                colon: Token | None = None
                 if self.strict:
                     if not is_union:
                         colon = self.consume_token([TokenType.COLON])
@@ -363,15 +362,15 @@ class Parser:
                     self.consume_space()
                 elif self.token.type == TokenType.COLON:
                     colon = self.consume_token([TokenType.COLON])
-                optional: ty.Optional[Token] = None
-                list_: ty.Optional[Token] = None
-                inplace: ty.Optional[Token] = None
-                direct: ty.Optional[Token] = None
-                value: ty.Optional[Token] = None
-                direct_table: ty.Optional[Table] = None
-                direct_union: ty.Optional[Union] = None
-                direct_enum: ty.Optional[Enum] = None
-                direct_struct: ty.Optional[Struct] = None
+                optional: Token | None = None
+                list_: Token | None = None
+                inplace: Token | None = None
+                direct: Token | None = None
+                value: Token | None = None
+                direct_table: Table | None = None
+                direct_union: Union | None = None
+                direct_enum: Enum | None = None
+                direct_struct: Struct | None = None
                 modifiers = [
                     TokenType.OPTIONAL,
                     TokenType.LIST,
@@ -437,7 +436,7 @@ class Parser:
                             doc_comment,
                         )
                     elif type_.type == TokenType.TABLE:
-                        id_: ty.Optional[Token] = None
+                        id_: Token | None = None
                         self.consume_space()
                         if self.token.type == TokenType.ID:
                             id_ = self.consume_token([TokenType.ID])
@@ -509,7 +508,7 @@ class Parser:
             self.handle_end_of_line(indent)
         return members
 
-    def parse_enum(self, indent: int) -> ty.Optional[ty.List[Value]]:
+    def parse_enum(self, indent: int) -> list[Value] | None:
         assert self.token is not None
         if self.token.type == TokenType.REMOVED:
             self.consume_token([TokenType.REMOVED])
@@ -522,7 +521,7 @@ class Parser:
         else:
             expect_indent = True
             self.handle_end_of_line(indent)
-        values: ty.List[Value] = []
+        values: list[Value] = []
         doc_comment = None
         while True:
             if self.strict and expect_indent:
@@ -631,9 +630,9 @@ class Parser:
         if self.strict:
             self.consume_token([TokenType.SPACE])
 
-    def parse_document(self, strict=False) -> ty.List[AstNode]:
-        ans: ty.List[AstNode] = []
-        doc_comment: ty.Optional[Token] = None
+    def parse_document(self, strict=False) -> list[AstNode]:
+        ans: list[AstNode] = []
+        doc_comment: Token | None = None
         assert self.token is not None
         self.strict = strict
         self.skip_empty_lines(0)

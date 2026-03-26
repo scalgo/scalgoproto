@@ -1,4 +1,3 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: nil; python-indent-offset: 4; coding: utf-8 -*-
 """
 Test that everything works
 """
@@ -9,7 +8,7 @@ import sys
 import tempfile
 import json
 import shutil
-from typing import Callable, List
+from collections.abc import Callable
 
 failures = []
 
@@ -19,7 +18,7 @@ def runValidate(schema: str, fail: bool = False) -> bool:
     return fail == (code != 0)
 
 
-def runCppSetup(schemas: List[str], cpp: str) -> bool:
+def runCppSetup(schemas: list[str], cpp: str) -> bool:
     for schema in schemas:
         subprocess.check_call(
             ["python3", "-m", "scalgoprotoc", "cpp", schema, "tmp/", "--single"]
@@ -49,7 +48,7 @@ def runCpp(name: str, bin: str) -> bool:
     return True
 
 
-def runRustSetup(schemas: List[str], main_file: str) -> bool:
+def runRustSetup(schemas: list[str], main_file: str) -> bool:
     os.makedirs("tmp/rust/src", exist_ok=True)
     shutil.copyfile("lib/rust/scalgoproto.rs", "tmp/rust/src/scalgoproto.rs")
     shutil.copyfile("test/test_all.rs", "tmp/rust/src/test_all.rs")
@@ -85,7 +84,7 @@ def runRust(name: str, bin: str) -> bool:
     return True
 
 
-def runPySetup(schemas: List[str]) -> bool:
+def runPySetup(schemas: list[str]) -> bool:
     for schema in schemas:
         subprocess.check_call(["python3", "-m", "scalgoprotoc", "py", schema, "tmp"])
     return True
@@ -99,7 +98,7 @@ def runPy(name: str, bin: str, mod="test_base.py") -> bool:
     return True
 
 
-def runTsSetup(schemas: List[str]) -> bool:
+def runTsSetup(schemas: list[str]) -> bool:
     if os.path.exists("test/node_modules/.bin/ts-node"):
         pass
     elif shutil.which("pnpm"):
