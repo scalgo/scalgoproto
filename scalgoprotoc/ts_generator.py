@@ -63,6 +63,11 @@ class Generator:
                 node.enum.name,
             )
         elif node.table:
+            if node.direct:
+                return "scalgoproto.ListOut<%sOut, %sIn>" % (
+                    node.table.name,
+                    node.table.name,
+                )
             return "scalgoproto.ListOut<%sOut, %sIn | null>" % (
                 node.table.name,
                 node.table.name,
@@ -94,6 +99,11 @@ class Generator:
         elif node.enum:
             return "constructEnumList<%s>(size%s)" % (node.enum.name, x)
         elif node.table:
+            if node.direct:
+                return "constructDirectTableList<%sOut>(%sOut, size)" % (
+                    node.table.name,
+                    node.table.name,
+                )
             return "constructTableList<%sOut>(%sOut, size%s)" % (
                 node.table.name,
                 node.table.name,
@@ -130,6 +140,12 @@ class Generator:
                 "\t\treturn this._reader._getEnumList<%s>(%s)" % (node.enum.name, os),
             )
         elif node.table:
+            if node.direct:
+                return (
+                    node.table.name + "In",
+                    "\t\treturn this._reader._getDirectTableList(%s, %sIn)"
+                    % (os, node.table.name),
+                )
             return (
                 node.table.name + "In | null",
                 "\t\treturn this._reader._getTableList(%s, %sIn)"
@@ -185,9 +201,10 @@ class Generator:
 
         self.output_doc(node, "\t")
         self.o("\tget %s() : scalgoproto.ListIn<%s> | null {" % (lname, tn))
+        magic = "DIRECT_LIST_MAGIC" if node.direct else "LIST_MAGIC"
         self.o(
-            "\t\tconst [o, s] = this._getPtr%s(%d, scalgoproto.LIST_MAGIC)"
-            % ("Inplace" if node.inplace else "", node.offset)
+            "\t\tconst [o, s] = this._getPtr%s(%d, scalgoproto.%s)"
+            % ("Inplace" if node.inplace else "", node.offset, magic)
         )
         self.o("\t\tif (o === 0) return null;")
         self.o(acc)
@@ -883,6 +900,11 @@ class Generator:
                         "\t\tif (i.%s !== null) this.add%s(i.%s.length)._copy(i.%s);"
                         % (lname, uname, lname, lname)
                     )
+                elif node.union:
+                    if node.optional:
+                        self.o("\t\tif (i.%s !== null) this.%s._copy(i.%s!);" % (lname, lname, lname))
+                    else:
+                        self.o("\t\tthis.%s._copy(i.%s);" % (lname, lname))
                 elif (
                     node.optional
                     or node.enum
@@ -907,8 +929,6 @@ class Generator:
                             "\t\t if (i.%s !== null) this.add%s()._copy(i.%s);"
                             % (lname, uname, lname)
                         )
-                elif node.union:
-                    self.o("\t\tthis.%s._copy(i.%s);" % (lname, lname))
                 else:
                     raise ICE()
         self.o("\t}")

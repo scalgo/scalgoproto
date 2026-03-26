@@ -4,6 +4,7 @@ export const MESSAGE_MAGIC = 0xB5C0C4B3
 export const TEXT_MAGIC = 0xD812C8F5
 export const BYTES_MAGIC = 0xDCDBBE10
 export const LIST_MAGIC = 0x3400BB46
+export const DIRECT_LIST_MAGIC = 0xE2C6CC05
 
 export class StructType {
 	static readonly _WIDTH: number = 0
@@ -331,16 +332,28 @@ export class Reader {
 		  }), listInHandler);
 	}
 
+	_getDirectTableList<T extends TableIn>(o: number, s: number, type: {
+		new(r: Reader, o: number, s: number): T; _MAGIC : number
+	}): ListIn<T> {
+		const magic = this._data.getUint32(o, true);
+		if (magic != type._MAGIC) throw Error('Bad direct list magic');
+		const itemSize = this._data.getUint32(o + 4, true);
+		const dataStart = o + 8;
+		return new Proxy<ListIn<T>>(
+		  new ListIn<T>(s, dataStart, (s: number, i: number) => {
+			  return new type(this, s + i * itemSize, itemSize);
+		  }), listInHandler);
+	}
+
 	_getUnionList<T extends UnionIn>(o: number, s: number, type: {
 		new(r: Reader, o: number, s: number): T;
 	}): ListIn<T> {
 		return new Proxy<ListIn<T>>(new ListIn<T>(s, o, (s: number, i: number) => {
-										const t = this._data.getUint16(s + i * 8);
-										const off = this._readUint48(s + i * 8 + 2);
-										return new type(this, t, off);
-									}), listInHandler);
+												       const t = this._data.getUint16(s + i * 8, true);
+												       const off = this._readUint48(s + i * 8 + 2);
+												       return new type(this, t, off);
+												}), listInHandler);
 	}
-
 	/** Return root node of message, of type type */
 	root<T extends TableIn>(type: {
 		new(r: Reader, o: number, s: number): T; _MAGIC : number
@@ -828,6 +841,52 @@ export class Writer {
 				  return v;
 			  }),
 		  listOutHandel);
+	}
+
+	constructDirectTableList<T extends TableOut>(type: {
+		new(writer: Writer, withHeader: boolean): T;
+		_MAGIC: number; _SIZE: number;
+		_IN: { new(reader: Reader, offset: number, size: number): CopyType<T> };
+	}, size: number): ListOut<T, CopyType<T>> {
+		// Write DIRECT_LIST header: DIRECT_LIST_MAGIC (4) + size as uint48 (6) = 10 bytes
+		// Then inline: table_magic (4) + item_size (4) + size * _SIZE zeroed bytes
+		this._reserve(18 + size * type._SIZE);
+		this._data.setUint32(this._size, DIRECT_LIST_MAGIC, true);
+		this._writeUint48(this._size + 4, size);
+		this._size += 10;
+		// Create ListOut now: _offset = this._size (just after header), so _setList stores header start ✓
+		let dataStart = 0;
+		let endSize = 0;
+		const listOut = new ListOut<T, CopyType<T>>(
+			this,
+			size,
+			'',
+			0,
+			false,
+			(off: number, idx: number, v: T|CopyType<T>) => {
+				if (v instanceof type._IN) {
+					const s = endSize;
+					this._size = dataStart + idx * type._SIZE;
+					const item = new type(this, false);
+					this._size = s;
+					(item as any)._copy(v);
+				}
+			},
+			(off: number, idx: number): T => {
+				const s = endSize;
+				this._size = dataStart + idx * type._SIZE;
+				const item = new type(this, false);
+				this._size = s;
+				return item;
+			});
+		// Write inline data after creating listOut (closures capture dataStart/endSize by reference)
+		this._data.setUint32(this._size, type._MAGIC, true);
+		this._data.setUint32(this._size + 4, type._SIZE, true);
+		this._size += 8;
+		dataStart = this._size;
+		for (let i = 0; i < size * type._SIZE; ++i) this._data.setUint8(this._size++, 0);
+		endSize = this._size;
+		return new Proxy<ListOut<T, CopyType<T>>>(listOut, listOutHandel);
 	}
 
 	constructTextList(size: number,
