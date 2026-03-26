@@ -2,7 +2,6 @@
 Parse a protocol description and generate an ast
 """
 
-import typing as ty
 from .error import error
 from .sp_tokenize import Token, TokenType, tokenize
 from .documents import Documents
@@ -25,7 +24,7 @@ class AstNode:
     offset: int
     docstring: list[str] | None
     document: int
-    uses: set[ty.Union["Union", "Table", "Struct", "Enum"]]
+    uses: set["Union | Table | Struct | Enum"]
     namespace: str | None
 
     def __init__(
