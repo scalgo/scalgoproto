@@ -14,7 +14,6 @@ from . import (
     rust_generator,
     validate,
 )
-from .parser import ParseError, Parser
 
 parser = argparse.ArgumentParser(description="Process schema.")
 subparsers = parser.add_subparsers(help="Subcommand to run")
