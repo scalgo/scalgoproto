@@ -100,8 +100,17 @@ def runPy(name: str, bin: str, mod="test_base.py") -> bool:
 
 
 def runTsSetup(schemas: List[str]) -> bool:
-    if not os.path.exists("./node_modules/.bin/ts-node"):
-        print("Run npm i to install ts-node")
+    if os.path.exists("test/node_modules/.bin/ts-node"):
+        pass
+    elif shutil.which("pnpm"):
+        subprocess.check_call(["pnpm", "install"], cwd="test")
+    elif shutil.which("npm"):
+        subprocess.check_call(["npm", "install"], cwd="test")
+    else:
+        print("Run pnpm i (or npm i) in test/ to install ts-node")
+        return False
+    if not os.path.exists("test/node_modules/.bin/ts-node"):
+        print("ts-node not found after install")
         return False
     for schema in schemas:
         subprocess.check_call(["python3", "-m", "scalgoprotoc", "ts", schema, "tmp"])
