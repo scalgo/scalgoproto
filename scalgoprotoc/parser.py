@@ -3,11 +3,10 @@
 Parse a protocol description and generate an ast
 """
 
-import enum
 import typing as ty
 from .error import error
 from .sp_tokenize import Token, TokenType, tokenize
-from .documents import Documents, Document
+from .documents import Documents
 
 
 class AstNode(object):
@@ -258,7 +257,7 @@ class Parser:
         self.context = ""
 
     def check_token(self, t: Token, types: ty.List[TokenType]) -> None:
-        if not t.type in types:
+        if t.type not in types:
             raise ParseError(
                 t,
                 "Expected one of %s got %s" % (", ".join(map(str, types)), t.type),
@@ -301,15 +300,15 @@ class Parser:
             if self.strict:
                 if not self.token or self.token.type != TokenType.RBRACE or indent != 1:
                     tabs = self.consume_token([TokenType.TABS])
-                    l = (
+                    expected_indent = (
                         indent - 1
                         if self.token and self.token.type == TokenType.RBRACE
                         else indent
                     )
-                    if tabs.length != l:
+                    if tabs.length != expected_indent:
                         raise ParseError(
                             tabs,
-                            f"Wrong indentation level {tabs.length} expected {l}",
+                            f"Wrong indentation level {tabs.length} expected {expected_indent}",
                             self.context,
                         )
 
@@ -529,15 +528,15 @@ class Parser:
             if self.strict and expect_indent:
                 if not self.token or self.token.type != TokenType.RBRACE or indent != 1:
                     tabs = self.consume_token([TokenType.TABS])
-                    l = (
+                    expected_indent = (
                         indent - 1
                         if self.token and self.token.type == TokenType.RBRACE
                         else indent
                     )
-                    if tabs.length != l:
+                    if tabs.length != expected_indent:
                         raise ParseError(
                             tabs,
-                            f"Wrong indentation level {tabs.length} expected {l}",
+                            f"Wrong indentation level {tabs.length} expected {expected_indent}",
                             self.context,
                         )
                 expect_indent = False
@@ -555,7 +554,7 @@ class Parser:
             if self.token.type == TokenType.RBRACE:
                 break
             elif self.token.type == TokenType.DOCCOMMENT:
-                doccomment2 = self.token
+                pass
             elif self.token.type == TokenType.IDENTIFIER:
                 ident = self.consume_token([TokenType.IDENTIFIER])
                 values.append(
@@ -657,7 +656,7 @@ class Parser:
                 i = self.token
                 self.check_token(i, [TokenType.IDENTIFIER])
                 name = self.value(i)
-                if not name in self.documents.by_name:
+                if name not in self.documents.by_name:
                     self.document = self.documents.read(name)
                     self.tokenizer = tokenize(self.document.content, self.document.id)
                     self.docstack.append((self.document, self.tokenizer))

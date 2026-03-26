@@ -141,12 +141,12 @@ def runTs(name: str, bin: str, mod="test_base.ts") -> bool:
 
 
 def runTest(name: str, func: Callable[[], bool]) -> bool:
-    l = 80 - len(name) - 4
-    print("%s> %s <%s" % ("=" * (l // 2), name, "=" * (l - l // 2)))
+    pad = 80 - len(name) - 4
+    print("%s> %s <%s" % ("=" * (pad // 2), name, "=" * (pad - pad // 2)))
     ok = False
     try:
         ok = func()
-    except:
+    except Exception:
         pass
     if ok:
         print("SUCCESS")
@@ -158,8 +158,8 @@ def runTest(name: str, func: Callable[[], bool]) -> bool:
 
 
 def runNeg(name: str, base: str, bad: str, good: str) -> None:
-    l = 80 - len(name) - 4
-    print("%s> %s <%s" % ("=" * (l // 2), name, "=" * (l - l // 2)))
+    pad = 80 - len(name) - 4
+    print("%s> %s <%s" % ("=" * (pad // 2), name, "=" * (pad - pad // 2)))
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as f:
         f.write(base % bad)
         f.flush()

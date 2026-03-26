@@ -5,8 +5,7 @@ Perform validation of the ast, and assign offsets and such
 
 import enum
 import struct
-import sys
-from typing import Dict, List, Set, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from .documents import Documents
 from .error import error
@@ -241,7 +240,6 @@ class Annotater:
             )
 
             assert v.type_ is not None
-            type_name = self.value(v.type_)
 
             if t == ContentType.STRUCT and v.optional:
                 self.error(v.optional, "Not allowed in structs")

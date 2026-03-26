@@ -3,7 +3,10 @@
 Validate a schema
 """
 
-import math, io, os, sys
+import math
+import io
+import os
+import sys
 from typing import List, Tuple, Optional
 import typing
 from .annotate import annotate
@@ -20,8 +23,8 @@ from .parser import (
     ICE,
 )
 from .sp_tokenize import Token, TokenType
-from .util import cescape, lcamel, ucamel, snake
-from .documents import Documents, Document
+from .util import cescape, lcamel, ucamel
+from .documents import Documents
 
 typeMap = {
     TokenType.I8: "std::int8_t",
@@ -755,7 +758,6 @@ class Generator:
         assert node.type_ is not None
         n = self.value(node.identifier)
         uname = ucamel(n)
-        typeName = self.value(node.type_)
         if node.list_:
             self.generate_list_in(node, uname)
         elif node.type_.type == TokenType.BOOL:

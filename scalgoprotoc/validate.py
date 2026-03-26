@@ -246,7 +246,7 @@ def validate(
                             ok = False
                     if nm is not None:
                         assert nname is not None
-                        if oom := old_members_by_name.get(nname):
+                        if old_members_by_name.get(nname):
                             # We should already have errored about the move for the member in old_members
                             # error(documents, p.context, nm.identifier, f"Member {oname} moved")
                             # error(old_documents, old_p.context, oom.identifier, "From here")

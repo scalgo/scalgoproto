@@ -4,11 +4,9 @@ Generate python reader/wirter
 """
 
 import math
-import typing
 import os
-from types import SimpleNamespace
 from typing import Dict, List, NamedTuple, Set, TextIO, Tuple
-from .documents import Documents, addDocumentsParams
+from .documents import Documents
 
 from .annotate import annotate
 from .parser import (
@@ -24,7 +22,7 @@ from .parser import (
     ICE,
 )
 from .sp_tokenize import Token, TokenType
-from .util import cescape, snake, ucamel
+from .util import snake, ucamel
 
 TypeInfo = NamedTuple("TypeInfo", [("n", str), ("p", str)])
 
@@ -63,10 +61,10 @@ def byte_encode(b: bytes) -> str:
 
 
 def add_lifetime(t: str, lt="a") -> str:
-    if not "<" in t:
+    if "<" not in t:
         t = t + "<>"
-    l, r = t.split("<", 1)
-    return "%s<'%s, %s" % (l, lt, r)
+    left, r = t.split("<", 1)
+    return "%s<'%s, %s" % (left, lt, r)
 
 
 class Generator:
@@ -267,7 +265,6 @@ class Generator:
 
     def generate_list_out(self, node: Value, lname: str, size: int) -> None:
         ot = self.out_list_type(node)
-        directTable = "DirectTable" if node.direct else ""
         directTable_ = "direct_table_" if node.direct else ""
         at = f"{node.table.name}Out<'a, Normal>" if node.direct and node.table else ot
         if not node.inplace:
@@ -1061,10 +1058,10 @@ impl<'a> scalgoproto::UnionIn<'a> for {union.name}In<'a> {{
                 self.o(f"        {i} => Ok(Self::None),")
 
         self.o(
-            f"""        _ => Ok(Self::None),
-        }}
-    }}
-}}
+            """        _ => Ok(Self::None),
+        }
+    }
+}
 """
         )
 
@@ -1192,10 +1189,10 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
             else:
                 self.o(f"            {name}In::{uname}(v) => {{self.add_{lname}(v);}},")
         self.o(
-            f"""        }};
+            """        };
         Ok(())
-    }}
-}}
+    }
+}
 """
         )
 
@@ -1381,9 +1378,9 @@ impl<'a, 'b, P: Placement> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, 
         )
         self.generate_table_copy(table)
         self.o(
-            f"""        Ok(())
-    }}
-}}
+            """        Ok(())
+    }
+}
 """
         )
 

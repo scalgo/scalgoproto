@@ -4,11 +4,9 @@ Generate python reader/wirter
 """
 
 import math
-import typing
 import os
-from types import SimpleNamespace
 from typing import Dict, List, NamedTuple, Set, TextIO, Tuple
-from .documents import Documents, addDocumentsParams
+from .documents import Documents
 
 from .annotate import annotate
 from .parser import (
@@ -1008,7 +1006,6 @@ class Generator:
         read = []
         write = []
         for v in node.members:
-            thing = ("", "", "", 0, 0, "")
             n = lcamel(self.value(v.identifier))
             if v.type_.type in typeMap:
                 ti = typeMap[v.type_.type]
@@ -1148,7 +1145,7 @@ class Generator:
             for u in node.uses:
                 if u.document == 0:
                     continue
-                if not u.document in imports:
+                if u.document not in imports:
                     imports[u.document] = set()
                 i = imports[u.document]
                 if isinstance(u, Struct):

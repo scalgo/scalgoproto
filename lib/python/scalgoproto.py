@@ -96,17 +96,17 @@ def split48_(v: int) -> Tuple[int, int]:
 
 
 def pack48_(v: int) -> bytes:
-    l, h = split48_(v)
-    return struct.pack("<IH", l, h)
+    lo, h = split48_(v)
+    return struct.pack("<IH", lo, h)
 
 
-def join48_(l: int, h: int) -> int:
-    return l + (h << 32)
+def join48_(lo: int, h: int) -> int:
+    return lo + (h << 32)
 
 
 def unpack48_(v: bytes) -> int:
-    l, h = struct.unpack("<IH", v)
-    return join48_(l, h)
+    lo, h = struct.unpack("<IH", v)
+    return join48_(lo, h)
 
 
 class Adder(Generic[B]):

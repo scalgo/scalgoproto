@@ -4,11 +4,9 @@ Generate python reader/wirter
 """
 
 import math
-import typing
 import os
-from types import SimpleNamespace
 from typing import Dict, List, NamedTuple, Set, TextIO, Tuple
-from .documents import Documents, addDocumentsParams
+from .documents import Documents
 
 from .annotate import annotate
 from .parser import (
@@ -24,7 +22,7 @@ from .parser import (
     ICE,
 )
 from .sp_tokenize import Token, TokenType
-from .util import cescape, snake, ucamel
+from .util import cescape, snake
 
 TypeInfo = NamedTuple("TypeInfo", [("n", str), ("p", str), ("s", str), ("w", int)])
 
@@ -1219,7 +1217,6 @@ class Generator:
         read = []
         slots = []
         for v in node.members:
-            thing = ("", "", "", 0, 0, "")
             n = snake(self.value(v.identifier))
             copy.append("self.%s = %s" % (n, n))
             slots.append('"%s"' % n)
@@ -1296,7 +1293,7 @@ class Generator:
             for u in node.uses:
                 if u.document == 0:
                     continue
-                if not u.document in imports:
+                if u.document not in imports:
                     imports[u.document] = set()
                 i = imports[u.document]
                 if isinstance(u, Struct):
