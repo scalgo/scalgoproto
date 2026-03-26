@@ -1001,15 +1001,13 @@ class Generator:
         self.o()
         self.o("    class Type(enum.IntEnum):")
         self.o("        NONE = 0")
-        idx = 1
-        for member in union.members:
+        for idx, member in enumerate(union.members, start=1):
             assert member.type_ is not None
             if member.type_.type == TokenType.REMOVED:
                 continue
             if not isinstance(member, (Table, Value)):
                 raise ICE()
             self.o("        %s = %d" % (self.value(member.identifier).upper(), idx))
-            idx += 1
         self.o()
         self.o("    @property")
         self.o("    def type(self) -> Type:")
@@ -1049,19 +1047,19 @@ class Generator:
         )
         self.o("        super().__init__(writer, offset, end)")
         self.o()
-        for idx, member in enumerate(union.members):
+        for idx, member in enumerate(union.members, start=1):
             assert member.type_ is not None
             if member.type_.type == TokenType.REMOVED:
                 continue
             uuname = snake(self.value(member.identifier))
             if member.list_:
-                self.generate_union_list_out(member, uuname, idx + 1, False)
+                self.generate_union_list_out(member, uuname, idx, False)
             elif member.table:
-                self.generate_union_table_out(member, uuname, idx + 1, False)
+                self.generate_union_table_out(member, uuname, idx, False)
             elif member.type_.type == TokenType.BYTES:
-                self.generate_union_bytes_out(member, uuname, idx + 1, False)
+                self.generate_union_bytes_out(member, uuname, idx, False)
             elif member.type_.type == TokenType.TEXT:
-                self.generate_union_text_out(member, uuname, idx + 1, False)
+                self.generate_union_text_out(member, uuname, idx, False)
             else:
                 raise ICE()
         self.generate_union_copy(union)
@@ -1078,8 +1076,7 @@ class Generator:
         )
         self.o("        super().__init__(writer, offset, end)")
         self.o()
-        idx = 1
-        for member in union.members:
+        for idx, member in enumerate(union.members, start=1):
             assert member.type_ is not None
             if member.type_.type == TokenType.REMOVED:
                 continue
@@ -1094,7 +1091,6 @@ class Generator:
                 self.generate_union_text_out(member, uuname, idx, True)
             else:
                 raise ICE()
-            idx += 1
         self.generate_union_copy(union)
         self.o()
 
@@ -1286,10 +1282,8 @@ class Generator:
     def generate_enum(self, node: Enum) -> None:
         self.o("class %s(enum.IntEnum):" % node.name)
         self.output_doc(node, "   ")
-        index = 0
-        for ev in node.members:
+        for index, ev in enumerate(node.members):
             self.o("    %s = %d" % (self.value(ev.identifier), index))
-            index += 1
         self.o()
         self.o()
 
