@@ -598,6 +598,16 @@ fn test_in_complex2(path: &str) -> scalgoproto::Result<()> {
     require!(i.b(), true);
     require!(s.s().x(), Some(complex2::Complex2SX::P));
     require!(s.s().y().z(), 8);
+    let l2 = require_some!(ce!(s.l2()));
+    require!(l2.len(), 2);
+    require!(
+        require_enum!(ce!(l2.get(0)), base::NamedUnionIn::Text(v), v),
+        "text"
+    );
+    require!(
+        require_enum!(ce!(l2.get(1)), base::NamedUnionIn::MyBytes(v), v),
+        b"bytes"
+    );
     Ok(())
 }
 
@@ -610,7 +620,7 @@ fn test_out_inplace(path: &str) -> scalgoproto::Result<()> {
     u.u().add_monkey().set_name(Some(&name));
 
     let mut u2 = writer.add_table::<base::InplaceUnion>();
-    u2.u().add_text().add_t("foobar");
+    u2.u().add_empty();
 
     let mut t = writer.add_table::<base::InplaceText>();
     t.id(45);
@@ -644,8 +654,7 @@ fn test_in_inplace(path: &str) -> scalgoproto::Result<()> {
     let v = require_enum!(ce!(u.u()), base::InplaceUnionUIn::Monkey(v), v);
     require!(ce!(v.name()), Some("nilson"));
     let u = require_some!(ce!(s.u2()));
-    let v = require_enum!(ce!(u.u()), base::InplaceUnionUIn::Text(v), v);
-    require!(ce!(v.t()), Some("foobar"));
+    require_enum!(ce!(u.u()), base::InplaceUnionUIn::Empty(_), ());
     let u = require_some!(ce!(s.t()));
     require!(ce!(u.t()), Some("cake"));
     let b = require_some!(ce!(s.b()));

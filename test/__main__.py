@@ -279,6 +279,7 @@ def main():
 
     runTest("validate base", lambda: runValidate("test/base.spr"))
     runTest("validate complex2", lambda: runValidate("test/complex2.spr"))
+    runTest("validate union", lambda: runValidate("test/union.spr"))
     if runTest(
         "cpp setup",
         lambda: runCppSetup(

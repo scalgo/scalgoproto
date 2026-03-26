@@ -845,6 +845,19 @@ def test_in_complex2(path: str) -> bool:
         return False
     if require(s.s.y.z, 8):
         return False
+    if require_some(s.l2):
+        return False
+    l3 = s.l2
+    if require(len(l3), 2):
+        return False
+    if require(l3[0].is_text, True):
+        return False
+    if require(l3[0].text, "text"):
+        return False
+    if require(l3[1].is_my_bytes, True):
+        return False
+    if require(l3[1].my_bytes, b"bytes"):
+        return False
 
     return True
 
@@ -856,7 +869,7 @@ def test_out_inplace(path: str) -> bool:
     u.u.add_monkey().name = name
 
     u2 = w.construct_table(base.InplaceUnionOut)
-    u2.u.add_text().t = "foobar"
+    u2.u.add_empty()
 
     t = w.construct_table(base.InplaceTextOut)
     t.id = 45
@@ -899,10 +912,7 @@ def test_in_inplace(path: str) -> bool:
     if require_some(s.u2):
         return False
     u2 = s.u2
-    if require(u2.u.is_text, True):
-        return False
-    u2t = u2.u.text
-    if require(u2t.t, "foobar"):
+    if require(u2.u.is_empty, True):
         return False
 
     if require_some(s.t):
