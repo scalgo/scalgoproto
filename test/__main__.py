@@ -1,4 +1,3 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: nil; python-indent-offset: 4; coding: utf-8 -*-
 """
 Test that everything works
 """
@@ -9,7 +8,7 @@ import sys
 import tempfile
 import json
 import shutil
-from typing import Callable, List
+from collections.abc import Callable
 
 failures = []
 
@@ -19,7 +18,7 @@ def runValidate(schema: str, fail: bool = False) -> bool:
     return fail == (code != 0)
 
 
-def runCppSetup(schemas: List[str], cpp: str) -> bool:
+def runCppSetup(schemas: list[str], cpp: str) -> bool:
     for schema in schemas:
         subprocess.check_call(
             ["python3", "-m", "scalgoprotoc", "cpp", schema, "tmp/", "--single"]
@@ -49,7 +48,7 @@ def runCpp(name: str, bin: str) -> bool:
     return True
 
 
-def runRustSetup(schemas: List[str], main_file: str) -> bool:
+def runRustSetup(schemas: list[str], main_file: str) -> bool:
     os.makedirs("tmp/rust/src", exist_ok=True)
     shutil.copyfile("lib/rust/scalgoproto.rs", "tmp/rust/src/scalgoproto.rs")
     shutil.copyfile("test/test_all.rs", "tmp/rust/src/test_all.rs")
@@ -59,7 +58,7 @@ def runRustSetup(schemas: List[str], main_file: str) -> bool:
     [package]
 name = "test"
 version = "0.1.0"
-edition = "2018"
+edition = "2024"
 
 [lib]
 name = "scalgoproto"
@@ -85,7 +84,7 @@ def runRust(name: str, bin: str) -> bool:
     return True
 
 
-def runPySetup(schemas: List[str]) -> bool:
+def runPySetup(schemas: list[str]) -> bool:
     for schema in schemas:
         subprocess.check_call(["python3", "-m", "scalgoprotoc", "py", schema, "tmp"])
     return True
@@ -99,9 +98,18 @@ def runPy(name: str, bin: str, mod="test_base.py") -> bool:
     return True
 
 
-def runTsSetup(schemas: List[str]) -> bool:
-    if not os.path.exists("./node_modules/.bin/ts-node"):
-        print("Run npm i to install ts-node")
+def runTsSetup(schemas: list[str]) -> bool:
+    if os.path.exists("test/node_modules/.bin/ts-node"):
+        pass
+    elif shutil.which("pnpm"):
+        subprocess.check_call(["pnpm", "install"], cwd="test")
+    elif shutil.which("npm"):
+        subprocess.check_call(["npm", "install"], cwd="test")
+    else:
+        print("Run pnpm i (or npm i) in test/ to install ts-node")
+        return False
+    if not os.path.exists("test/node_modules/.bin/ts-node"):
+        print("ts-node not found after install")
         return False
     for schema in schemas:
         subprocess.check_call(["python3", "-m", "scalgoprotoc", "ts", schema, "tmp"])
@@ -132,12 +140,12 @@ def runTs(name: str, bin: str, mod="test_base.ts") -> bool:
 
 
 def runTest(name: str, func: Callable[[], bool]) -> bool:
-    l = 80 - len(name) - 4
-    print("%s> %s <%s" % ("=" * (l // 2), name, "=" * (l - l // 2)))
+    pad = 80 - len(name) - 4
+    print("%s> %s <%s" % ("=" * (pad // 2), name, "=" * (pad - pad // 2)))
     ok = False
     try:
         ok = func()
-    except:
+    except Exception:
         pass
     if ok:
         print("SUCCESS")
@@ -149,8 +157,8 @@ def runTest(name: str, func: Callable[[], bool]) -> bool:
 
 
 def runNeg(name: str, base: str, bad: str, good: str) -> None:
-    l = 80 - len(name) - 4
-    print("%s> %s <%s" % ("=" * (l // 2), name, "=" * (l - l // 2)))
+    pad = 80 - len(name) - 4
+    print("%s> %s <%s" % ("=" * (pad // 2), name, "=" * (pad - pad // 2)))
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as f:
         f.write(base % bad)
         f.flush()
@@ -270,6 +278,7 @@ def main():
 
     runTest("validate base", lambda: runValidate("test/base.spr"))
     runTest("validate complex2", lambda: runValidate("test/complex2.spr"))
+    runTest("validate union", lambda: runValidate("test/union.spr"))
     if runTest(
         "cpp setup",
         lambda: runCppSetup(

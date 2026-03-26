@@ -1,13 +1,11 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: nil; python-indent-offset: 4; coding: utf-8 -*-
 """
 Generate python reader/wirter
 """
+
 import math
-import typing
 import os
-from types import SimpleNamespace
-from typing import Dict, List, NamedTuple, Set, TextIO, Tuple
-from .documents import Documents, addDocumentsParams
+from typing import NamedTuple, TextIO
+from .documents import Documents
 
 from .annotate import annotate
 from .parser import (
@@ -25,9 +23,13 @@ from .parser import (
 from .sp_tokenize import Token, TokenType
 from .util import cescape, ucamel, lcamel
 
-TypeInfo = NamedTuple("TypeInfo", [("n", str), ("p", str)])
 
-typeMap: Dict[TokenType, TypeInfo] = {
+class TypeInfo(NamedTuple):
+    n: str
+    p: str
+
+
+typeMap: dict[TokenType, TypeInfo] = {
     TokenType.I8: TypeInfo("Int8", "number"),
     TokenType.I16: TypeInfo("Int16", "number"),
     TokenType.I32: TypeInfo("Int32", "number"),
@@ -63,6 +65,11 @@ class Generator:
                 node.enum.name,
             )
         elif node.table:
+            if node.direct:
+                return "scalgoproto.ListOut<%sOut, %sIn>" % (
+                    node.table.name,
+                    node.table.name,
+                )
             return "scalgoproto.ListOut<%sOut, %sIn | null>" % (
                 node.table.name,
                 node.table.name,
@@ -94,6 +101,11 @@ class Generator:
         elif node.enum:
             return "constructEnumList<%s>(size%s)" % (node.enum.name, x)
         elif node.table:
+            if node.direct:
+                return "constructDirectTableList<%sOut>(%sOut, size)" % (
+                    node.table.name,
+                    node.table.name,
+                )
             return "constructTableList<%sOut>(%sOut, size%s)" % (
                 node.table.name,
                 node.table.name,
@@ -112,7 +124,7 @@ class Generator:
         else:
             raise ICE()
 
-    def in_list_help(self, node: Value, os: str) -> Tuple[str, str]:
+    def in_list_help(self, node: Value, os: str) -> tuple[str, str]:
         if node.type_.type == TokenType.BOOL:
             return ("boolean", "\t\treturn this._reader._getBoolList(%s)" % (os))
         elif node.type_.type in typeMap:
@@ -130,6 +142,12 @@ class Generator:
                 "\t\treturn this._reader._getEnumList<%s>(%s)" % (node.enum.name, os),
             )
         elif node.table:
+            if node.direct:
+                return (
+                    node.table.name + "In",
+                    "\t\treturn this._reader._getDirectTableList(%s, %sIn)"
+                    % (os, node.table.name),
+                )
             return (
                 node.table.name + "In | null",
                 "\t\treturn this._reader._getTableList(%s, %sIn)"
@@ -161,8 +179,8 @@ class Generator:
         self,
         node: AstNode,
         indent: str = "",
-        prefix: List[str] = [],
-        suffix: List[str] = [],
+        prefix: list[str] = [],
+        suffix: list[str] = [],
     ):
         if not node.docstring and not suffix and not prefix:
             return
@@ -185,9 +203,10 @@ class Generator:
 
         self.output_doc(node, "\t")
         self.o("\tget %s() : scalgoproto.ListIn<%s> | null {" % (lname, tn))
+        magic = "DIRECT_LIST_MAGIC" if node.direct else "LIST_MAGIC"
         self.o(
-            "\t\tconst [o, s] = this._getPtr%s(%d, scalgoproto.LIST_MAGIC)"
-            % ("Inplace" if node.inplace else "", node.offset)
+            "\t\tconst [o, s] = this._getPtr%s(%d, scalgoproto.%s)"
+            % ("Inplace" if node.inplace else "", node.offset, magic)
         )
         self.o("\t\tif (o === 0) return null;")
         self.o(acc)
@@ -883,6 +902,14 @@ class Generator:
                         "\t\tif (i.%s !== null) this.add%s(i.%s.length)._copy(i.%s);"
                         % (lname, uname, lname, lname)
                     )
+                elif node.union:
+                    if node.optional:
+                        self.o(
+                            "\t\tif (i.%s !== null) this.%s._copy(i.%s!);"
+                            % (lname, lname, lname)
+                        )
+                    else:
+                        self.o("\t\tthis.%s._copy(i.%s);" % (lname, lname))
                 elif (
                     node.optional
                     or node.enum
@@ -907,8 +934,6 @@ class Generator:
                             "\t\t if (i.%s !== null) this.add%s()._copy(i.%s);"
                             % (lname, uname, lname)
                         )
-                elif node.union:
-                    self.o("\t\tthis.%s._copy(i.%s);" % (lname, lname))
                 else:
                     raise ICE()
         self.o("\t}")
@@ -984,7 +1009,6 @@ class Generator:
         read = []
         write = []
         for v in node.members:
-            thing = ("", "", "", 0, 0, "")
             n = lcamel(self.value(v.identifier))
             if v.type_.type in typeMap:
                 ti = typeMap[v.type_.type]
@@ -1116,15 +1140,15 @@ class Generator:
         self.o("}")
         self.o()
 
-    def generate(self, ast: List[AstNode]) -> None:
-        imports: Dict[int, Set[str]] = {}
+    def generate(self, ast: list[AstNode]) -> None:
+        imports: dict[int, set[str]] = {}
         for node in ast:
             if node.document != 0:
                 continue
             for u in node.uses:
                 if u.document == 0:
                     continue
-                if not u.document in imports:
+                if u.document not in imports:
                     imports[u.document] = set()
                 i = imports[u.document]
                 if isinstance(u, Struct):

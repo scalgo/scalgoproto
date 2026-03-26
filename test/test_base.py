@@ -1,4 +1,3 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: nil; python-indent-offset: 4; coding: utf-8 -*-
 import sys
 
 import scalgoproto
@@ -420,9 +419,9 @@ def test_out_complex(path: str) -> bool:
     m = w.construct_table(base.MemberOut)
     m.id = 42
 
-    l = w.construct_int32_list(31)
+    int_list = w.construct_int32_list(31)
     for i in range(31):
-        l[i] = 100 - 2 * i
+        int_list[i] = 100 - 2 * i
 
     l2 = w.construct_enum_list(base.MyEnum, 2)
     l2[0] = base.MyEnum.a
@@ -464,7 +463,7 @@ def test_out_complex(path: str) -> bool:
     s.member = m
     s.text = t
     s.my_bytes = b
-    s.int_list = l
+    s.int_list = int_list
     s.struct_list = l3
     s.enum_list = l2
     s.text_list = l4
@@ -501,13 +500,13 @@ def test_in_complex(path: str) -> bool:
         return False
     if require_none(s.nint_list):
         return False
-    l = s.int_list
+    int_list = s.int_list
 
-    if require(len(l), 31):
+    if require(len(int_list), 31):
         return False
 
     for i in range(31):
-        if require(l[i], 100 - 2 * i):
+        if require(int_list[i], 100 - 2 * i):
             return False
 
     if require_some(s.enum_list):
@@ -653,12 +652,12 @@ def test_in_complex3(path: str) -> bool:
     if require(len(s.nint_list), 0):
         return False
 
-    l = s.int_list
-    if require(len(l), 31):
+    int_list = s.int_list
+    if require(len(int_list), 31):
         return False
 
     for i in range(31):
-        if require(l[i], 100 - 2 * i):
+        if require(int_list[i], 100 - 2 * i):
             return False
 
     l2 = s.enum_list
@@ -773,9 +772,9 @@ def test_out_complex2(path: str) -> bool:
     b = w.construct_bytes(b"bytes")
     t = w.construct_text("text")
 
-    l = w.construct_enum_list(base.NamedUnionEnumList, 2)
-    l[0] = base.NamedUnionEnumList.x
-    l[1] = base.NamedUnionEnumList.z
+    enum_list = w.construct_enum_list(base.NamedUnionEnumList, 2)
+    enum_list[0] = base.NamedUnionEnumList.x
+    enum_list[1] = base.NamedUnionEnumList.z
 
     l2 = w.construct_struct_list(complex2.Complex2L, 1)
     l2[0] = complex2.Complex2L(2, True)
@@ -788,7 +787,7 @@ def test_out_complex2(path: str) -> bool:
     r.u1.member = m
     r.u2.text = t
     r.u3.my_bytes = b
-    r.u4.enum_list = l
+    r.u4.enum_list = enum_list
     r.u5.add_a()
 
     m2 = r.add_hat()
@@ -819,12 +818,12 @@ def test_in_complex2(path: str) -> bool:
         return False
     if require(s.u4.is_enum_list, True):
         return False
-    l = s.u4.enum_list
-    if require(len(l), 2):
+    enum_list = s.u4.enum_list
+    if require(len(enum_list), 2):
         return False
-    if require(l[0], base.NamedUnionEnumList.x):
+    if require(enum_list[0], base.NamedUnionEnumList.x):
         return False
-    if require(l[1], base.NamedUnionEnumList.z):
+    if require(enum_list[1], base.NamedUnionEnumList.z):
         return False
     if require(s.u5.is_a, True):
         return False
@@ -845,6 +844,19 @@ def test_in_complex2(path: str) -> bool:
         return False
     if require(s.s.y.z, 8):
         return False
+    if require_some(s.l2):
+        return False
+    l3 = s.l2
+    if require(len(l3), 2):
+        return False
+    if require(l3[0].is_text, True):
+        return False
+    if require(l3[0].text, "text"):
+        return False
+    if require(l3[1].is_my_bytes, True):
+        return False
+    if require(l3[1].my_bytes, b"bytes"):
+        return False
 
     return True
 
@@ -856,7 +868,7 @@ def test_out_inplace(path: str) -> bool:
     u.u.add_monkey().name = name
 
     u2 = w.construct_table(base.InplaceUnionOut)
-    u2.u.add_text().t = "foobar"
+    u2.u.add_empty()
 
     t = w.construct_table(base.InplaceTextOut)
     t.id = 45
@@ -866,9 +878,9 @@ def test_out_inplace(path: str) -> bool:
     b.id = 46
     b.b = b"hi"
 
-    l = w.construct_table(base.InplaceListOut)
-    l.id = 47
-    ll = l.add_l(2)
+    inplace_list = w.construct_table(base.InplaceListOut)
+    inplace_list.id = 47
+    ll = inplace_list.add_l(2)
     ll[0] = 24
     ll[1] = 99
 
@@ -877,7 +889,7 @@ def test_out_inplace(path: str) -> bool:
     root.u2 = u2
     root.t = t
     root.b = b
-    root.l = l
+    root.l = inplace_list
     data = w.finalize(root)
     return validate_out(data, path)
 
@@ -899,10 +911,7 @@ def test_in_inplace(path: str) -> bool:
     if require_some(s.u2):
         return False
     u2 = s.u2
-    if require(u2.u.is_text, True):
-        return False
-    u2t = u2.u.text
-    if require(u2t.t, "foobar"):
+    if require(u2.u.is_empty, True):
         return False
 
     if require_some(s.t):
@@ -923,12 +932,12 @@ def test_in_inplace(path: str) -> bool:
 
     if require_some(s.l):
         return False
-    l = s.l
-    if require(l.id, 47):
+    inplace_list = s.l
+    if require(inplace_list.id, 47):
         return False
-    if require_some(l.l):
+    if require_some(inplace_list.l):
         return False
-    ll = l.l
+    ll = inplace_list.l
     if require(len(ll), 2):
         return False
     if require(ll[0], 24):
@@ -967,11 +976,11 @@ def test_out_extend2(path: str) -> bool:
     cake = root.u.add_cake()
     cake.v = 45
 
-    l = root.add_direct_member_list(4)
-    l[0].id = 100
-    l[1].id = 101
-    l[2].id = 102
-    l[3].id = 103
+    members = root.add_direct_member_list(4)
+    members[0].id = 100
+    members[1].id = 101
+    members[2].id = 102
+    members[3].id = 103
     data = w.finalize(root)
     return validate_out(data, path)
 
@@ -987,24 +996,24 @@ def test_extend2_part(s: base.Gen3In) -> bool:
         return False
     if require_some(s.direct_member_list):
         return False
-    l = s.direct_member_list
-    if require(len(l), 4):
+    members = s.direct_member_list
+    if require(len(members), 4):
         return False
-    if require(l[0].id, 100):
+    if require(members[0].id, 100):
         return False
-    if require(l[0].cookie, 37):
+    if require(members[0].cookie, 37):
         return False
-    if require(l[1].id, 101):
+    if require(members[1].id, 101):
         return False
-    if require(l[1].cookie, 37):
+    if require(members[1].cookie, 37):
         return False
-    if require(l[2].id, 102):
+    if require(members[2].id, 102):
         return False
-    if require(l[2].cookie, 37):
+    if require(members[2].cookie, 37):
         return False
-    if require(l[3].id, 103):
+    if require(members[3].id, 103):
         return False
-    if require(l[3].cookie, 37):
+    if require(members[3].cookie, 37):
         return False
     if require(s.e, base.MyEnum.c):
         return False

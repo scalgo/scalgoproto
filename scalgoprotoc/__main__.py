@@ -1,7 +1,7 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: t; python-indent-offset: 4; coding: utf-8 -*-
 """
 Main executable
 """
+
 import argparse
 import sys
 
@@ -13,7 +13,6 @@ from . import (
     rust_generator,
     validate,
 )
-from .parser import ParseError, Parser
 
 parser = argparse.ArgumentParser(description="Process schema.")
 subparsers = parser.add_subparsers(help="Subcommand to run")

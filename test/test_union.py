@@ -1,8 +1,7 @@
-# -*- mode: python: return False tab-width: 4: return False indent-tabs-mode: nil: return False python-indent-offset: 4: return False coding: utf-8 -*-
 import sys
 import scalgoproto
 import union
-from test_base import require2, require, read_in, validate_out, get_v, require_some
+from test_base import require2, read_in, validate_out, require_some
 
 
 def for_copy() -> union.Table3In:

@@ -1,8 +1,7 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: t; python-indent-offset: 4; coding: utf-8 -*-
 """
 Validate a schema
 """
-from typing import Dict, List, Tuple, Optional, Set
+
 from .annotate import annotate
 from .parser import (
     ParseError,
@@ -20,7 +19,7 @@ from .sp_tokenize import Token
 from .error import error
 
 
-def ct(t: Optional[Token]) -> Token:
+def ct(t: Token | None) -> Token:
     assert t is not None
     return t
 
@@ -28,15 +27,15 @@ def ct(t: Optional[Token]) -> Token:
 def validate(
     schema: str,
     strict: bool,
-    old_schema_path: Optional[str] = None,
-    old_schema_data: Optional[str] = None,
+    old_schema_path: str | None = None,
+    old_schema_data: str | None = None,
 ) -> int:
     documents = Documents()
     documents.read_root(schema)
     p = Parser(documents)
     try:
         ast = p.parse_document(strict)
-        checked: Set[Tuple[AstNode, AstNode]] = set()
+        checked: set[tuple[AstNode, AstNode]] = set()
         if not annotate(documents, ast):
             return 1
 
@@ -78,8 +77,8 @@ def validate(
             def check_flag(
                 om: Value,
                 nm: Value,
-                ov: Optional[Token],
-                nv: Optional[Token],
+                ov: Token | None,
+                nv: Token | None,
                 flag: str,
             ) -> None:
                 nonlocal ok
@@ -136,8 +135,8 @@ def validate(
             def check_members(
                 old_token: Token,
                 new_token: Token,
-                old_members: List[Value],
-                new_members: List[Value],
+                old_members: list[Value],
+                new_members: list[Value],
                 allow_append: bool = True,
                 check_types: bool = True,
             ) -> None:
@@ -146,7 +145,7 @@ def validate(
                 # Matchup old and new names
                 s1 = [ov(om.identifier) for om in old_members]
                 s2 = [nv(nm.identifier) for nm in new_members]
-                m: List[List[int]] = [[0 for _ in range(len(s2) + 1)]]
+                m: list[list[int]] = [[0 for _ in range(len(s2) + 1)]]
                 for i1, v1 in enumerate(s1):
                     m.append([0])
                     for i2, v2 in enumerate(s2):
@@ -157,8 +156,8 @@ def validate(
                         )
                 i1 = len(s1)
                 i2 = len(s2)
-                matches: List[Tuple[Value, Value]] = []
-                mismatches: List[Tuple[Optional[Value], Optional[Value]]] = []
+                matches: list[tuple[Value, Value]] = []
+                mismatches: list[tuple[Value | None, Value | None]] = []
                 while i1 != 0 and i2 != 0:
                     if s1[i1 - 1] == s2[i2 - 1]:
                         i1 -= 1
@@ -245,7 +244,7 @@ def validate(
                             ok = False
                     if nm is not None:
                         assert nname is not None
-                        if oom := old_members_by_name.get(nname):
+                        if old_members_by_name.get(nname):
                             # We should already have errored about the move for the member in old_members
                             # error(documents, p.context, nm.identifier, f"Member {oname} moved")
                             # error(old_documents, old_p.context, oom.identifier, "From here")
@@ -360,7 +359,7 @@ def validate(
                     new.members,
                 )
 
-            old_global: Dict[str, AstNode] = {}
+            old_global: dict[str, AstNode] = {}
             for node in old_ast:
                 if isinstance(node, Struct):
                     assert node.name is not None

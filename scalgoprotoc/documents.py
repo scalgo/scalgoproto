@@ -1,14 +1,17 @@
 import typing as ty
 import os
 
-Document = ty.NamedTuple(
-    "Document", [("id", int), ("name", str), ("path", str), ("content", str)]
-)
+
+class Document(ty.NamedTuple):
+    id: int
+    name: str
+    path: str
+    content: str
 
 
 class Documents:
-    by_name: ty.Dict[str, Document] = None
-    by_id: ty.List[Document] = []
+    by_name: dict[str, Document] = None
+    by_id: list[Document] = []
     root: Document
     lookup = []
 
@@ -18,7 +21,7 @@ class Documents:
         self.lookup = []
 
     def read_root(self, path: str):
-        with open(path, "r") as f:
+        with open(path) as f:
             self.add_root(path, f.read())
 
     def add_root(self, path: str, data: str):
@@ -32,7 +35,7 @@ class Documents:
         for p in self.lookup:
             path = os.path.join(p, "%s.spr" % name)
             if os.path.isfile(path):
-                data = open(path, "r").read()
+                data = open(path).read()
                 doc = Document(len(self.by_id), name, path, data)
                 self.by_name[name] = doc
                 self.by_id.append(doc)

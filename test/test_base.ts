@@ -334,6 +334,10 @@ function testOutComplex(path: string): boolean {
 	l6[0] = m;
 	l6[2] = m;
 
+	const l6a = w.constructDirectTableList(base.MemberOut, 3);
+	l6a.add(0).id = 43;
+	l6a.add(2).id = 43;
+
 	const l7 = w.constructFloat32List(2);
 	l7[1] = 98.0;
 
@@ -358,6 +362,7 @@ function testOutComplex(path: string): boolean {
 	s.textList = l4;
 	s.bytesList = l5;
 	s.memberList = l6;
+	s.directMemberList = l6a;
 	s.f32list = l7;
 	s.f64list = l8;
 	s.u8list = l9;
@@ -523,6 +528,13 @@ function testInComplex2(path: string): boolean {
 	if (require1(l2[0].b, true)) return false;
 	if (require1(s.s.x, complex2.Complex2SX.p)) return false;
 	if (require1(s.s.y.z, 8)) return false;
+	if (require1(s.l2 !== null, true)) return false;
+	const l3 = s.l2!;
+	if (require1(l3.length, 2)) return false;
+	if (require1(l3[0].isText, true)) return false;
+	if (require1(l3[0].text, 'text')) return false;
+	if (require1(l3[1].isMyBytes, true)) return false;
+	if (require1(l3[1].myBytes, bc('bytes'))) return false;
 	return true;
 }
 
@@ -533,7 +545,7 @@ function testOutInplace(path: string): boolean {
 	u.u.addMonkey().name = name;
 
 	const u2 = w.constructTable(base.InplaceUnionOut);
-	u2.u.addText().t = 'foobar';
+	u2.u.addEmpty();
 
 	const t = w.constructTable(base.InplaceTextOut);
 	t.id = 45;
@@ -571,7 +583,9 @@ function testInInplace(path: string): boolean {
 	if (require1(monkey.name !== null, true)) return false;
 	if (require1(monkey.name, 'nilson')) return false;
 
-	const u2 = s.u2;
+	if (require1(s.u2 !== null, true)) return false;
+	const u2 = s.u2!;
+	if (require1(u2.u.isEmpty, true)) return false;
 
 	if (require1(s.t !== null, true)) return false;
 	const t = s.t!;
@@ -620,6 +634,11 @@ function testOutExtend2(path: string): boolean {
 	root.bb = 81;
 	const cake = root.u.addCake();
 	cake.v = 45;
+	const l = root.addDirectMemberList(4);
+	l.add(0).id = 100;
+	l.add(1).id = 101;
+	l.add(2).id = 102;
+	l.add(3).id = 103;
 	const data = w.finalize(root);
 	return validateOut(data, path);
 }

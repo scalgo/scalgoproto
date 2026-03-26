@@ -1,7 +1,3 @@
-# -*- mode: python; tab-width: 4; indent-tabs-mode: t; python-indent-offset: 4; coding: utf-8 -*-
-from typing import List
-
-
 def cescape(v: bytes) -> str:
     ans = []
     cmap = {0: "\\0", 34: '"', 9: "\\t", 10: "\\n", 13: "\\r"}
@@ -26,7 +22,7 @@ def lcamel(n: str) -> str:
 
 
 def usnake(n: str) -> str:
-    out: List[str] = []
+    out: list[str] = []
     for c in n:
         if c.isupper() and out:
             out.append("_")
@@ -38,7 +34,7 @@ def usnake(n: str) -> str:
 
 def snake(n: str) -> str:
     """Convert a string in upper or lower camel case to snake case"""
-    out: List[str] = []
+    out: list[str] = []
     for c in n:
         if c.isupper() and out:
             out.append("_")

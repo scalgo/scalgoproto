@@ -487,7 +487,7 @@ int main(int argc, char ** argv) {
 		u.u().addMonkey().setName(name);
 
 		auto u2 = w.construct<InplaceUnionOut>();
-		u2.u().addText().addT("foobar");
+		u2.u().setEmpty();
 
 		auto t = w.construct<InplaceTextOut>();
 		t.setId(45);
@@ -521,10 +521,7 @@ int main(int argc, char ** argv) {
 
 		REQUIRE(s.hasU2(), true);
 		auto u2 = s.u2();
-		REQUIRE(u2.u().isText(), true);
-		auto u2t = u2.u().text();
-		REQUIRE(u2t.hasT(), true);
-		REQUIRE(u2t.t(), "foobar");
+		REQUIRE(u2.u().isEmpty(), true);
 		
 		REQUIRE(s.hasT(), true);
 		auto t = s.t();
