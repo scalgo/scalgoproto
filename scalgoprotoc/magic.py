@@ -2,6 +2,7 @@
 """
 Generate magic values
 """
+
 import random
 
 

@@ -2,6 +2,7 @@
 """
 Main executable
 """
+
 import argparse
 import sys
 

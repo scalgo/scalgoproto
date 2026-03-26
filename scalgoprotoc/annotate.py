@@ -2,6 +2,7 @@
 """
 Perform validation of the ast, and assign offsets and such
 """
+
 import enum
 import struct
 import sys

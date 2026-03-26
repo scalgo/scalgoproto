@@ -2,6 +2,7 @@
 """
 Validate a schema
 """
+
 from typing import Dict, List, Tuple, Optional, Set
 from .annotate import annotate
 from .parser import (

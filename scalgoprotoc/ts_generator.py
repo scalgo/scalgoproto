@@ -2,6 +2,7 @@
 """
 Generate python reader/wirter
 """
+
 import math
 import typing
 import os
@@ -902,7 +903,10 @@ class Generator:
                     )
                 elif node.union:
                     if node.optional:
-                        self.o("\t\tif (i.%s !== null) this.%s._copy(i.%s!);" % (lname, lname, lname))
+                        self.o(
+                            "\t\tif (i.%s !== null) this.%s._copy(i.%s!);"
+                            % (lname, lname, lname)
+                        )
                     else:
                         self.o("\t\tthis.%s._copy(i.%s);" % (lname, lname))
                 elif (

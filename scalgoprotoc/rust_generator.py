@@ -2,6 +2,7 @@
 """
 Generate python reader/wirter
 """
+
 import math
 import typing
 import os
@@ -88,7 +89,9 @@ class Generator:
                 node.table.name
             )
         elif node.table:
-            return "scalgoproto::TableListWrite<'_, %sOut<'a, Normal>>" % (node.table.name)
+            return "scalgoproto::TableListWrite<'_, %sOut<'a, Normal>>" % (
+                node.table.name
+            )
         elif node.union:
             return "scalgoproto::UnionListWrite<'_, %s>" % (node.union.name)
         elif node.type_.type == TokenType.TEXT:
@@ -442,9 +445,11 @@ class Generator:
             self.o(
                 f"""    #[inline]
     pub fn {lname}(&self) -> {ti.p} {{
-        self._reader.get_pod({node.offset}).unwrap_or({node.parsed_value
+        self._reader.get_pod({node.offset}).unwrap_or({
+                    node.parsed_value
                     if not math.isnan(node.parsed_value)
-                    else "%s::NAN" % ti.p})
+                    else "%s::NAN" % ti.p
+                })
     }}
 """
             )
@@ -1291,7 +1296,10 @@ impl<'a> {name}In<'a> {{"""
             self.generate_value_in(table, node)
 
         debug = "".join(
-            [f"\n            .field(\"{snake(self.value(v.identifier))}\", & self.{snake(self.value(v.identifier))}())" for v in table.members]
+            [
+                f'\n            .field("{snake(self.value(v.identifier))}", & self.{snake(self.value(v.identifier))}())'
+                for v in table.members
+            ]
         )
 
         self.o(
@@ -1467,7 +1475,10 @@ impl <'a> {name}In<'a> {{"""
             else:
                 raise ICE()
         debug = "".join(
-            [f"\n            .field(\"{self.value(v.identifier)}\", & self.{self.value(v.identifier)}())" for v in node.members]
+            [
+                f'\n            .field("{self.value(v.identifier)}", & self.{self.value(v.identifier)}())'
+                for v in node.members
+            ]
         )
 
         self.o(

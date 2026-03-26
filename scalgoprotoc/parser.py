@@ -2,6 +2,7 @@
 """
 Parse a protocol description and generate an ast
 """
+
 import enum
 import typing as ty
 from .error import error

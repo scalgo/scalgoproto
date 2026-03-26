@@ -2,6 +2,7 @@
 """
 Validate a schema
 """
+
 import math, io, os, sys
 from typing import List, Tuple, Optional
 import typing
@@ -430,10 +431,7 @@ class Generator:
         assert node.table is not None
         if not node.table.empty:
             self.output_doc(node, "\t")
-            self.o(
-                "\t%sIn %s() const {"
-                % (self.qualify(node.table), lcamel(uname))
-            )
+            self.o("\t%sIn %s() const {" % (self.qualify(node.table), lcamel(uname)))
             self.o("\t\tassert(is%s());" % (uname))
             self.o(
                 "\t\treturn scalgoproto::In::getObject_<%sIn>(this->reader_, this->template getPtr_<%sIn::MAGIC>());"
@@ -1265,6 +1263,7 @@ template <> struct EnumSize<%s> {static constexpr size_t size() noexcept {return
                 err = True
         if err:
             exit(1)
+
 
 def run(args) -> int:
     documents = Documents()
