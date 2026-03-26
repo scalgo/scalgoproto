@@ -10,6 +10,8 @@ jobs:
       - uses: astral-sh/ruff-action@v3
         with:
           args: format --check
+          version: "0.14.4"
       - uses: astral-sh/ruff-action@v3
         with:
           args: check
+          version: "0.14.4"
