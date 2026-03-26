@@ -426,11 +426,16 @@ class Reader(object):
             )
 
     def _get_union_list(self, t: Type[UI], off: int, size: int) -> ListIn[UI]:
+        def getter(r: "Reader", s: int, i: int) -> UI:
+            base = s + i * 8
+            utype = struct.unpack_from("<H", r._data, base)[0]
+            uoff = unpack48_(r._data[base + 2 : base + 8])
+            return t(r, utype, uoff)
         return ListIn[UI](
             self,
             size,
             off,
-            lambda r, s, i: t._read(r, s + i * t._WIDTH),
+            getter,
             lambda r, s, i: True,
             False,
         )
