@@ -1031,29 +1031,29 @@ impl<'a> scalgoproto::UnionIn<'a> for {union.name}In<'a> {{
         -> Result<Self> {{
         match t {{"""
         )
-        for i, member in enumerate(union.members):
+        for i, member in enumerate(union.members, start=1):
             assert member.type_ is not None
             uname = ucamel(self.value(member.identifier))
             if member.list_:
                 self.o(
-                    f"        {i+1} => Ok(Self::{uname}(reader.get_list_union(magic, offset, size)?)),"
+                    f"        {i} => Ok(Self::{uname}(reader.get_list_union(magic, offset, size)?)),"
                 )
             elif member.table:
                 self.o(
-                    f"        {i+1} => Ok(Self::{uname}(reader.get_table_union::<{member.table.name}In>(magic, offset, size)?)),"
+                    f"        {i} => Ok(Self::{uname}(reader.get_table_union::<{member.table.name}In>(magic, offset, size)?)),"
                 )
             elif member.type_.type == TokenType.BYTES:
                 self.o(
-                    f"        {i+1} => Ok(Self::{uname}(reader.get_bytes_union(magic, offset, size)?)),"
+                    f"        {i} => Ok(Self::{uname}(reader.get_bytes_union(magic, offset, size)?)),"
                 )
             elif member.type_.type == TokenType.TEXT:
                 self.o(
-                    f"        {i+1} => Ok(Self::{uname}(reader.get_text_union(magic, offset, size)?)),"
+                    f"        {i} => Ok(Self::{uname}(reader.get_text_union(magic, offset, size)?)),"
                 )
             elif member.type_.type == TokenType.REMOVED:
                 continue
             else:
-                self.o(f"        {i+1} => Ok(Self::None),")
+                self.o(f"        {i} => Ok(Self::None),")
 
         self.o(
             f"""        _ => Ok(Self::None),
@@ -1080,17 +1080,17 @@ impl<'a> {union.name}Out<'a, Normal> {{
     }}
 """
         )
-        for idx, member in enumerate(union.members):
+        for idx, member in enumerate(union.members, start=1):
             assert member.type_ is not None
             llname = snake(self.value(member.identifier))
             if member.list_:
-                self.generate_union_list_out(member, llname, idx + 1, False)
+                self.generate_union_list_out(member, llname, idx, False)
             elif member.table:
-                self.generate_union_table_out(member, llname, idx + 1, False)
+                self.generate_union_table_out(member, llname, idx, False)
             elif member.type_.type == TokenType.BYTES:
-                self.generate_union_bytes_out(member, llname, idx + 1, False)
+                self.generate_union_bytes_out(member, llname, idx, False)
             elif member.type_.type == TokenType.TEXT:
-                self.generate_union_text_out(member, llname, idx + 1, False)
+                self.generate_union_text_out(member, llname, idx, False)
             elif member.type_.type == TokenType.REMOVED:
                 continue
             else:
@@ -1107,17 +1107,17 @@ impl<'a> {union.name}Out<'a, Inplace> {{
     }}
 """
         )
-        for idx, member in enumerate(union.members):
+        for idx, member in enumerate(union.members, start=1):
             assert member.type_ is not None
             llname = snake(self.value(member.identifier))
             if member.list_:
-                self.generate_union_list_out(member, llname, idx + 1, True)
+                self.generate_union_list_out(member, llname, idx, True)
             elif member.table:
-                self.generate_union_table_out(member, llname, idx + 1, True)
+                self.generate_union_table_out(member, llname, idx, True)
             elif member.type_.type == TokenType.BYTES:
-                self.generate_union_bytes_out(member, llname, idx + 1, True)
+                self.generate_union_bytes_out(member, llname, idx, True)
             elif member.type_.type == TokenType.TEXT:
-                self.generate_union_text_out(member, llname, idx + 1, True)
+                self.generate_union_text_out(member, llname, idx, True)
             elif member.type_.type == TokenType.REMOVED:
                 continue
             else:

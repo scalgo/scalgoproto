@@ -912,20 +912,20 @@ class Generator:
                 "\tusing IN=%sIn<%s>;" % (union.name, "true" if inplace else "false")
             )
             self.o("\tType type() const noexcept {return (Type)this->getType_();}")
-            for idx, member in enumerate(union.members):
+            for idx, member in enumerate(union.members, start=1):
                 assert member.type_ is not None
                 if member.type_.type == TokenType.REMOVED:
                     continue
                 n = self.value(member.identifier)
                 uname = ucamel(n)
                 if member.list_:
-                    self.generate_union_list_out(member, uname, inplace, idx + 1)
+                    self.generate_union_list_out(member, uname, inplace, idx)
                 elif member.table:
-                    self.generate_union_table_out(member, uname, inplace, idx + 1)
+                    self.generate_union_table_out(member, uname, inplace, idx)
                 elif member.type_.type == TokenType.BYTES:
-                    self.generate_union_bytes_out(member, uname, inplace, idx + 1)
+                    self.generate_union_bytes_out(member, uname, inplace, idx)
                 elif member.type_.type == TokenType.TEXT:
-                    self.generate_union_text_out(member, uname, inplace, idx + 1)
+                    self.generate_union_text_out(member, uname, inplace, idx)
                 else:
                     raise ICE()
             self.generate_union_copy(union, inplace)
@@ -1127,13 +1127,11 @@ class Generator:
     def generate_enum(self, node: Enum) -> None:
         self.switch_namespace(node.namespace)
         self.o("enum class %s: std::uint8_t {" % node.name)
-        index = 0
-        for ev in node.members:
+        for idx, ev in enumerate(node.members):
             if ev.token is None:
                 raise ICE()
             self.output_doc(ev, "\t")
-            self.o("\t%s = %d," % (self.value(ev.token), index))
-            index += 1
+            self.o("\t%s = %d," % (self.value(ev.token), idx))
         self.o("};")
         self.output_metamagic(
             """template <> struct MetaMagic<%s> {using t=EnumTag;};

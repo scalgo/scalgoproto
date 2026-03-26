@@ -825,18 +825,18 @@ class Generator:
         self.o("\t\tsuper(writer, offset, end);")
         self.o("\t}")
         self.o()
-        for idx, member in enumerate(union.members):
+        for idx, member in enumerate(union.members, start=1):
             llname = lcamel(self.value(member.identifier))
             if member.type_.type == TokenType.REMOVED:
                 continue
             if member.list_:
-                self.generate_union_list_out(member, llname, idx + 1, False)
+                self.generate_union_list_out(member, llname, idx, False)
             elif member.table:
-                self.generate_union_table_out(member, llname, idx + 1, False)
+                self.generate_union_table_out(member, llname, idx, False)
             elif member.type_.type == TokenType.BYTES:
-                self.generate_union_bytes_out(member, llname, idx + 1, False)
+                self.generate_union_bytes_out(member, llname, idx, False)
             elif member.type_.type == TokenType.TEXT:
-                self.generate_union_text_out(member, llname, idx + 1, False)
+                self.generate_union_text_out(member, llname, idx, False)
             else:
                 raise ICE()
         self.generate_union_copy(union)
@@ -854,8 +854,7 @@ class Generator:
         self.o("\t\tsuper(writer, offset, end);")
         self.o("\t}")
         self.o()
-        idx = 1
-        for member in union.members:
+        for idx, member in enumerate(union.members, start=1):
             llname = lcamel(self.value(member.identifier))
             if member.list_:
                 self.generate_union_list_out(member, llname, idx, True)
@@ -867,7 +866,6 @@ class Generator:
                 self.generate_union_text_out(member, llname, idx, True)
             else:
                 raise ICE()
-            idx += 1
         self.generate_union_copy(union)
         self.o("}")
         self.o()
@@ -1113,10 +1111,8 @@ class Generator:
     def generate_enum(self, node: Enum) -> None:
         self.output_doc(node, "")
         self.o("export enum %s {" % node.name)
-        index = 0
         for ev in node.members:
             self.o("    %s," % (self.value(ev.identifier)))
-            index += 1
         self.o("}")
         self.o()
 
