@@ -123,6 +123,8 @@ class ListIn(Sequence[B]):
         getter: Callable[["Reader", int, int], B],
         haser: Callable[["Reader", int, int], bool],
         require_has: bool,
+        struct_str: str | None = None,
+        item_width: int = 0,
     ) -> None:
         """Private constructor. Use the accessor methods on tables to get an instance"""
         self._reader = reader
@@ -131,6 +133,8 @@ class ListIn(Sequence[B]):
         self._getter = getter
         self._haser = haser
         self._require_has = require_has
+        self._struct_str = struct_str
+        self._item_width = item_width
 
     def has(self, idx: int) -> bool:
         """Return True if there is an element on possision idx. Note that idx must be less than size"""
@@ -164,6 +168,19 @@ class ListIn(Sequence[B]):
         for v in self:
             digest(h, v)
         h.update(b"\xff\xe4")
+
+    def raw_bytes(self) -> tuple[bytes, int, str | None]:
+        """Return the raw bytes of the list, the byte width of each element
+        (0 for bit-packed bool), and an optional struct format string for decoding members"""
+        if self._item_width == 0:
+            byte_len = (self._size + 7) >> 3
+        else:
+            byte_len = self._size * self._item_width
+        return (
+            self._reader._data[self._offset : self._offset + byte_len],
+            self._item_width,
+            self._struct_str,
+        )
 
 
 class UnionIn:
@@ -398,6 +415,7 @@ class Reader:
                 getter,
                 lambda r, s, i: unpack48_(r._data[s + 6 * i : s + 6 * i + 6]) != 0,
                 False,
+                item_width=6,
             )
         else:
             magic, item_size = struct.unpack("<II", self._data[off : off + 8])
@@ -416,6 +434,7 @@ class Reader:
                 lambda r, s, i: t(r, s + i * item_size, item_size),
                 lambda r, s, i: True,
                 False,
+                item_width=item_size,
             )
 
     def _get_union_list(self, t: type[UI], off: int, size: int) -> ListIn[UI]:
@@ -432,6 +451,7 @@ class Reader:
             getter,
             lambda r, s, i: True,
             False,
+            item_width=8,
         )
 
     def _get_bool_list(self, off: int, size: int) -> ListIn[bool]:
@@ -454,6 +474,8 @@ class Reader:
             ],
             lambda r, s, i: True,
             False,
+            "<" + f,
+            w,
         )
 
     def _get_float_list(self, f: str, w: int, off: int, size: int) -> ListIn[float]:
@@ -468,6 +490,8 @@ class Reader:
                 struct.unpack("<" + f, r._data[s + i * w : s + i * w + w])[0]
             ),
             False,
+            "<" + f,
+            w,
         )
 
     def _get_struct_list(self, t: type[S], off: int, size: int) -> ListIn[S]:
@@ -488,6 +512,7 @@ class Reader:
             lambda r, s, i: t(r._data[s + i]),
             lambda r, s, i: r._data[s + i] != 255,
             True,
+            item_width=1,
         )
 
     def _get_text_list(self, off: int, size: int) -> ListIn[str]:
@@ -505,6 +530,7 @@ class Reader:
             getter,
             lambda r, s, i: unpack48_(r._data[s + 6 * i : s + 6 * i + 6]) != 0,
             False,
+            item_width=6,
         )
 
     def _get_bytes_list(self, off: int, size: int) -> ListIn[bytes]:
@@ -520,6 +546,7 @@ class Reader:
             getter,
             lambda r, s, i: unpack48_(r._data[s + 6 * i : s + 6 * i + 6]) != 0,
             False,
+            item_width=6,
         )
 
     def root(self, type: type[TI]) -> TI:
