@@ -48,6 +48,7 @@ B = TypeVar("B")
 
 class StructType(Generic[B]):
     _WIDTH: ClassVar[int] = 0
+    _STRUCT_STR: ClassVar[str] = ""
 
     @staticmethod
     @abstractmethod
@@ -502,6 +503,8 @@ class Reader:
             lambda r, s, i: t._read(r, s + i * t._WIDTH),
             lambda r, s, i: True,
             False,
+            t._STRUCT_STR,
+            t._WIDTH,
         )
 
     def _get_enum_list(self, t: type[E], off: int, size: int) -> ListIn[E]:
