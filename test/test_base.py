@@ -1,3 +1,4 @@
+import struct
 import sys
 
 import scalgoproto
@@ -504,6 +505,17 @@ def test_in_complex(path: str) -> bool:
 
     if require(len(int_list), 31):
         return False
+    if require(int_list.raw_bytes()[1], 4):
+        return False
+    if require(int_list.raw_bytes()[2], "<i"):
+        return False
+    int_raw = int_list.raw_bytes()[0]
+    if require(len(int_raw), 31 * 4):
+        return False
+    if require(
+        struct.unpack("<" + "i" * 31, int_raw), tuple(100 - 2 * i for i in range(31))
+    ):
+        return False
 
     for i in range(31):
         if require(int_list[i], 100 - 2 * i):
@@ -525,6 +537,15 @@ def test_in_complex(path: str) -> bool:
         return False
     l3 = s.struct_list
     if require(len(l3), 1):
+        return False
+    if require(l3.raw_bytes()[1], 9):
+        return False
+    if require(l3.raw_bytes()[2], "<If?"):
+        return False
+    l3_raw = l3.raw_bytes()[0]
+    if require(len(l3_raw), 1 * 9):
+        return False
+    if require(struct.unpack("<If?", l3_raw), (0, 0.0, False)):
         return False
 
     if require_some(s.text_list):
@@ -577,6 +598,15 @@ def test_in_complex(path: str) -> bool:
     l7 = s.f32list
     if require(len(l7), 2):
         return False
+    if require(l7.raw_bytes()[1], 4):
+        return False
+    if require(l7.raw_bytes()[2], "<f"):
+        return False
+    l7_raw = l7.raw_bytes()[0]
+    if require(len(l7_raw), 2 * 4):
+        return False
+    if require(struct.unpack("<ff", l7_raw), (0.0, 98.0)):
+        return False
     if require(l7[0], 0.0):
         return False
     if require(l7[1], 98.0):
@@ -586,6 +616,15 @@ def test_in_complex(path: str) -> bool:
         return False
     l8 = s.f64list
     if require(len(l8), 3):
+        return False
+    if require(l8.raw_bytes()[1], 8):
+        return False
+    if require(l8.raw_bytes()[2], "<d"):
+        return False
+    l8_raw = l8.raw_bytes()[0]
+    if require(len(l8_raw), 3 * 8):
+        return False
+    if require(struct.unpack("<ddd", l8_raw), (0.0, 0.0, 78.0)):
         return False
     if require(l8[0], 0.0):
         return False
