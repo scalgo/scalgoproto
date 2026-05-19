@@ -155,6 +155,34 @@ class Generator:
     def o(self, text="") -> None:
         print(text, file=self.out)
 
+    def struct_format_body(self, node: Struct) -> str:
+        out: list[str] = []
+        offset = 0
+
+        for v in node.members:
+            if v.offset > offset:
+                out.append("%dx" % (v.offset - offset))
+                offset = v.offset
+
+            assert v.type_ is not None
+            if v.type_.type in typeMap:
+                ti = typeMap[v.type_.type]
+                out.append(ti.s)
+                offset += ti.w
+            elif v.enum:
+                out.append("B")
+                offset += 1
+            elif v.struct:
+                out.append(self.struct_format_body(v.struct))
+                offset += v.struct.bytes
+            else:
+                raise ICE()
+
+        if node.bytes > offset:
+            out.append("%dx" % (node.bytes - offset))
+
+        return "".join(out)
+
     def value(self, t: Token) -> str:
         return self.documents.by_id[t.document].content[t.index : t.index + t.length]
 
@@ -1257,6 +1285,11 @@ class Generator:
                 raise ICE()
         self.o("    __slots__ = [%s]" % ", ".join(slots))
         self.o("    _WIDTH: typing_.ClassVar[int] = %d" % node.bytes)
+        fmt_body = self.struct_format_body(node)
+        self.o(
+            '    _STRUCT_STR: typing_.ClassVar[str] = "%s"'
+            % ("<" + (fmt_body if fmt_body else "0x"))
+        )
         self.o()
         self.o("    def __init__(self, %s) -> None:" % (", ".join(init)))
         for line in copy:
