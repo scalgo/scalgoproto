@@ -303,9 +303,9 @@ Additionally docstring comments are also supported, these comments are propagate
         b,
     }
 
-## Gramma
+## Grammar
 
-An gramma for a schema is defined below:
+A grammar for schemas is defined below:
 
     Document = (DocumentItem Split)*
     Split = (";" | ",")?
@@ -337,3 +337,83 @@ An gramma for a schema is defined below:
     TableItemMod = "list" | "optional" | "inplace"
     TableItemType = BasicType | "Text" | "Bytes" | UIdentifier | BriefUnion | BriefTable | BriefEnum
     Number = "-?[0-9]*(\.[0-9]*)?(e-?[0-9]+)?
+
+## Validating a schema
+
+A schema can be checked with the `validate` subcommand:
+
+    $ ./scalgoprotoc.py validate [--strict] [--old <old.spr>] <schema.spr>
+
+The command parses the schema and runs the semantic checks (name casing,
+duplicate members, magic numbers, valid types, etc.).
+
+### `--strict`
+
+Strict formatting.  A canonically formatted table looks like this (indented
+with tabs):
+
+```
+table Foo @5D99E0AD {
+	id: U64
+	count: optional I32
+	kind: enum {
+		a,
+		b
+	}
+}
+```
+
+The enforced layout rules are:
+
+* **Tabs for indentation.** Each nesting level is indented by exactly one extra
+  tab; spaces may not be used to indent.
+* **One space between tokens.** Wherever a space is required it must be exactly
+  one space (no tabs). A space is required after a declaration's leading keyword
+  and after its name (`struct Foo `, `enum Kind `, `union U `, `table Foo `, 
+  and after the `@magic` id), after a member's `:`, after each modifier 
+  (`optional`, `list`, `inplace`, `direct`), after a brief
+  `union`/`table`/`enum`/`struct` type keyword before its `{`, around a `=`
+  default (`count: I32 = 42`), and after `namespace`/`import`. No space is
+  allowed before a `:`, before a `,`/`;` separator, or around the `::` in a
+  namespace.
+* **Members go on their own line.** Inside a struct, table or union each member
+  is written on its own line and terminated by a newline. A single trailing `,`
+  or `;` may follow the member (directly, with no space before it) but is
+  optional.
+* **Opening braces.** After a `{` the parser expects either a newline (the usual
+  case) or, for a struct/table/union only, an immediate `}` for an empty block
+  (`{}`). A single trailing line comment may follow the `{`. A space directly
+  after `{` is otherwise rejected -- this is why `enum E { a, b }` fails, while
+  the multi-line form and even the compact `enum E {a, b}` (no space right after
+  `{`) are accepted. An empty enum cannot use `{}`; it must be written over two
+  lines.
+* **Enum members need separators.** Consecutive enum values must be separated by
+  a `,` or `;`. They may then be placed on separate lines, or share a line when
+  separated by `, `.
+* **Member colons.** Struct and table members must use the `name: type` form
+  (including brief tables/structs/unions, e.g. `field: {…}`). For union members
+  the `:` is used only for typed members; a brief inline table member is written
+  `name {…}` (with the space, no colon).
+* **`import` ends with `;`.** In strict mode an `import` statement must be
+  terminated by a semicolon (`import base;`). A `namespace` always ends with a
+  `;`, in both modes.
+* **No trailing separator at the top level.** A top-level `struct`, `table`,
+  `enum` or `union` ends with its closing `}` followed by a newline; a `,` or `;`
+  after the `}` is rejected. The file must also end with a newline.
+* **Comment placement.** A full-line `//` or `#` comment must be indented to the
+  level of the block it sits in. A trailing comment may follow content on a line
+  when separated from it by exactly one space. Blank lines (empty, or containing
+  only the block's indentation tabs) are allowed. Doc comments (`##`, `///`,
+  `/** … */`) attach to the following declaration or member and sit at its
+  indentation. Block comments (`/* … */`) are stripped by the tokenizer and may
+  appear anywhere, in both modes.
+
+### `--old`
+
+`--old <old.spr>` additionally checks that the schema is a backwards-compatible
+evolution of an older version. The old schema is parsed (leniently) and each
+struct, enum, table and union that appears in both is compared. Removing,
+inserting, reordering or renaming members, and changing a member's type or its
+`optional`/`inplace`/`list`/`direct` flags, are reported as errors; a changed
+table magic number is reported as a warning. Appending new members at the end is
+allowed, except for structs, whose layout is fixed.
