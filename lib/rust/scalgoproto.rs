@@ -1185,6 +1185,7 @@ impl PArena {
             slice.set_pod_unsafe(0, &TEXTMAGIC);
             slice.set_u48_unsafe(4, v.len() as u64);
             std::ptr::copy_nonoverlapping(v.as_bytes().as_ptr(), slice.data(10), v.len());
+            slice.set_pod_unsafe(10 + v.len(), &0u8);
             TextOut { slice }
         }
     }
