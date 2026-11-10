@@ -792,6 +792,34 @@ def test_in_complex3(path: str) -> bool:
     return not require(l10[9], False)
 
 
+def test_in_short_complex3(path: str) -> bool:
+    # Simulate a table written with an older schema that has none of these
+    # members: the table is empty, and the bytes after it belong to other
+    # objects. Every member must read as absent, not as the following bytes.
+    data = bytearray(read_in(path))
+    root = int.from_bytes(data[4:10], "little")
+    size = int.from_bytes(data[root + 4 : root + 10], "little")
+    data[root + 4 : root + 10] = (0).to_bytes(6, "little")
+    data[root + 10 : root + 10 + size] = b"\xff" * size
+    s = scalgoproto.Reader(bytes(data)).root(base.Complex3In)
+    checks = [
+        (s.member.id, 0),
+        (s.text, ""),
+        (s.my_bytes, b""),
+        (len(s.int_list), 0),
+        (len(s.enum_list), 0),
+        (len(s.struct_list), 0),
+        (len(s.text_list), 0),
+        (len(s.bytes_list), 0),
+        (len(s.member_list), 0),
+        (len(s.direct_member_list), 0),
+        (len(s.f32list), 0),
+        (len(s.u8list), 0),
+        (len(s.blist), 0),
+    ]
+    return not any(require(v, e) for v, e in checks)
+
+
 def test_out_complex2(path: str) -> bool:
     w = scalgoproto.Writer()
 
@@ -1149,6 +1177,8 @@ def main() -> None:
         ans = test_in_complex(path)
     elif test == "in_complex3":
         ans = test_in_complex3(path)
+    elif test == "in_short_complex3":
+        ans = test_in_short_complex3(path)
     elif test == "out_complex2":
         ans = test_out_complex2(path)
     elif test == "in_complex2":

@@ -265,15 +265,12 @@ class TableIn:
                 digest(h, getattr(self, m))
         h.update(b"\xff\xe7")
 
-    def _get_uint48_f(self, o: int) -> int:
-        return unpack48_(self._reader._data[self._offset + o : self._offset + o + 6])
-
     def _get_int8(self, o: int, d: int) -> int:
         return (
             struct.unpack(
                 "<b", self._reader._data[self._offset + o : self._offset + o + 1]
             )[0]
-            if o < self._size
+            if o + 1 <= self._size
             else d
         )
 
@@ -282,7 +279,7 @@ class TableIn:
             struct.unpack(
                 "<B", self._reader._data[self._offset + o : self._offset + o + 1]
             )[0]
-            if o < self._size
+            if o + 1 <= self._size
             else d
         )
 
@@ -291,7 +288,7 @@ class TableIn:
             struct.unpack(
                 "<h", self._reader._data[self._offset + o : self._offset + o + 2]
             )[0]
-            if o < self._size
+            if o + 2 <= self._size
             else d
         )
 
@@ -300,7 +297,7 @@ class TableIn:
             struct.unpack(
                 "<H", self._reader._data[self._offset + o : self._offset + o + 2]
             )[0]
-            if o < self._size
+            if o + 2 <= self._size
             else d
         )
 
@@ -309,7 +306,7 @@ class TableIn:
             struct.unpack(
                 "<i", self._reader._data[self._offset + o : self._offset + o + 4]
             )[0]
-            if o < self._size
+            if o + 4 <= self._size
             else d
         )
 
@@ -318,14 +315,14 @@ class TableIn:
             struct.unpack(
                 "<I", self._reader._data[self._offset + o : self._offset + o + 4]
             )[0]
-            if o < self._size
+            if o + 4 <= self._size
             else d
         )
 
     def _get_uint48(self, o: int) -> int:
         return (
             unpack48_(self._reader._data[self._offset + o : self._offset + o + 6])
-            if o < self._size
+            if o + 6 <= self._size
             else 0
         )
 
@@ -334,7 +331,7 @@ class TableIn:
             struct.unpack(
                 "<q", self._reader._data[self._offset + o : self._offset + o + 8]
             )[0]
-            if o < self._size
+            if o + 8 <= self._size
             else d
         )
 
@@ -343,7 +340,7 @@ class TableIn:
             struct.unpack(
                 "<Q", self._reader._data[self._offset + o : self._offset + o + 8]
             )[0]
-            if o < self._size
+            if o + 8 <= self._size
             else d
         )
 
@@ -352,7 +349,7 @@ class TableIn:
             struct.unpack(
                 "<f", self._reader._data[self._offset + o : self._offset + o + 4]
             )[0]
-            if o < self._size
+            if o + 4 <= self._size
             else d
         )
 
@@ -361,7 +358,7 @@ class TableIn:
             struct.unpack(
                 "<d", self._reader._data[self._offset + o : self._offset + o + 8]
             )[0]
-            if o < self._size
+            if o + 8 <= self._size
             else d
         )
 
@@ -373,14 +370,14 @@ class TableIn:
         )
 
     def _get_ptr(self, o: int, magic: int) -> tuple[int, int]:
-        off = self._get_uint48_f(o)
+        off = self._get_uint48(o)
         if off == 0:
             return (0, 0)
         size = self._reader._read_size(off, magic)
         return (off + 10, size)
 
     def _get_ptr_inplace(self, o: int, magic: int) -> tuple[int, int]:
-        size = self._get_uint48_f(o)
+        size = self._get_uint48(o)
         return (self._offset + self._size, size)
 
 
@@ -417,6 +414,11 @@ class Reader:
                 lambda r, s, i: unpack48_(r._data[s + 6 * i : s + 6 * i + 6]) != 0,
                 False,
                 item_width=6,
+            )
+        elif size == 0:
+            # An absent list has no header, and an empty one has no items to describe.
+            return ListIn[TI](
+                self, 0, off, lambda r, s, i: t(r, 0, 0), lambda r, s, i: True, False
             )
         else:
             magic, item_size = struct.unpack("<II", self._data[off : off + 8])
