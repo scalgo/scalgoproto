@@ -3,10 +3,10 @@ Test that everything works
 """
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
-import shutil
 from collections.abc import Callable
 
 failures = []
@@ -91,7 +91,7 @@ def runPySetup(schemas: list[str]) -> bool:
 
 def runPy(name: str, bin: str, mod="test_base.py") -> bool:
     subprocess.check_call(
-        ["python3", "test/%s" % mod, name, bin],
+        ["python3", f"test/{mod}", name, bin],
         env={**os.environ, "PYTHONPATH": "lib/python:tmp:test"},
     )
     return True
@@ -129,7 +129,7 @@ def runTs(
     if capacity:
         env["SP_WRITER_CAPACITY"] = str(capacity)
     subprocess.check_call(
-        ["./node_modules/.bin/tsx", "./%s" % mod, name, bin],
+        ["./node_modules/.bin/tsx", f"./{mod}", name, bin],
         cwd="test/",
         env=env,
     )
@@ -137,13 +137,13 @@ def runTs(
 
 
 def runTsScript(script: str) -> bool:
-    subprocess.check_call(["./node_modules/.bin/tsx", "./%s" % script], cwd="test/")
+    subprocess.check_call(["./node_modules/.bin/tsx", f"./{script}"], cwd="test/")
     return True
 
 
 def runTest(name: str, func: Callable[[], bool]) -> bool:
     pad = 80 - len(name) - 4
-    print("%s> %s <%s" % ("=" * (pad // 2), name, "=" * (pad - pad // 2)))
+    print("{}> {} <{}".format("=" * (pad // 2), name, "=" * (pad - pad // 2)))
     ok = False
     try:
         ok = func()
@@ -160,7 +160,7 @@ def runTest(name: str, func: Callable[[], bool]) -> bool:
 
 def runNeg(name: str, base: str, bad: str, good: str) -> None:
     pad = 80 - len(name) - 4
-    print("%s> %s <%s" % ("=" * (pad // 2), name, "=" * (pad - pad // 2)))
+    print("{}> {} <{}".format("=" * (pad // 2), name, "=" * (pad - pad // 2)))
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as f:
         f.write(base % bad)
         f.flush()
@@ -189,10 +189,10 @@ def main():
 
     # Test names
     for bad, good in (("monkey", "Monkey"), ("Monkey_Cat", "MonkeyCat")):
-        runNeg("bad table name %s" % bad, "table %s @8908828A {}", bad, good)
+        runNeg(f"bad table name {bad}", "table %s @8908828A {}", bad, good)
     for bad, good in (("Cat", "cat"), ("type", "myType"), ("cat_dog", "catDog")):
         runNeg(
-            "bad table member name %s" % bad,
+            f"bad table member name {bad}",
             "table Monkey @8908828A {%s : U32}",
             bad,
             good,
@@ -207,7 +207,7 @@ def main():
         ("String", "Text"),
     ):
         runNeg(
-            "bad table member type %s" % bad,
+            f"bad table member type {bad}",
             "table Monkey @8908828A {a: %s}",
             bad,
             good,
@@ -222,7 +222,7 @@ def main():
         ("Text", "U16"),
         ("union {}", "F32"),
     ):
-        runNeg("bad struct member type %s" % bad, "struct Monkey {a: %s}", bad, good)
+        runNeg(f"bad struct member type {bad}", "struct Monkey {a: %s}", bad, good)
 
     # Test table id
     for bad, good in (
@@ -232,7 +232,7 @@ def main():
         ("@8908828A78", "@8908828A"),
         ("", "@8908828A"),
     ):
-        runNeg("table id %s" % bad, "table Monkey %s {}", bad, good)
+        runNeg(f"table id {bad}", "table Monkey %s {}", bad, good)
     runNeg(
         "table id inplace a", "table Monkey @8908828A {a: table %s {}}", "", "@8908828B"
     )
@@ -401,7 +401,7 @@ def main():
             ("in_extend2", "test/extend2.bin"),
         ]:
             runTest(
-                "ts %s unaligned" % name.replace("_", " "),
+                "ts {} unaligned".format(name.replace("_", " ")),
                 lambda name=name, bin=bin: runTs(name, bin, shift=3),
             )
         for name, bin in [
@@ -414,7 +414,7 @@ def main():
             ("out_extend2", "test/extend2.bin"),
         ]:
             runTest(
-                "ts %s small buffer" % name.replace("_", " "),
+                "ts {} small buffer".format(name.replace("_", " ")),
                 lambda name=name, bin=bin: runTs(name, bin, capacity=16),
             )
         runTest("ts read", lambda: runTsScript("test_read.ts"))
@@ -474,7 +474,7 @@ def main():
         sys.exit(0)
     else:
         for t in failures:
-            print("%s failed" % t)
+            print(f"{t} failed")
         sys.exit(1)
 
 

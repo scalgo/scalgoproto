@@ -3,20 +3,20 @@ Validate a schema
 """
 
 from .annotate import annotate
+from .documents import Documents, addDocumentsParams
+from .error import error
 from .parser import (
+    AstNode,
+    Enum,
+    Namespace,
     ParseError,
     Parser,
     Struct,
-    Enum,
     Table,
     Union,
-    Namespace,
-    AstNode,
     Value,
 )
-from .documents import Documents, addDocumentsParams
 from .sp_tokenize import Token
-from .error import error
 
 
 def ct(t: Token | None) -> Token:
@@ -183,15 +183,11 @@ def validate(
                     mismatches.append((None, new_members[i2]))
                 mismatches.reverse()
 
-                old_members_by_name = dict(
-                    [(ov(om.identifier), om) for om in old_members]
-                )
-                new_members_by_name = dict(
-                    [(nv(nm.identifier), nm) for nm in new_members]
-                )
-                new_members_indexes = dict(
-                    [(nv(nm.identifier), i) for (i, nm) in enumerate(new_members)]
-                )
+                old_members_by_name = {ov(om.identifier): om for om in old_members}
+                new_members_by_name = {nv(nm.identifier): nm for nm in new_members}
+                new_members_indexes = {
+                    nv(nm.identifier): i for (i, nm) in enumerate(new_members)
+                }
                 for om, nm in mismatches:
                     oname = ov(om.identifier) if om else None
                     nname = nv(nm.identifier) if nm else None
@@ -361,16 +357,7 @@ def validate(
 
             old_global: dict[str, AstNode] = {}
             for node in old_ast:
-                if isinstance(node, Struct):
-                    assert node.name is not None
-                    old_global[node.name] = node
-                elif isinstance(node, Enum):
-                    assert node.name is not None
-                    old_global[node.name] = node
-                elif isinstance(node, Table):
-                    assert node.name is not None
-                    old_global[node.name] = node
-                elif isinstance(node, Union):
+                if isinstance(node, (Struct, Enum, Table, Union)):
                     assert node.name is not None
                     old_global[node.name] = node
                 elif isinstance(node, Namespace):
@@ -408,7 +395,6 @@ def validate(
         return 0
     except ParseError as err:
         err.describe(documents)
-        pass
     return 1
 
 
