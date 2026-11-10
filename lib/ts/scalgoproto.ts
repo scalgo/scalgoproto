@@ -856,7 +856,6 @@ export class Writer {
 		this._size += 10;
 		// Create ListOut now: _offset = this._size (just after header), so _setList stores header start ✓
 		let dataStart = 0;
-		let endSize = 0;
 		const listOut = new ListOut<T, CopyType<T>>(
 			this,
 			size,
@@ -865,7 +864,7 @@ export class Writer {
 			false,
 			(off: number, idx: number, v: T|CopyType<T>) => {
 				if (v instanceof type._IN) {
-					const s = endSize;
+					const s = this._size;
 					this._size = dataStart + idx * type._SIZE;
 					const item = new type(this, false);
 					this._size = s;
@@ -873,19 +872,18 @@ export class Writer {
 				}
 			},
 			(off: number, idx: number): T => {
-				const s = endSize;
+				const s = this._size;
 				this._size = dataStart + idx * type._SIZE;
 				const item = new type(this, false);
 				this._size = s;
 				return item;
 			});
-		// Write inline data after creating listOut (closures capture dataStart/endSize by reference)
+		// Write inline data after creating listOut (closures capture dataStart by reference)
 		this._data.setUint32(this._size, type._MAGIC, true);
 		this._data.setUint32(this._size + 4, type._SIZE, true);
 		this._size += 8;
 		dataStart = this._size;
 		for (let i = 0; i < size * type._SIZE; ++i) this._data.setUint8(this._size++, 0);
-		endSize = this._size;
 		return new Proxy<ListOut<T, CopyType<T>>>(listOut, listOutHandel);
 	}
 
