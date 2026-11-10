@@ -1,7 +1,8 @@
 import sys
+
 import scalgoproto
 import union
-from test_base import require2, read_in, validate_out, require_some
+from test_base import read_in, require2, require_some, validate_out
 
 
 def for_copy() -> union.Table3In:
@@ -337,12 +338,7 @@ def test_in_union(path: str) -> bool:
         v10.d is not None and v10.d.is_v10 and len(v10.d.v10) == 1, v10.d.v10[0], True
     ):
         return False
-    if require2(
-        v10.e is not None and v10.e.is_v10 and len(v10.e.v10) == 1, v10.e.v10[0], True
-    ):
-        return False
-
-    return True
+    return not require2(v10.e is not None and v10.e.is_v10 and len(v10.e.v10) == 1, v10.e.v10[0], True)
 
 
 def main() -> None:

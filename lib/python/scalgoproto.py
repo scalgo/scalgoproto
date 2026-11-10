@@ -1,14 +1,14 @@
 import enum
 import math
 import struct
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Sequence
 from typing import (
+    Any,
     ClassVar,
     Generic,
     TypeVar,
-    Any,
 )
-from collections.abc import Callable, Sequence
 
 MESSAGE_MAGIC = 0xB5C0C4B3
 TEXT_MAGIC = 0xD812C8F5
@@ -57,8 +57,8 @@ class StructType(Generic[B]):
     def __str__(self):
         o = []
         for m in self.__slots__:
-            o.append("%s: %s" % (m, getattr(self, m)))
-        return "{%s}" % ", ".join(o)
+            o.append(f"{m}: {getattr(self, m)}")
+        return "{{{}}}".format(", ".join(o))
 
     def _to_dict(self):
         o = {}
@@ -154,7 +154,7 @@ class ListIn(Sequence[B]):
         return self._getter(self._reader, self._offset, idx)
 
     def __str__(self) -> str:
-        return "[%s]" % (", ".join(map(str, self)))
+        return "[{}]".format(", ".join(map(str, self)))
 
     def _to_dict(self):
         o = []
@@ -185,7 +185,7 @@ class ListIn(Sequence[B]):
 
 
 class UnionIn:
-    __slots__ = ["_reader", "_type", "_offset", "_size"]
+    __slots__ = ["_offset", "_reader", "_size", "_type"]
 
     def __init__(
         self, reader: "Reader", type: int, offset: int, size: int | None = None
@@ -201,8 +201,8 @@ class UnionIn:
             return "{}"
         m = self._MEMBERS[self._type - 1]
         if hasattr(self, m):
-            return "{%s: %s}" % (m, getattr(self, m))
-        return "{%s}" % m
+            return f"{{{m}: {getattr(self, m)}}}"
+        return f"{{{m}}}"
 
     def _to_dict(self):
         if self._type == 0:
@@ -231,7 +231,7 @@ class UnionIn:
 class TableIn:
     """Base class for reading a table"""
 
-    __slots__ = ["_reader", "_offset", "_size"]
+    __slots__ = ["_offset", "_reader", "_size"]
     _MAGIC: int = 0
     _MEMBERS: Sequence[str] = None
 
@@ -245,8 +245,8 @@ class TableIn:
         o = []
         for m in self._MEMBERS:
             if getattr(self, "has_" + m, True):
-                o.append("%s: %s" % (m, getattr(self, m)))
-        return "{%s}" % ", ".join(o)
+                o.append(f"{m}: {getattr(self, m)}")
+        return "{{{}}}".format(", ".join(o))
 
     def _to_dict(self):
         o = {}
@@ -394,7 +394,7 @@ class Reader:
     def _read_size(self, offset: int, magic: int):
         m, sizelow, sizehigh = struct.unpack("<IIH", self._data[offset : offset + 10])
         if m != magic:
-            raise Exception("Expected magic %08X but got %08X" % (magic, m))
+            raise Exception(f"Expected magic {magic:08X} but got {m:08X}")
         return join48_(sizelow, sizehigh)
 
     def _get_table_list(
@@ -422,7 +422,7 @@ class Reader:
             magic, item_size = struct.unpack("<II", self._data[off : off + 8])
             if magic != t._MAGIC:
                 raise Exception(
-                    "Expected scalgoproto magic %08X but got %08X" % (t._MAGIC, magic)
+                    f"Expected scalgoproto magic {t._MAGIC:08X} but got {magic:08X}"
                 )
 
             if off + 8 + item_size * size > len(self._data):
@@ -487,8 +487,10 @@ class Reader:
             lambda r, s, i: struct.unpack("<" + f, r._data[s + i * w : s + i * w + w])[
                 0
             ],
-            lambda r, s, i: not math.isnan(
-                struct.unpack("<" + f, r._data[s + i * w : s + i * w + w])[0]
+            lambda r, s, i: (
+                not math.isnan(
+                    struct.unpack("<" + f, r._data[s + i * w : s + i * w + w])[0]
+                )
             ),
             False,
             "<" + f,
@@ -559,12 +561,12 @@ class Reader:
         if magic != MESSAGE_MAGIC:
             if magic == 0xFD2FB528:
                 raise Exception(
-                    "Expected scalgoproto magic %08X " % MESSAGE_MAGIC
-                    + "but got the zstd magic instead (%08X). " % magic
+                    f"Expected scalgoproto magic {MESSAGE_MAGIC:08X} "
+                    + f"but got the zstd magic instead ({magic:08X}). "
                     + "Decompress the data with zstd.decompress() first."
                 )
             raise Exception(
-                "Expected scalgoproto magic %08X but got %08X" % (MESSAGE_MAGIC, magic)
+                f"Expected scalgoproto magic {MESSAGE_MAGIC:08X} but got {magic:08X}"
             )
         size = self._read_size(offset, type._MAGIC)
         return type(self, offset + 10, size)
@@ -581,7 +583,7 @@ class BytesOut:
 
 
 class TableOut:
-    __slots__ = ["_writer", "_offset"]
+    __slots__ = ["_offset", "_writer"]
     _MAGIC: ClassVar[int] = 0
     _SIZE: ClassVar[int] = 0
     _DEFAULT: ClassVar[bytes] = b""
@@ -685,7 +687,7 @@ class TableOut:
 
 
 class UnionOut:
-    __slots__ = ["_writer", "_offset", "_end"]
+    __slots__ = ["_end", "_offset", "_writer"]
 
     def __init__(self, writer: "Writer", offset: int, end: int) -> None:
         self._writer = writer

@@ -9,6 +9,7 @@ from .documents import Documents
 from .error import error
 from .keywords import keywords
 from .parser import (
+    ICE,
     AstNode,
     Enum,
     Namespace,
@@ -18,7 +19,6 @@ from .parser import (
     TokenType,
     Union,
     Value,
-    ICE,
 )
 from .util import ucamel
 
@@ -92,11 +92,11 @@ class Annotater:
         if name[0].isupper() or name.count("_") or not name.isidentifier():
             self.error(t, "Name must be CamelCase")
         if name in keywords:
-            self.error(t, "Illegal name '%s'" % name)
-        hasName = "has%s%s" % (name[0].upper(), name[1:]) if has else None
-        isName = "is%s%s" % (name[0].upper(), name[1:]) if is_ else None
-        getName = "get%s%s" % (name[0].upper(), name[1:]) if has else None
-        addName = "add%s%s" % (name[0].upper(), name[1:]) if is_ else None
+            self.error(t, f"Illegal name '{name}'")
+        hasName = f"has{name[0].upper()}{name[1:]}" if has else None
+        isName = f"is{name[0].upper()}{name[1:]}" if is_ else None
+        getName = f"get{name[0].upper()}{name[1:]}" if has else None
+        addName = f"add{name[0].upper()}{name[1:]}" if is_ else None
 
         for n in [name, hasName, isName, getName, addName]:
             if n and n in seen:
@@ -550,7 +550,7 @@ class Annotater:
             self.outer = node
             if isinstance(node, Struct):
                 assert node.identifier is not None
-                self.context = "struct %s" % self.value(node.identifier)
+                self.context = f"struct {self.value(node.identifier)}"
                 name = self.validate_uname(node.identifier)
                 node.name = name
                 self.attach_namespace(node)
@@ -563,7 +563,7 @@ class Annotater:
                 if node.removed:
                     continue
                 assert node.identifier is not None
-                self.context = "enum %s" % self.value(node.identifier)
+                self.context = f"enum {self.value(node.identifier)}"
                 name = self.validate_uname(node.identifier)
                 node.name = name
                 self.attach_namespace(node)
@@ -571,7 +571,7 @@ class Annotater:
                 self.enums[name] = node
             elif isinstance(node, Table):
                 assert node.identifier is not None
-                self.context = "table %s" % self.value(node.identifier)
+                self.context = f"table {self.value(node.identifier)}"
                 name = self.validate_uname(node.identifier)
                 node.name = name
                 self.attach_namespace(node)
@@ -585,7 +585,7 @@ class Annotater:
                 self.tables[name] = node
             elif isinstance(node, Union):
                 assert node.identifier is not None
-                self.context = "union %s" % self.value(node.identifier)
+                self.context = f"union {self.value(node.identifier)}"
                 name = self.validate_uname(node.identifier)
                 node.name = name
                 self.attach_namespace(node)

@@ -6,11 +6,11 @@ import argparse
 import sys
 
 from . import (
-    ts_generator,
     cpp_generator,
     magic,
     python_generator,
     rust_generator,
+    ts_generator,
     validate,
 )
 

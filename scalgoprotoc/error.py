@@ -1,5 +1,6 @@
 import sys
 from tokenize import Token
+
 from .documents import Documents
 
 
@@ -24,8 +25,7 @@ def error(
             t += 1
         idx += 1
     print(
-        "%s:%s: %s in %s: %s"
-        % (documents.by_id[token.document].path, cnt, error, context, message),
+        f"{documents.by_id[token.document].path}:{cnt}: {error} in {context}: {message}",
         file=sys.stderr,
     )
     end = start
@@ -33,6 +33,6 @@ def error(
         end += 1
     print(data[start:end], file=sys.stderr)
     print(
-        "%s%s%s" % ("\t" * t, " " * (token.index - start - t), "^" * (token.length)),
+        "{}{}{}".format("\t" * t, " " * (token.index - start - t), "^" * (token.length)),
         file=sys.stderr,
     )

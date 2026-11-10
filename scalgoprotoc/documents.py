@@ -1,5 +1,5 @@
-import typing as ty
 import os
+import typing as ty
 
 
 class Document(ty.NamedTuple):
@@ -33,7 +33,7 @@ class Documents:
 
     def read(self, name: str):
         for p in self.lookup:
-            path = os.path.join(p, "%s.spr" % name)
+            path = os.path.join(p, f"{name}.spr")
             if os.path.isfile(path):
                 data = open(path).read()
                 doc = Document(len(self.by_id), name, path, data)
