@@ -339,6 +339,10 @@ def main():
         runTest("py out complex", lambda: runPy("out_complex", "test/complex.bin"))
         runTest("py in complex", lambda: runPy("in_complex", "test/complex.bin"))
         runTest("py in complex3", lambda: runPy("in_complex3", "test/complex.bin"))
+        runTest(
+            "py in short complex3",
+            lambda: runPy("in_short_complex3", "test/complex.bin"),
+        )
         runTest("py out complex2", lambda: runPy("out_complex2", "test/complex2.bin"))
         runTest("py in complex2", lambda: runPy("in_complex2", "test/complex2.bin"))
         runTest("py out inplace", lambda: runPy("out_inplace", "test/inplace.bin"))
