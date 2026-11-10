@@ -14,3 +14,6 @@ It is possible to make changes to a schema such that a new message can be read b
 
 ### Binary coding
 A message is coded in a packed binary format, such that any member in any object in the message can be accessed in constant time with a small constant. Structs and basic types are coded like they would be in c on an X64 with #pragma pack(1). Objects such as tables, lists, bytes, and texts, are encoded with a 32bit magic number followed by their size followed by the encoding of their content. For a full description of the encoding see [doc/binary_coding.md](doc/binary_coding.md).
+
+### TypeScript
+See [doc/typescript.md](doc/typescript.md) for how to use the TypeScript reader and writer.

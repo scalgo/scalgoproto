@@ -2,10 +2,10 @@
 import * as scalgoproto from 'scalgoproto'
 import * as union from 'union'
 
-import {bc, readIn, require1, require2, validateOut} from './test_base'
+import {bc, newWriter, readMessage, require1, require2, validateOut} from './test_base'
 
 function forCopy(): union.Table3In {
-	const w = new scalgoproto.Writer();
+	const w = newWriter();
 	const root = w.constructTable(union.Table3Out);
 
 	const v1 = root.addV1();
@@ -25,12 +25,12 @@ function forCopy(): union.Table3In {
 	v4.b.addV4().a = 104;
 
 	const v5 = root.addV5();
-	v5.a.addV5(1)[0] = 'ctext3';
-	v5.b.addV5(1)[0] = 'ctext4';
+	v5.a.addV5(1).set(0, 'ctext3');
+	v5.b.addV5(1).set(0, 'ctext4');
 
 	const v6 = root.addV6();
-	v6.a.addV6(1)[0] = bc('cbytes3');
-	v6.b.addV6(1)[0] = bc('cbytes4');
+	v6.a.addV6(1).set(0, bc('cbytes3'));
+	v6.b.addV6(1).set(0, bc('cbytes4'));
 
 	const v7 = root.addV7();
 	v7.a.addV7(1).add(0).a = 105;
@@ -41,12 +41,12 @@ function forCopy(): union.Table3In {
 	v8.b.addV8(1).add(0).a = 108;
 
 	const v9 = root.addV9();
-	v9.a.addV9(1)[0] = 109;
-	v9.b.addV9(1)[0] = 110;
+	v9.a.addV9(1).set(0, 109);
+	v9.b.addV9(1).set(0, 110);
 
 	const v10 = root.addV10();
-	v10.a.addV10(1)[0] = true;
-	v10.b.addV10(1)[0] = true;
+	v10.a.addV10(1).set(0, true);
+	v10.b.addV10(1).set(0, true);
 
 	const d = w.finalize(root);
 
@@ -57,7 +57,7 @@ function forCopy(): union.Table3In {
 function test_out_union(path: string): boolean {
 	const i = forCopy();
 
-	const w = new scalgoproto.Writer();
+	const w = newWriter();
 	const root = w.constructTable(union.Table3Out);
 
 	const v1 = root.addV1()
@@ -93,20 +93,20 @@ function test_out_union(path: string): boolean {
 	v4.e.v4 = i.v4!.b.v4!;
 
 	const v5 = root.addV5();
-	v5.a.addV5(1)[0] = 'text4';
-	v5.b.addV5(1)[0] = 'text5';
+	v5.a.addV5(1).set(0, 'text4');
+	v5.b.addV5(1).set(0, 'text5');
 	const t5 = w.constructTextList(1);
-	t5[0] = 'text6';
+	t5.set(0, 'text6');
 	v5.c.v5 = t5;
 	v5.d.v5 = i.v5!.a.v5!;
 	v5.e.v5 = i.v5!.b.v5!;
 
 	const v6 = root.addV6();
-	v6.a.addV6(1)[0] = bc('bytes4');
+	v6.a.addV6(1).set(0, bc('bytes4'));
 	const tt6 = v6.b.addV6(1);
-	tt6[0] = w.constructBytes(bc('bytes5'));
+	tt6.set(0, w.constructBytes(bc('bytes5')));
 	const t6 = w.constructBytesList(1);
-	t6[0] = w.constructBytes(bc('bytes6'));
+	t6.set(0, w.constructBytes(bc('bytes6')));
 	v6.c.v6 = t6;
 	v6.d.v6 = i.v6!.a.v6!;
 	v6.e.v6 = i.v6!.b.v6!;
@@ -114,7 +114,7 @@ function test_out_union(path: string): boolean {
 	const v7 = root.addV7();
 	v7.a.addV7(1).add(0).a = 7;
 	v7.b.addV7(1).add(0).a = 8;
-	const t7 = w.constructTableList(union.Table1Out, 1);
+	const t7 = w.constructList(union.Table1_ListOut, 1);
 	t7.add(0).a = 9;
 	v7.c.v7 = t7;
 	v7.d.v7 = i.v7!.a.v7!;
@@ -123,26 +123,26 @@ function test_out_union(path: string): boolean {
 	const v8 = root.addV8();
 	v8.a.addV8(1).add(0).a = 10;
 	v8.b.addV8(1).add(0).a = 11;
-	const t8 = w.constructTableList(union.Union1V8Out, 1);
+	const t8 = w.constructList(union.Union1V8_ListOut, 1);
 	t8.add(0).a = 12;
 	v8.c.v8 = t8;
 	v8.d.v8 = i.v8!.a.v8!;
 	v8.e.v8 = i.v8!.b.v8!;
 
 	const v9 = root.addV9();
-	v9.a.addV9(1)[0] = 13;
-	v9.b.addV9(1)[0] = 14;
+	v9.a.addV9(1).set(0, 13);
+	v9.b.addV9(1).set(0, 14);
 	const t9 = w.constructUint32List(1);
-	t9[0] = 15;
+	t9.set(0, 15);
 	v9.c.v9 = t9;
 	v9.d.v9 = i.v9!.a.v9!;
 	v9.e.v9 = i.v9!.b.v9!;
 
 	const v10 = root.addV10();
-	v10.a.addV10(1)[0] = true;
-	v10.b.addV10(1)[0] = false;
+	v10.a.addV10(1).set(0, true);
+	v10.b.addV10(1).set(0, false);
 	const t10 = w.constructBoolList(1);
-	t10[0] = true;
+	t10.set(0, true);
 	v10.c.v10 = t10;
 	v10.d.v10 = i.v10!.a.v10!;
 	v10.e.v10 = i.v10!.b.v10!;
@@ -152,8 +152,7 @@ function test_out_union(path: string): boolean {
 }
 
 function test_in_union(path: string): boolean {
-	const o = readIn(path);
-	const r = new scalgoproto.Reader(o);
+	const r = new scalgoproto.Reader(readMessage(path));
 	const i = r.root(union.Table3In);
 
 	if (require1(i.v1 !== null, true)) return false;
@@ -192,60 +191,60 @@ function test_in_union(path: string): boolean {
 
 	if (require1(i.v5 !== null, true)) return false;
 	const v5 = i.v5!;
-	if (require2(v5.a.isV5 && v5.a.v5!.length == 1, v5.a.v5![0], 'text4')) return false;
-	if (require2(v5.b.isV5 && v5.b.v5!.length == 1, v5.b.v5![0], 'text5')) return false;
-	if (require2(v5.c.isV5 && v5.c.v5!.length == 1, v5.c.v5![0], 'text6')) return false;
-	if (require2(v5.d.isV5 && v5.d.v5!.length == 1, v5.d.v5![0], 'ctext3')) return false;
-	if (require2(v5.e.isV5 && v5.e.v5!.length == 1, v5.e.v5![0], 'ctext4')) return false;
+	if (require2(v5.a.isV5 && v5.a.v5!.length == 1, v5.a.v5!.get(0), 'text4')) return false;
+	if (require2(v5.b.isV5 && v5.b.v5!.length == 1, v5.b.v5!.get(0), 'text5')) return false;
+	if (require2(v5.c.isV5 && v5.c.v5!.length == 1, v5.c.v5!.get(0), 'text6')) return false;
+	if (require2(v5.d.isV5 && v5.d.v5!.length == 1, v5.d.v5!.get(0), 'ctext3')) return false;
+	if (require2(v5.e.isV5 && v5.e.v5!.length == 1, v5.e.v5!.get(0), 'ctext4')) return false;
 
 	if (require1(i.v6 !== null, true)) return false;
 	const v6 = i.v6!;
-	if (require2(v6.a.isV6 && v6.a.v6!.length == 1, v6.a.v6![0], bc('bytes4')))
+	if (require2(v6.a.isV6 && v6.a.v6!.length == 1, v6.a.v6!.get(0), bc('bytes4')))
 		return false;
-	if (require2(v6.b.isV6 && v6.b.v6!.length == 1, v6.b.v6![0], bc('bytes5')))
+	if (require2(v6.b.isV6 && v6.b.v6!.length == 1, v6.b.v6!.get(0), bc('bytes5')))
 		return false;
-	if (require2(v6.c.isV6 && v6.c.v6!.length == 1, v6.c.v6![0], bc('bytes6')))
+	if (require2(v6.c.isV6 && v6.c.v6!.length == 1, v6.c.v6!.get(0), bc('bytes6')))
 		return false;
-	if (require2(v6.d.isV6 && v6.d.v6!.length == 1, v6.d.v6![0], bc('cbytes3')))
+	if (require2(v6.d.isV6 && v6.d.v6!.length == 1, v6.d.v6!.get(0), bc('cbytes3')))
 		return false;
-	if (require2(v6.e.isV6 && v6.e.v6!.length == 1, v6.e.v6![0], bc('cbytes4')))
+	if (require2(v6.e.isV6 && v6.e.v6!.length == 1, v6.e.v6!.get(0), bc('cbytes4')))
 		return false;
 
 	if (require1(i.v7 !== null, true)) return false;
 	const v7 = i.v7!;
-	if (require2(v7.a.isV7 && v7.a.v7!.length == 1, v7.a.v7![0]!.a, 7)) return false;
-	if (require2(v7.b.isV7 && v7.b.v7!.length == 1, v7.b.v7![0]!.a, 8)) return false;
-	if (require2(v7.c.isV7 && v7.c.v7!.length == 1, v7.c.v7![0]!.a, 9)) return false;
-	if (require2(v7.d.isV7 && v7.d.v7!.length == 1, v7.d.v7![0]!.a, 105)) return false;
-	if (require2(v7.e.isV7 && v7.e.v7!.length == 1, v7.e.v7![0]!.a, 106)) return false;
+	if (require2(v7.a.isV7 && v7.a.v7!.length == 1, v7.a.v7!.get(0)!.a, 7)) return false;
+	if (require2(v7.b.isV7 && v7.b.v7!.length == 1, v7.b.v7!.get(0)!.a, 8)) return false;
+	if (require2(v7.c.isV7 && v7.c.v7!.length == 1, v7.c.v7!.get(0)!.a, 9)) return false;
+	if (require2(v7.d.isV7 && v7.d.v7!.length == 1, v7.d.v7!.get(0)!.a, 105)) return false;
+	if (require2(v7.e.isV7 && v7.e.v7!.length == 1, v7.e.v7!.get(0)!.a, 106)) return false;
 
 	if (require1(i.v8 !== null, true)) return false;
 	const v8 = i.v8!;
-	if (require2(v8.a.isV8 && v8.a.v8!.length == 1, v8.a.v8![0]!.a, 10)) return false;
-	if (require2(v8.b.isV8 && v8.b.v8!.length == 1, v8.b.v8![0]!.a, 11)) return false;
-	if (require2(v8.c.isV8 && v8.c.v8!.length == 1, v8.c.v8![0]!.a, 12)) return false;
-	if (require2(v8.d.isV8 && v8.d.v8!.length == 1, v8.d.v8![0]!.a, 107)) return false;
-	if (require2(v8.e.isV8 && v8.e.v8!.length == 1, v8.e.v8![0]!.a, 108)) return false;
+	if (require2(v8.a.isV8 && v8.a.v8!.length == 1, v8.a.v8!.get(0)!.a, 10)) return false;
+	if (require2(v8.b.isV8 && v8.b.v8!.length == 1, v8.b.v8!.get(0)!.a, 11)) return false;
+	if (require2(v8.c.isV8 && v8.c.v8!.length == 1, v8.c.v8!.get(0)!.a, 12)) return false;
+	if (require2(v8.d.isV8 && v8.d.v8!.length == 1, v8.d.v8!.get(0)!.a, 107)) return false;
+	if (require2(v8.e.isV8 && v8.e.v8!.length == 1, v8.e.v8!.get(0)!.a, 108)) return false;
 
 	if (require1(i.v8 !== null, true)) return false;
 	const v9 = i.v9!;
-	if (require2(v9.a.isV9 && v9.a.v9!.length == 1, v9.a.v9![0], 13)) return false;
-	if (require2(v9.b.isV9 && v9.b.v9!.length == 1, v9.b.v9![0], 14)) return false;
-	if (require2(v9.c.isV9 && v9.c.v9!.length == 1, v9.c.v9![0], 15)) return false;
-	if (require2(v9.d.isV9 && v9.d.v9!.length == 1, v9.d.v9![0], 109)) return false;
-	if (require2(v9.e.isV9 && v9.e.v9!.length == 1, v9.e.v9![0], 110)) return false;
+	if (require2(v9.a.isV9 && v9.a.v9!.length == 1, v9.a.v9!.get(0), 13)) return false;
+	if (require2(v9.b.isV9 && v9.b.v9!.length == 1, v9.b.v9!.get(0), 14)) return false;
+	if (require2(v9.c.isV9 && v9.c.v9!.length == 1, v9.c.v9!.get(0), 15)) return false;
+	if (require2(v9.d.isV9 && v9.d.v9!.length == 1, v9.d.v9!.get(0), 109)) return false;
+	if (require2(v9.e.isV9 && v9.e.v9!.length == 1, v9.e.v9!.get(0), 110)) return false;
 
 	if (require1(i.v10 !== null, true)) return false;
 	const v10 = i.v10!;
-	if (require2(v10.a.isV10 && v10.a.v10!.length == 1, v10.a.v10![0], true))
+	if (require2(v10.a.isV10 && v10.a.v10!.length == 1, v10.a.v10!.get(0), true))
 		return false;
-	if (require2(v10.b.isV10 && v10.b.v10!.length == 1, v10.b.v10![0], false))
+	if (require2(v10.b.isV10 && v10.b.v10!.length == 1, v10.b.v10!.get(0), false))
 		return false;
-	if (require2(v10.c.isV10 && v10.c.v10!.length == 1, v10.c.v10![0], true))
+	if (require2(v10.c.isV10 && v10.c.v10!.length == 1, v10.c.v10!.get(0), true))
 		return false;
-	if (require2(v10.d.isV10 && v10.d.v10!.length == 1, v10.d.v10![0], true))
+	if (require2(v10.d.isV10 && v10.d.v10!.length == 1, v10.d.v10!.get(0), true))
 		return false;
-	if (require2(v10.e.isV10 && v10.e.v10!.length == 1, v10.e.v10![0], true))
+	if (require2(v10.e.isV10 && v10.e.v10!.length == 1, v10.e.v10!.get(0), true))
 		return false;
 
 	return true;

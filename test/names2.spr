@@ -1,0 +1,12 @@
+import names
+
+// A local type with the name the inplace writer of the imported union Choice would
+// have if generated names were not collision safe
+struct ChoiceInplaceOut {
+	x: U32;
+}
+
+table User @5E3A9C19 {
+	c: Choice;
+	s: ChoiceInplaceOut;
+}

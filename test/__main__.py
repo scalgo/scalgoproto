@@ -6,7 +6,6 @@ import os
 import subprocess
 import sys
 import tempfile
-import json
 import shutil
 from collections.abc import Callable
 
@@ -93,49 +92,52 @@ def runPySetup(schemas: list[str]) -> bool:
 def runPy(name: str, bin: str, mod="test_base.py") -> bool:
     subprocess.check_call(
         ["python3", "test/%s" % mod, name, bin],
-        env={"PYTHONPATH": "lib/python:tmp:test"},
+        env={**os.environ, "PYTHONPATH": "lib/python:tmp:test"},
     )
     return True
 
 
 def runTsSetup(schemas: list[str]) -> bool:
-    if os.path.exists("test/node_modules/.bin/ts-node"):
+    if os.path.exists("test/node_modules/.bin/tsx"):
         pass
     elif shutil.which("pnpm"):
         subprocess.check_call(["pnpm", "install"], cwd="test")
     elif shutil.which("npm"):
         subprocess.check_call(["npm", "install"], cwd="test")
     else:
-        print("Run pnpm i (or npm i) in test/ to install ts-node")
+        print("Run pnpm i (or npm i) in test/ to install tsx and typescript")
         return False
-    if not os.path.exists("test/node_modules/.bin/ts-node"):
-        print("ts-node not found after install")
+    if not os.path.exists("test/node_modules/.bin/tsx"):
+        print("tsx not found after install")
         return False
     for schema in schemas:
         subprocess.check_call(["python3", "-m", "scalgoprotoc", "ts", schema, "tmp"])
+    # Type check the library, the generated code and the tests
+    subprocess.check_call(["./node_modules/.bin/tsc", "-p", "."], cwd="test/")
     return True
 
 
-def runTs(name: str, bin: str, mod="test_base.ts") -> bool:
+def runTs(
+    name: str, bin: str, mod="test_base.ts", shift: int = 0, capacity: int = 0
+) -> bool:
+    """Run a TS test. For reading tests, shift places the message at an
+    unaligned offset in memory. For writing tests, capacity is the initial
+    capacity of the writer; a small one makes it grow its buffer often"""
+    env = dict(os.environ)
+    if shift:
+        env["SP_SHIFT"] = str(shift)
+    if capacity:
+        env["SP_WRITER_CAPACITY"] = str(capacity)
     subprocess.check_call(
-        [
-            "./node_modules/.bin/ts-node",
-            "-r",
-            "tsconfig-paths/register",
-            "--compiler-options",
-            json.dumps(
-                {
-                    "module": "commonjs",
-                    "strict": True,
-                    "rootDirs": [os.path.abspath("lib/ts")],
-                }
-            ),
-            "./%s" % mod,
-            name,
-            bin,
-        ],
+        ["./node_modules/.bin/tsx", "./%s" % mod, name, bin],
         cwd="test/",
+        env=env,
     )
+    return True
+
+
+def runTsScript(script: str) -> bool:
+    subprocess.check_call(["./node_modules/.bin/tsx", "./%s" % script], cwd="test/")
     return True
 
 
@@ -287,8 +289,10 @@ def main():
     ):
         runTest(
             "cpp mmap stress test",
-            lambda: subprocess.check_call(["tmp/bin", "mmap_stress", "test/mmap.bin"])
-            or True,
+            lambda: (
+                subprocess.check_call(["tmp/bin", "mmap_stress", "test/mmap.bin"])
+                or True
+            ),
         )
         runTest(
             "cpp out default simple",
@@ -356,7 +360,16 @@ def main():
 
     if runTest(
         "ts setup",
-        lambda: runTsSetup(["test/base.spr", "test/complex2.spr", "test/union.spr"]),
+        lambda: runTsSetup(
+            [
+                "test/base.spr",
+                "test/complex2.spr",
+                "test/union.spr",
+                "test/read.spr",
+                "test/names.spr",
+                "test/names2.spr",
+            ]
+        ),
     ):
         runTest(
             "ts out default simple",
@@ -378,6 +391,34 @@ def main():
         runTest("ts in extend1", lambda: runTs("in_extend1", "test/extend1.bin"))
         runTest("ts out extend2", lambda: runTs("out_extend2", "test/extend2.bin"))
         runTest("ts in extend2", lambda: runTs("in_extend2", "test/extend2.bin"))
+        for name, bin in [
+            ("in_default", "test/simple_default.bin"),
+            ("in", "test/simple.bin"),
+            ("in_complex", "test/complex.bin"),
+            ("in_complex2", "test/complex2.bin"),
+            ("in_inplace", "test/inplace.bin"),
+            ("in_extend1", "test/extend1.bin"),
+            ("in_extend2", "test/extend2.bin"),
+        ]:
+            runTest(
+                "ts %s unaligned" % name.replace("_", " "),
+                lambda name=name, bin=bin: runTs(name, bin, shift=3),
+            )
+        for name, bin in [
+            ("out_default", "test/simple_default.bin"),
+            ("out", "test/simple.bin"),
+            ("out_complex", "test/complex.bin"),
+            ("out_complex2", "test/complex2.bin"),
+            ("out_inplace", "test/inplace.bin"),
+            ("out_extend1", "test/extend1.bin"),
+            ("out_extend2", "test/extend2.bin"),
+        ]:
+            runTest(
+                "ts %s small buffer" % name.replace("_", " "),
+                lambda name=name, bin=bin: runTs(name, bin, capacity=16),
+            )
+        runTest("ts read", lambda: runTsScript("test_read.ts"))
+        runTest("ts write", lambda: runTsScript("test_write.ts"))
 
     if runTest("ts setup union", lambda: runTsSetup(["test/union.spr"])):
         runTest(
@@ -386,6 +427,14 @@ def main():
         )
         runTest(
             "ts in union", lambda: runTs("in_union", "test/union.bin", "test_union.ts")
+        )
+        runTest(
+            "ts out union small buffer",
+            lambda: runTs("out_union", "test/union.bin", "test_union.ts", capacity=16),
+        )
+        runTest(
+            "ts in union unaligned",
+            lambda: runTs("in_union", "test/union.bin", "test_union.ts", shift=3),
         )
 
     if runTest(
