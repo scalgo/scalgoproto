@@ -15,6 +15,14 @@ struct Infinity {
 	x: U32;
 }
 
+struct Array {
+	x: U32;
+}
+
+table Inner @5E3A9C18 {
+	t: Text;
+}
+
 table Names @5E3A9C17 {
 	amount: U64;
 	amountBigInt: U32;
@@ -26,4 +34,6 @@ table Names @5E3A9C17 {
 	b: Bytes;
 	bl: list Bytes;
 	dl: list DataView;
+	al: list Array;
+	nl: direct list Inner;
 }

@@ -425,7 +425,7 @@ class Generator:
             elif spec[0] == "bit":
                 self.o("\t%s: globalThis.Uint8Array;" % spec[1])
             else:
-                self.o("\t%s: Array<%s>;" % (spec[1], spec[2]))
+                self.o("\t%s: globalThis.Array<%s>;" % (spec[1], spec[2]))
         self.o("}")
         self.o()
 
@@ -450,7 +450,10 @@ class Generator:
             elif spec[0] == "bit":
                 self.o("\t\tconst c_%s = new globalThis.Uint8Array(_n);" % spec[1])
             else:
-                self.o("\t\tconst c_%s = new Array<%s>(_n);" % (spec[1], spec[2]))
+                self.o(
+                    "\t\tconst c_%s = new globalThis.Array<%s>(_n);"
+                    % (spec[1], spec[2])
+                )
         objs = [spec for spec in specs if spec[0] == "obj"]
         if cursor:
             self.o("\t\tconst c = this.cursor();")
@@ -535,9 +538,9 @@ class Generator:
         self.o("\t\tfor (let i = 0; i < n; ++i) fn(this.get(i), i);")
         self.o("\t}")
         self.o()
-        self.o("\ttoArray(): Array<%s> {" % t)
+        self.o("\ttoArray(): globalThis.Array<%s> {" % t)
         self.o("\t\tconst n = this.length;")
-        self.o("\t\tconst ans = new Array<%s>(n);" % t)
+        self.o("\t\tconst ans = new globalThis.Array<%s>(n);" % t)
         self.o("\t\tfor (let i = 0; i < n; ++i) ans[i] = this.get(i);")
         self.o("\t\treturn ans;")
         self.o("\t}")
