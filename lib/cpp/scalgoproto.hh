@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <fcntl.h>
 #include <limits>
 #include <memory>
@@ -13,8 +14,10 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <type_traits>
 #include <unistd.h>
 #include <utility>
+#include <vector>
 
 namespace scalgoproto {
 
@@ -55,6 +58,12 @@ class DirectListOut;
 template <typename T>
 class DirectListIn;
 
+template <typename T>
+class JaggedDirectListIn;
+
+template <typename, typename, typename>
+class JaggedOut;
+
 template <typename, typename>
 class ListAccessHelp;
 
@@ -86,6 +95,17 @@ class TooLargeItemSizeError: public Error {
 public:
 	size_t size;
 	TooLargeItemSizeError(size_t size) : Error("too large item size"), size(size) {}
+};
+
+/**
+ * Claim state of a JaggedOut, shared by its copies. The Writer keeps a
+ * reference to it so that finalize can check that every child range was claimed.
+ */
+struct JaggedState_ {
+	std::uint64_t total;
+	std::uint64_t cursor = 0;
+	std::uint64_t nextElement = 0;
+	JaggedState_(std::uint64_t total): total(total) {}
 };
 
 class TextOut {
@@ -184,6 +204,27 @@ static inline void write48_(char * data, std::uint64_t v) noexcept {
 	assert((v & 0xFFFF000000000000ul) == 0);
 	memcpy(data, &v, 6);
 }
+
+template <typename T>
+static inline T readPod_(const char * data) noexcept {
+	T ans;
+	memcpy(&ans, data, sizeof(T));
+	return ans;
+}
+
+/**
+ * A list that jagged members name, looked up once by the table that holds
+ * it. `error` holds the exception of a failed lookup, rethrown on use.
+ */
+struct JaggedList_ {
+	Ptr ptr{nullptr, 0};
+	std::uint32_t itemSize = 0;
+	std::exception_ptr error;
+
+	void check() const {
+		if (error) std::rethrow_exception(error);
+	}
+};
 
 class Reader {
 private:
@@ -728,6 +769,9 @@ public:
 template <typename T>
 class DirectListIn : public In {
 	friend class In;
+	template <typename>
+	friend class JaggedDirectListIn;
+	friend struct JaggedLookup_;
 	const Reader * reader_;
 	const char * start_;
 	const std::uint64_t size_;
@@ -754,6 +798,13 @@ class DirectListIn : public In {
 		, start_(p.start+8)
 		, size_(p.size)
 		, item_size_(p.size == 0 ? 1 : parse_header(reader, p)) {}
+
+	// A list whose header was already checked, as in a JaggedList_.
+	DirectListIn(const Reader * reader, const JaggedList_ & l) noexcept
+		: reader_(reader)
+		, start_(l.ptr.start)
+		, size_(l.ptr.size)
+		, item_size_(l.itemSize) {}
 public:
 	using value_type = T;
 	using size_type = std::size_t;
@@ -777,6 +828,144 @@ public:
 	}
 };
 
+
+template <typename T, typename = void>
+struct JaggedCtxOf_ {
+	using type = char;
+};
+
+template <typename T>
+struct JaggedCtxOf_<T, std::void_t<typename T::JaggedCtx>> {
+	using type = typename T::JaggedCtx;
+};
+
+/**
+ * Reader of a direct list of tables that have jagged members. Unlike
+ * DirectListIn, it gives each element the looked-up lists that its jagged
+ * members name, and the location of the next element in the list.
+ */
+template <typename T>
+class JaggedDirectListIn : public In {
+	using Ctx = typename JaggedCtxOf_<T>::type;
+	const Reader * reader_;
+	const char * start_;
+	std::uint64_t size_;
+	std::uint32_t itemSize_;
+	Ctx ctx_;
+
+public:
+	using value_type = T;
+	using size_type = std::size_t;
+
+	class iterator {
+		const JaggedDirectListIn * list_;
+		std::uint64_t index_;
+		friend class JaggedDirectListIn;
+		iterator(const JaggedDirectListIn * list, std::uint64_t index) noexcept
+			: list_(list), index_(index) {}
+	public:
+		using value_type = T;
+		using difference_type = std::ptrdiff_t;
+		using pointer = T *;
+		using reference = T &;
+		using iterator_category = std::random_access_iterator_tag;
+
+		value_type operator*() const { return (*list_)[index_]; }
+		bool operator==(const iterator & o) const noexcept { return index_ == o.index_; }
+		bool operator!=(const iterator & o) const noexcept { return index_ != o.index_; }
+		bool operator<(const iterator & o) const noexcept { return index_ < o.index_; }
+		iterator & operator++() noexcept {
+			++index_;
+			return *this;
+		}
+		iterator operator++(int) noexcept {
+			iterator t = *this;
+			++index_;
+			return t;
+		}
+		iterator & operator+=(difference_type d) noexcept {
+			index_ += d;
+			return *this;
+		}
+		iterator operator+(difference_type d) const noexcept {
+			iterator t = *this;
+			t += d;
+			return t;
+		}
+		difference_type operator-(const iterator & o) const noexcept {
+			return difference_type(index_) - difference_type(o.index_);
+		}
+	};
+
+	JaggedDirectListIn(DirectListIn<T> l, const Ctx & ctx) noexcept
+		: reader_(l.reader_), start_(l.start_), size_(l.size_), itemSize_(l.item_size_), ctx_(ctx) {}
+
+	JaggedDirectListIn(const Reader * reader, const JaggedList_ & l, const Ctx & ctx) noexcept
+		: reader_(reader), start_(l.ptr.start), size_(l.ptr.size), itemSize_(l.itemSize), ctx_(ctx) {}
+
+	size_type size() const noexcept { return size_; }
+	bool empty() const noexcept { return size_ == 0; }
+	iterator begin() const noexcept { return iterator(this, 0); }
+	iterator end() const noexcept { return iterator(this, size_); }
+	value_type front() const { return (*this)[0]; }
+	value_type back() const { return (*this)[size_ - 1]; }
+	value_type at(size_type pos) const {
+		if (pos >= size_) throw std::out_of_range("out of range");
+		return (*this)[pos];
+	}
+	value_type operator[](size_type pos) const {
+		assert(pos < size_);
+		const char * e = start_ + pos * itemSize_;
+		return T(reader_, Ptr{e, itemSize_}, ctx_, pos + 1 < size_ ? e + itemSize_ : nullptr);
+	}
+};
+
+/// Looks up the lists that jagged members name, for JaggedList_.
+struct JaggedLookup_ : public In {
+	template <typename T>
+	static JaggedList_ directList(const Reader * reader, Ptr p) {
+		DirectListIn<T> l = getObject_<DirectListIn<T>>(reader, p);
+		JaggedList_ ans;
+		ans.ptr = Ptr{l.start_, l.size_};
+		ans.itemSize = l.item_size_;
+		return ans;
+	}
+};
+
+/**
+ * A contiguous range [offset(), offset() + size()) of a list L, such as the
+ * children that an element of a jagged list owns.
+ */
+template <typename L>
+class ListSlice {
+	L list_;
+	std::uint64_t begin_;
+	std::uint64_t end_;
+public:
+	using value_type = typename L::value_type;
+	using size_type = std::size_t;
+	using iterator = typename L::iterator;
+
+	ListSlice(L list, std::uint64_t begin, std::uint64_t end) noexcept
+		: list_(list), begin_(begin), end_(end) {}
+
+	/// Index of the first element in the underlying list.
+	std::uint64_t offset() const noexcept { return begin_; }
+	size_type size() const noexcept { return end_ - begin_; }
+	bool empty() const noexcept { return begin_ == end_; }
+	iterator begin() const noexcept { return list_.begin() + begin_; }
+	iterator end() const noexcept { return list_.begin() + end_; }
+	value_type front() const { return (*this)[0]; }
+	value_type back() const { return (*this)[size() - 1]; }
+	value_type at(size_type pos) const {
+		if (pos >= size()) throw std::out_of_range("out of range");
+		return (*this)[pos];
+	}
+	value_type operator[](size_type pos) const {
+		assert(pos < size());
+		return list_[begin_ + pos];
+	}
+};
 
 class TableIn : public In {
 protected:
@@ -953,6 +1142,8 @@ class DirectListOut {
 protected:
 	friend class Writer;
 	friend class Out;
+	template <typename, typename, typename>
+	friend class JaggedOut;
 	Writer & writer_;
 	std::uint64_t offset_;
 	std::uint64_t size_;
@@ -971,6 +1162,13 @@ public:
 	std::uint64_t size() const noexcept { return size_; }
 
 	DirectListOut & copy_(const DirectListIn<typename T::IN> in) {
+		assert(in.size() == size());
+		for (size_t i=0; i < size(); ++i)
+			(*this)[i].copy_(in[i]);
+		return *this;
+	}
+
+	DirectListOut & copy_(const JaggedDirectListIn<typename T::IN> & in) {
 		assert(in.size() == size());
 		for (size_t i=0; i < size(); ++i)
 			(*this)[i].copy_(in[i]);
@@ -1091,6 +1289,7 @@ private:
 	friend class DirectListOut;
 	template <typename, typename>
 	friend class ListAccessHelp;
+	std::vector<std::shared_ptr<JaggedState_>> jagged_;
 	void setCapacity(size_t newCapacity) {
 		if (backing) {
 			data = backing->setCapacity(newCapacity);
@@ -1139,7 +1338,9 @@ public:
 		: backing(std::move(o.backing))
 		, data(o.data)
 		, size(o.size)
-		, capacity(o.capacity) {
+		, capacity(o.capacity)
+		, jagged_(std::move(o.jagged_)) {
+		o.jagged_.clear();
 		o.data = nullptr;
 		o.size = 0;
 		o.capacity = 0;
@@ -1150,6 +1351,8 @@ public:
 		data = o.data;
 		size = o.size;
 		capacity = o.capacity;
+		jagged_ = std::move(o.jagged_);
+		o.jagged_.clear();
 		o.data = nullptr;
 		o.size = 0;
 		o.capacity = 0;
@@ -1163,7 +1366,15 @@ public:
 		capacity = 0;
 	}
 
-	void clear() noexcept { size = 10; }
+	void clear() noexcept {
+		size = 10;
+		jagged_.clear();
+	}
+
+	/// Register a jagged writer view; finalize checks that it is fully claimed.
+	void registerJagged_(std::shared_ptr<JaggedState_> state) {
+		jagged_.push_back(std::move(state));
+	}
 
 	bool isClean() const noexcept { return size == 10; }
 
@@ -1371,6 +1582,8 @@ protected:
 class TableOut : public Out {
 protected:
 	friend class Writer;
+	template <typename, typename, typename>
+	friend class JaggedOut;
 	template <typename, typename>
 	friend class ListAccessHelp;
 
@@ -1439,6 +1652,98 @@ protected:
 		return read48_(writer_.data + offset_ + o);
 	}
 };
+
+/**
+ * A contiguous range [offset(), offset() + size()) of a list L that an element
+ * of a jagged list owns. Writer counterpart of ListSlice.
+ */
+template <typename L>
+class ListSliceOut {
+	L list_;
+	std::uint64_t begin_;
+	std::uint64_t end_;
+public:
+	ListSliceOut(L list, std::uint64_t begin, std::uint64_t end) noexcept
+		: list_(list), begin_(begin), end_(end) {}
+
+	/// Index of the first element in the underlying list.
+	std::uint64_t offset() const noexcept { return begin_; }
+	std::uint64_t size() const noexcept { return end_ - begin_; }
+
+	decltype(auto) operator[](size_t index) {
+		assert(index < size());
+		return list_[begin_ + index];
+	}
+
+	template <typename... TT>
+	decltype(auto) add(size_t index, TT... vv) {
+		assert(index < size());
+		return list_.add(begin_ + index, std::forward<TT>(vv)...);
+	}
+};
+
+/**
+ * Writer view of a jagged list. Elements of `elements` are claimed in
+ * strictly increasing order with add(element, k); each claim gives the element
+ * the next k children of `children`. Elements that are skipped, and elements
+ * after the last claim, own no children. Misuse throws std::logic_error, and
+ * Writer::finalize throws it unless exactly size(children) children were
+ * claimed.
+ *
+ * Copies share their claim state. Do not mix a view with setting the element
+ * offsets directly.
+ */
+template <typename E, typename C, typename F>
+class JaggedOut {
+	E elements_;
+	C children_;
+	F setOffset_;
+	std::shared_ptr<JaggedState_> state_;
+public:
+	using element_type = typename E::value_type;
+
+	JaggedOut(E elements, C children, F setOffset)
+		: elements_(elements)
+		, children_(children)
+		, setOffset_(setOffset)
+		, state_(std::make_shared<JaggedState_>(children.size())) {
+		for (std::uint64_t i = 0; i < elements_.size(); ++i) {
+			auto element = elements_[i];
+			setOffset_(element, state_->total);
+		}
+		elements_.writer_.registerJagged_(state_);
+	}
+
+	/// The shared list that holds the children of all elements.
+	C children() const { return children_; }
+
+	/// Give `element`, an element of the list this view was created for, the next k children.
+	ListSliceOut<C> add(const element_type & element, std::uint64_t k) {
+		auto & st = *state_;
+		std::uint64_t rel = element.offset_ - elements_.offset_;
+		if (&element.writer_ != &elements_.writer_ || element.offset_ < elements_.offset_
+			|| rel % element_type::SIZE != 0 || rel / element_type::SIZE >= elements_.size())
+			throw std::logic_error("jagged add: not an element of the list of this view");
+		std::uint64_t index = rel / element_type::SIZE;
+		if (index < st.nextElement)
+			throw std::logic_error("jagged add: elements must be claimed once, in increasing order");
+		if (k > st.total - st.cursor)
+			throw std::logic_error("jagged add: more children claimed than the total");
+		for (std::uint64_t i = st.nextElement; i <= index; ++i) {
+			auto e = elements_[i];
+			setOffset_(e, st.cursor);
+		}
+		st.nextElement = index + 1;
+		std::uint64_t begin = st.cursor;
+		st.cursor += k;
+		return ListSliceOut<C>(children_, begin, st.cursor);
+	}
+};
+
+template <typename E, typename C, typename F>
+JaggedOut<E, C, F> makeJaggedOut_(E elements, C children, F setOffset) {
+	return JaggedOut<E, C, F>(elements, children, setOffset);
+}
 
 template <typename T>
 ListAccessHelp<BoolTag, T>::Setter::Setter(Writer & writer, std::uint64_t offset,
@@ -1576,6 +1881,9 @@ void ListAccessHelp<UnionTag, T>::copy(Writer & writer, std::uint64_t offset,
 }
 
 Bytes Writer::finalize(const TableOut & root) {
+	for (const auto & j : jagged_)
+		if (j->cursor != j->total)
+			throw std::logic_error("jagged list not fully claimed at finalize");
 	write(ROOTMAGIC, 0);
 	this->write48_(root.offset_ - 10, 4);
 	if (backing) backing->finalizeBacking(size);

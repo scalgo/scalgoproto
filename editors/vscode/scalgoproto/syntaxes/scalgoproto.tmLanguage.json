@@ -78,7 +78,7 @@
 		 },
 		 "lname": {
 			"patterns": [{
-				"match": "\\b(?!(namespace,struct,enum,union,inplace,direct,list,table)\\W)[a-z][a-zA-Z0-9]*\\b",
+				"match": "\\b(?!(namespace,struct,enum,union,inplace,direct,jagged,list,table)\\W)[a-z][a-zA-Z0-9]*\\b",
 				"name": "entity.name.tag.scalgoproto"
 			},{
 				"match": "\\b([A-Z0-9_][_a-zA-Z0-9]\\w*)\\b",
@@ -191,8 +191,16 @@
 			"end": "(;|,)",
 			"patterns": [
 				{
+					"match": "\\b(jagged)\\s+(?:(U8|U16|U32)\\s+)?([a-z][a-zA-Z0-9]*)\\b",
+					"captures": {
+						"1": {"name": "keyword.control.scalgoproto"},
+						"2": {"name": "entity.name.function"},
+						"3": {"name": "entity.name.tag.scalgoproto"}
+					}
+				},
+				{
 					"name": "keyword.control.scalgoproto",
-					"match": "(inplace|list|optional|direct)"
+					"match": "(inplace|list|optional|direct|jagged)"
 				},
 				{"include": "#brief-struct-decl"},
 				{"include": "#brief-table-decl"},

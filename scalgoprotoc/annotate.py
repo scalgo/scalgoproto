@@ -174,9 +174,57 @@ class Annotater:
             if not 1 <= node.magic < 2**32:
                 self.error(node.id_, "Magic outside range")
 
+    def link_jagged(self, values: list[Value]) -> None:
+        """Link each jagged member of the inline element tables of lists in
+        the table members `values` to the list in `values` that it names."""
+        lists = {
+            self.value(v.identifier): v
+            for v in values
+            if v.list_ and v.identifier.type != TokenType.REMOVED
+        }
+        for elements in values:
+            if (
+                not elements.list_
+                or not elements.direct_table
+                or elements.identifier.type == TokenType.REMOVED
+            ):
+                continue
+            for m in elements.direct_table.members:
+                if m.jagged is None or m.identifier.type == TokenType.REMOVED:
+                    continue
+                assert m.type_ is not None
+                m.jagged_elements = elements
+                if not elements.direct:
+                    self.error(
+                        m.jagged,
+                        "Jagged members must be in the element table of a direct list",
+                    )
+                children = lists.get(self.value(m.type_))
+                if children is None:
+                    self.error(
+                        m.type_,
+                        "Jagged members must name a list in the table that holds their list",
+                    )
+                    continue
+                if children.jagged_offset is not None:
+                    assert children.jagged_offset.type_ is not None
+                    self.error(m.type_, "List already named by a jagged member")
+                    self.error(children.jagged_offset.type_, "Previously named here")
+                    continue
+                if children.optional:
+                    self.error(children.optional, "Jagged children cannot be optional")
+                if children.inplace:
+                    self.error(children.inplace, "Jagged children cannot be inplace")
+                children.jagged_elements = elements
+                children.jagged_offset = m
+                m.jagged_list = children
+                self.documents.uses_jagged = True
+
     def visit_content(
         self, name: str, values: list[Value], t: ContentType, inplace_context: bool
     ) -> tuple[bytes, list[Value]]:
+        if t == ContentType.TABLE:
+            self.link_jagged(values)
         content: dict[str, Token] = {}
         bytes = 0
         default = []
@@ -260,6 +308,22 @@ class Annotater:
             if v.direct and not v.list_:
                 self.error(v.direct, "Only lists can be direct")
 
+            if v.jagged:
+                for modifier in (v.optional, v.list_, v.inplace, v.direct):
+                    if modifier:
+                        self.error(modifier, "Not allowed on jagged members")
+                if not removed and v.jagged_elements is None:
+                    self.error(
+                        v.jagged,
+                        "Jagged members must be members of an inline table that is the element type of a list in a table",
+                    )
+                self.validate_member_name(v.identifier, val + "Offset", content)
+            if v.jagged_offset is not None and not removed:
+                assert v.jagged_offset.type_ is not None
+                self.validate_member_name(
+                    v.jagged_offset.type_, "jagged" + ucamel(val), content
+                )
+
             if (
                 v.optional
                 and v.type_.type
@@ -286,7 +350,17 @@ class Annotater:
                 bool_bit += 1
 
             typeName = self.value(v.type_)
-            if v.list_:
+            if v.jagged:
+                # The index of the element's first child, as an unsigned integer.
+                v.bytes = {
+                    None: 6,
+                    TokenType.U8: 1,
+                    TokenType.U16: 2,
+                    TokenType.UI32: 4,
+                }[v.jagged_type.type if v.jagged_type else None]
+                default.append(b"\0" * v.bytes)
+                v.offset = bytes
+            elif v.list_:
                 if v.direct_enum:
                     v.enum = v.direct_enum
                 elif v.direct_table:
@@ -599,6 +673,21 @@ class Annotater:
             else:
                 self.error(node.token, "Unknown thing")
                 continue
+
+
+def has_jagged(table: Table) -> bool:
+    """Whether elements of `table` own ranges of lists through jagged members."""
+    return any(m.jagged and m.jagged_elements is not None for m in table.members)
+
+
+def owns_jagged(table: Table) -> bool:
+    """Whether `table` holds a list whose elements have jagged members."""
+    return any(m.list_ and m.table and has_jagged(m.table) for m in table.members)
+
+
+def jagged_lists(table: Table) -> list[Value]:
+    """The lists in `table` that jagged members name."""
+    return [m for m in table.members if m.jagged_offset is not None]
 
 
 def annotate(documents: Documents, ast: list[AstNode]) -> bool:

@@ -19,6 +19,7 @@ class Documents:
         self.by_name = {}
         self.by_id = []
         self.lookup = []
+        self.uses_jagged = False
 
     def read_root(self, path: str):
         with open(path) as f:

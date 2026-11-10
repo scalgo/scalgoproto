@@ -6,6 +6,9 @@ from .documents import Documents
 from .error import error
 from .sp_tokenize import Token, TokenType, tokenize
 
+# Offset types a jagged member may name; without one it uses 6 bytes.
+JAGGED_TYPES = [TokenType.U8, TokenType.U16, TokenType.UI32]
+
 
 class AstNode:
     __slots__ = [
@@ -157,6 +160,11 @@ class Value(AstNode):
         "has_offset",
         "identifier",
         "inplace",
+        "jagged",
+        "jagged_elements",
+        "jagged_list",
+        "jagged_offset",
+        "jagged_type",
         "list_",
         "optional",
         "parsed_value",
@@ -223,6 +231,16 @@ class Value(AstNode):
         self.struct = None
         self.union = None
         self.parsed_value = 0
+        self.jagged: Token | None = None
+        # The offset type of a jagged member; None means 6 bytes.
+        self.jagged_type: Token | None = None
+        # Set by annotate on a jagged member and on the list it names: the
+        # list whose elements hold the offsets.
+        self.jagged_elements: Value | None = None
+        # Set by annotate on a list named by a jagged member: that member.
+        self.jagged_offset: Value | None = None
+        # Set by annotate on a jagged member: the list it names.
+        self.jagged_list: Value | None = None
 
 
 class ParseError(Exception):
@@ -363,6 +381,8 @@ class Parser:
                 list_: Token | None = None
                 inplace: Token | None = None
                 direct: Token | None = None
+                jagged: Token | None = None
+                jagged_type: Token | None = None
                 value: Token | None = None
                 direct_table: Table | None = None
                 direct_union: Union | None = None
@@ -373,6 +393,7 @@ class Parser:
                     TokenType.LIST,
                     TokenType.INPLACE,
                     TokenType.DIRECT,
+                    TokenType.JAGGED,
                 ]
                 while self.token.type in modifiers:
                     if self.token.type == TokenType.OPTIONAL:
@@ -387,7 +408,17 @@ class Parser:
                     elif self.token.type == TokenType.DIRECT:
                         direct = self.consume_token([TokenType.DIRECT])
                         self.consume_space()
+                    elif self.token.type == TokenType.JAGGED:
+                        jagged = self.consume_token([TokenType.JAGGED])
+                        self.consume_space()
                 type_ = self.token
+                if jagged is not None:
+                    if self.token.type in JAGGED_TYPES:
+                        jagged_type = self.consume_token(JAGGED_TYPES)
+                        self.consume_space()
+                        type_ = self.token
+                    # The name of the list that holds the children.
+                    self.check_token(self.token, [TokenType.IDENTIFIER])
                 self.check_token(
                     self.token,
                     [
@@ -478,24 +509,25 @@ class Parser:
                                 TokenType.IDENTIFIER,
                             ]
                         )
-                members.append(
-                    Value(
-                        colon,
-                        self.document.id,
-                        t,
-                        value,
-                        type_,
-                        optional,
-                        list_,
-                        inplace,
-                        direct,
-                        direct_table,
-                        direct_union,
-                        direct_enum,
-                        direct_struct,
-                        doc_comment,
-                    )
+                member = Value(
+                    colon,
+                    self.document.id,
+                    t,
+                    value,
+                    type_,
+                    optional,
+                    list_,
+                    inplace,
+                    direct,
+                    direct_table,
+                    direct_union,
+                    direct_enum,
+                    direct_struct,
+                    doc_comment,
                 )
+                member.jagged = jagged
+                member.jagged_type = jagged_type
+                members.append(member)
                 doc_comment = None
             else:
                 raise ICE()

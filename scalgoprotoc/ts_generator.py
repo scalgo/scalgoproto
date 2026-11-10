@@ -1691,6 +1691,9 @@ def run(args) -> int:
         if not annotate(documents, ast):
             print("Schema is invalid")
             return 1
+        if documents.uses_jagged:
+            print("Jagged lists are not supported by the TypeScript generator")
+            return 1
         g = Generator(documents, out, args.import_prefix)
         print(
             "// -*- mode: typescript; tab-width: 4; indent-tabs-mode: t; coding: utf-8 -*-",

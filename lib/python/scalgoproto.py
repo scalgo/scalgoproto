@@ -184,6 +184,48 @@ class ListIn(Sequence[B]):
         )
 
 
+class OutOfBoundsError(Exception):
+    """The message refers to data outside its bounds, such as jagged list
+    offsets that decrease or point past the end of the list."""
+
+
+class ListSlice(Sequence[B]):
+    """A contiguous range of a list, such as the children that an element of a
+    jagged list owns. `offset` is the index of the first element in the list."""
+
+    def __init__(self, list_: Sequence[B], begin: int, end: int) -> None:
+        self._list = list_
+        self.offset = begin
+        self._size = end - begin
+
+    def __len__(self) -> int:
+        return self._size
+
+    def __getitem__(self, idx: int) -> B:  # type: ignore[override]
+        if idx < 0:
+            idx += self._size
+        if not 0 <= idx < self._size:
+            raise IndexError()
+        return self._list[self.offset + idx]
+
+
+class JaggedContext:
+    """The lists of a table that jagged members name, looked up on first use
+    and shared by the elements that own ranges of them."""
+
+    __slots__ = ["_lists", "_owner"]
+
+    def __init__(self, owner: Any) -> None:
+        self._owner = owner
+        self._lists: dict[str, Any] = {}
+
+    def get(self, name: str) -> Any:
+        lists = self._lists
+        if name not in lists:
+            lists[name] = getattr(self._owner, name)
+        return lists[name]
+
+
 class UnionIn:
     __slots__ = ["_offset", "_reader", "_size", "_type"]
 
@@ -264,6 +306,26 @@ class TableIn:
             if getattr(self, "has_" + m, True):
                 digest(h, getattr(self, m))
         h.update(b"\xff\xe7")
+
+    def _jagged_slice(
+        self, name: str, begin: int, o: int, width: int
+    ) -> ListSlice[Any]:
+        """The range of the list `name` of the jagged context that this element
+        owns: from `begin` up to the offset at `o` in the next element, or to
+        the end of the list for the last element."""
+        children = self._jagged_ctx.get(name)  # type: ignore[attr-defined]
+        nxt = self._jagged_next  # type: ignore[attr-defined]
+        if nxt is None:
+            end = len(children)
+        elif o + width <= self._size:
+            end = int.from_bytes(
+                self._reader._data[nxt + o : nxt + o + width], "little"
+            )
+        else:
+            end = 0
+        if begin > end or end > len(children):
+            raise OutOfBoundsError()
+        return ListSlice(children, begin, end)
 
     def _get_int8(self, o: int, d: int) -> int:
         return (
@@ -395,7 +457,12 @@ class Reader:
         return join48_(sizelow, sizehigh)
 
     def _get_table_list(
-        self, t: type[TI], off: int, size: int, direct: bool = False
+        self,
+        t: type[TI],
+        off: int,
+        size: int,
+        direct: bool = False,
+        jagged: JaggedContext | None = None,
     ) -> ListIn[TI]:
         if not direct:
 
@@ -429,6 +496,22 @@ class Reader:
 
             if off + 8 + item_size * size > len(self._data):
                 raise Exception("Invalid table size")
+
+            if jagged is not None:
+
+                def jagged_getter(r: "Reader", s: int, i: int) -> TI:
+                    nxt = s + (i + 1) * item_size if i + 1 < size else None
+                    return t(r, s + i * item_size, item_size, jagged, nxt)  # type: ignore[call-arg]
+
+                return ListIn[TI](
+                    self,
+                    size,
+                    off + 8,
+                    jagged_getter,
+                    lambda r, s, i: True,
+                    False,
+                    item_width=item_size,
+                )
 
             return ListIn[TI](
                 self,
@@ -899,6 +982,89 @@ class UnionListOut(OutList, Generic[UO]):
         return self._u(self._writer, self._offset + index * 8)
 
 
+class ListSliceOut(Generic[B]):
+    """A contiguous range of a list that an element of a jagged list owns.
+    Writer counterpart of ListSlice. `offset` is the index of the first element
+    in the list."""
+
+    def __init__(self, list_: Any, begin: int, end: int) -> None:
+        self._list = list_
+        self.offset = begin
+        self._size = end - begin
+
+    def __len__(self) -> int:
+        return self._size
+
+    def _index(self, idx: int) -> int:
+        if not 0 <= idx < self._size:
+            raise IndexError()
+        return self.offset + idx
+
+    def __getitem__(self, idx: int) -> Any:
+        return self._list[self._index(idx)]
+
+    def __setitem__(self, idx: int, value: Any) -> None:
+        self._list[self._index(idx)] = value
+
+    def add(self, idx: int, *args: Any) -> Any:
+        """Forward to add(idx) of the list, for lists whose elements are added."""
+        return self._list.add(self._index(idx), *args)
+
+
+class JaggedOut:
+    """Writer view of a jagged list. Elements of `elements` are claimed in
+    strictly increasing order with add(element, k); each claim gives the
+    element the next k children of `children`. Elements that are skipped, and
+    elements after the last claim, own no children. Misuse raises ValueError,
+    and Writer.finalize raises it unless exactly len(children) children were
+    claimed.
+
+    Do not mix a view with setting the element offsets directly."""
+
+    def __init__(
+        self,
+        elements: DirectTableListOut,
+        children: OutList,
+        set_offset: Callable[[Any, int], None],
+    ) -> None:
+        self._elements = elements
+        self.children = children
+        self._set_offset = set_offset
+        self._total = len(children)
+        self._cursor = 0
+        self._next_element = 0
+        for i in range(len(elements)):
+            set_offset(elements[i], self._total)
+        elements._writer._jagged.append(self)
+
+    def add(self, element: TableOut, k: int) -> ListSliceOut:
+        """Give `element`, an element of the list this view was created for, the next k
+        children."""
+        elements = self._elements
+        size = elements._t._SIZE
+        rel = element._offset - elements._offset - 8
+        if (
+            element._writer is not elements._writer
+            or rel < 0
+            or rel % size != 0
+            or rel // size >= len(elements)
+        ):
+            raise ValueError("jagged add: not an element of the list of this view")
+        index = rel // size
+        if index < self._next_element:
+            raise ValueError(
+                "jagged add: elements must be claimed once, in increasing order"
+            )
+        if not 0 <= k <= self._total - self._cursor:
+            raise ValueError("jagged add: more children claimed than the total")
+        for i in range(self._next_element, index + 1):
+            self._set_offset(elements[i], self._cursor)
+        self._next_element = index + 1
+        begin = self._cursor
+        self._cursor += k
+        return ListSliceOut(self.children, begin, self._cursor)
+
+
 class Writer:
     _data: bytearray = None
     _used: int = 0
@@ -917,6 +1083,7 @@ class Writer:
     def __init__(self):
         self._data = bytearray(b"\0" * 256)
         self._used = 10
+        self._jagged: list[JaggedOut] = []
 
     def construct_table(self, t: type[TO]) -> TO:
         """Construct a table of the given type"""
@@ -1003,6 +1170,12 @@ class Writer:
 
     def finalize(self, root: TableOut) -> bytes:
         """Return finalized message given root object"""
+        for j in self._jagged:
+            if j._cursor != j._total:
+                raise ValueError(
+                    "jagged list not fully claimed at finalize: %d of %d children"
+                    % (j._cursor, j._total)
+                )
         offsetlow, offsethigh = split48_(root._offset - 10)
         self._data[0:10] = struct.pack("<IIH", MESSAGE_MAGIC, offsetlow, offsethigh)
         return self._data[0 : self._used]

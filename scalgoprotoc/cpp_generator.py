@@ -7,7 +7,7 @@ import math
 import os
 import sys
 
-from .annotate import annotate
+from .annotate import annotate, has_jagged, jagged_lists
 from .documents import Documents
 from .parser import (
     ICE,
@@ -49,6 +49,10 @@ class Generator:
         self.documents = documents
         self.current_namespace: str | None = None
         self.current_file: str | None = None
+        # Name of the table that holds the list of each element table with jagged members
+        self.jagged_owner: dict[int, str] = {}
+        # Out-of-class definitions of jagged accessors, emitted before their owner table
+        self.jagged_defs: dict[str, list[str]] = {}
 
     def in_list_types(self, node: Value) -> tuple[str, str | None]:
         typeName: str | None = None
@@ -146,12 +150,20 @@ class Generator:
             self.o("\t")
 
         self.output_doc(node, "\t")
+        get = f"getObject_<scalgoproto::{direct}ListIn<{typeName}> >(reader_, getPtr_<{bs(node.inplace)}, scalgoproto::{direct.upper()}LISTMAGIC, {node.offset}{mult}>())"
+        if node.table and has_jagged(node.table):
+            self.o(f"\tscalgoproto::JaggedDirectListIn<{typeName}> {lname}() const {{")
+            if node.optional:
+                self.o(f"\t\tassert (has{uname}());")
+            self.o(
+                f"\t\treturn scalgoproto::JaggedDirectListIn<{typeName}>({get}, jaggedLists_());"
+            )
+            self.o("\t}")
+            return
         self.o(f"\tscalgoproto::{direct}ListIn<{typeName}> {lname}() const {{")
         if node.optional:
             self.o(f"\t\tassert (has{uname}());")
-        self.o(
-            f"\t\treturn getObject_<scalgoproto::{direct}ListIn<{typeName}> >(reader_, getPtr_<{bs(node.inplace)}, scalgoproto::{direct.upper()}LISTMAGIC, {node.offset}{mult}>());"
-        )
+        self.o(f"\t\treturn {get};")
         self.o("\t}")
         if rawType:
             self.o("\t")
@@ -338,6 +350,99 @@ class Generator:
         self.o("\t\treturn *this;")
         self.o("\t}")
         self.generate_basic_in(node, uname)
+
+    def generate_jagged_offset_in(
+        self, node: Value, uname: str, table: Table | None = None
+    ) -> None:
+        lname = lcamel(uname)
+        if node.bytes == 6:
+            get = "get48_<%d>()" % node.offset
+        else:
+            get = "getInner_<std::uint%d_t, %d>(0)" % (node.bytes * 8, node.offset)
+        self.o(
+            f"\t/// Index of the first of {lname} that this element owns in the list it names."
+        )
+        self.o(f"\tstd::uint64_t {lname}Offset() const noexcept {{return {get};}}")
+        if table is None:
+            return
+        assert node.type_ is not None and table.name is not None
+        assert node.jagged_list is not None
+        owner = self.jagged_owner[id(table)]
+        list_name = lcamel(self.value(node.type_))
+        children = node.jagged_list
+        if children.table and has_jagged(children.table):
+            lt = f"scalgoproto::JaggedDirectListIn<{self.qualify(children.table)}In>"
+            make = f"{lt}(reader_, l, jaggedCtx_)"
+        elif children.direct and children.table:
+            lt = f"scalgoproto::DirectListIn<{self.qualify(children.table)}In>"
+            make = f"getObject_<{lt}>(reader_, l)"
+        else:
+            lt = f"scalgoproto::ListIn<{self.in_list_types(children)[0]}>"
+            make = f"getObject_<{lt}>(reader_, l.ptr)"
+        if node.bytes == 6:
+            read = f"scalgoproto::read48_(jaggedNext_ + {node.offset})"
+        else:
+            read = f"scalgoproto::readPod_<std::uint{node.bytes * 8}_t>(jaggedNext_ + {node.offset})"
+        self.output_doc(
+            node,
+            "\t",
+            suffix=["Throws scalgoproto::OutOfBoundsError on invalid offsets."],
+        )
+        self.o(f"\tscalgoproto::ListSlice<{lt}> {lname}() const;")
+        self.jagged_defs.setdefault(owner, []).append(
+            f"""inline scalgoproto::ListSlice<{lt}> {table.name}In::{lname}() const {{
+	const scalgoproto::JaggedList_ & l = jaggedCtx_.{list_name};
+	l.check();
+	const std::uint64_t b = {lname}Offset();
+	const std::uint64_t e = !jaggedNext_ ? l.ptr.size : {node.offset + node.bytes} > size_ ? 0 : {read};
+	if (b > e || e > l.ptr.size) throw scalgoproto::OutOfBoundsError();
+	return scalgoproto::ListSlice<{lt}>({make}, b, e);
+}}
+"""
+        )
+
+    def generate_jagged_offset_out(self, node: Value, uname: str, outer: str) -> None:
+        bits = node.bytes * 8
+        self.o(f"\t{outer} & set{uname}Offset(std::uint64_t value) noexcept {{")
+        self.o("\t\tassert(value < (std::uint64_t(1) << %d));" % bits)
+        if node.bytes == 6:
+            self.o("\t\tset48_<%d>(value);" % node.offset)
+        else:
+            self.o(
+                "\t\tsetInner_<std::uint%d_t, %d>(static_cast<std::uint%d_t>(value));"
+                % (bits, node.offset, bits)
+            )
+        self.o("\t\treturn *this;")
+        self.o("\t}")
+        self.generate_jagged_offset_in(node, uname)
+
+    def generate_jagged_out(self, node: Value, uname: str) -> None:
+        assert node.jagged_elements is not None and node.jagged_offset is not None
+        list_name = lcamel(self.value(node.jagged_elements.identifier))
+        offset = ucamel(self.value(node.jagged_offset.identifier)) + "Offset"
+        list_type = self.out_list_type(node.jagged_elements)
+        self.o("\t/**")
+        self.o(
+            f"\t * Add {lcamel(uname)} with `total` children and return a view that gives each element of"
+        )
+        self.o(
+            f"\t * `elements` (the list added by add{ucamel(list_name)}) its range of them."
+        )
+        self.o(
+            "\t * Claim ranges with add(element, k) in element order; Writer::finalize throws"
+        )
+        self.o("\t * std::logic_error unless all `total` children were claimed.")
+        self.o("\t */")
+        self.o(
+            f"\tauto addJagged{uname}(scalgoproto::DirectListOut<{list_type}> elements, size_t total) {{"
+        )
+        self.o(
+            f'\t\tif (total >= (std::uint64_t(1) << {node.jagged_offset.bytes * 8})) throw std::logic_error("total does not fit in {lcamel(offset)}");'
+        )
+        self.o(
+            f"\t\treturn scalgoproto::makeJaggedOut_(elements, add{uname}(total), [](auto & e, std::uint64_t v) {{e.set{offset}(v);}});"
+        )
+        self.o("\t}")
 
     def generate_enum_in(self, node: Value, uname: str) -> None:
         if node.inplace:
@@ -729,12 +834,14 @@ class Generator:
             self.o("\t}")
         self.o("\t")
 
-    def generate_value_in(self, node: Value) -> None:
+    def generate_value_in(self, node: Value, table: Table) -> None:
         assert node.type_ is not None
         n = self.value(node.identifier)
         uname = ucamel(n)
         if node.list_:
             self.generate_list_in(node, uname)
+        elif node.jagged:
+            self.generate_jagged_offset_in(node, uname, table)
         elif node.type_.type == TokenType.BOOL:
             self.generate_bool_in(node, uname)
         elif node.type_.type in typeMap:
@@ -760,6 +867,10 @@ class Generator:
         self.output_doc(node, "\t")
         if node.list_:
             self.generate_list_out(node, uname, outer)
+            if node.jagged_elements is not None:
+                self.generate_jagged_out(node, uname)
+        elif node.jagged:
+            self.generate_jagged_offset_out(node, uname, outer)
         elif node.type_.type == TokenType.BOOL:
             self.generate_bool_out(node, uname, outer)
         elif node.type_.type in typeMap:
@@ -923,6 +1034,8 @@ class Generator:
                     self.o(
                         f"\t\tif (i.{lname}().size()) add{uname}(i.{lname}().size()).copy_(i.{lname}());"
                     )
+                elif node.jagged:
+                    self.o(f"\t\tset{uname}Offset(i.{lname}Offset());")
                 elif (
                     node.type_.type in typeMap
                     or node.type_.type == TokenType.BOOL
@@ -964,6 +1077,27 @@ class Generator:
         self.o("\t}")
 
     def generate_table(self, table: Table) -> None:
+        lists = jagged_lists(table)
+        if lists:
+            assert table.name is not None
+            for m in table.members:
+                if m.list_ and m.direct_table and has_jagged(m.direct_table):
+                    self.jagged_owner[id(m.direct_table)] = table.name
+            self.switch_namespace(table.namespace)
+            for c in lists:
+                if c.direct_table:
+                    self.o(f"class {c.direct_table.name}In;")
+            self.o(
+                f"/// The lists of {table.name} that jagged members name, looked up once."
+            )
+            self.o(f"struct {table.name}JaggedCtx_ {{")
+            for c in lists:
+                self.o(
+                    f"\tscalgoproto::JaggedList_ {lcamel(self.value(c.identifier))};"
+                )
+            self.o("};")
+            self.o("")
+
         # Recursively generate direct contained members
         for value in table.members:
             if value.direct_table:
@@ -975,8 +1109,15 @@ class Generator:
             if value.direct_struct:
                 self.generate_struct(value.direct_struct)
 
+        if lists:
+            self.switch_namespace(table.namespace)
+            for d in self.jagged_defs.pop(table.name, []):
+                self.o(d)
+
         if table.empty:
             return
+        jagged = has_jagged(table)
+        owner = self.jagged_owner.get(id(table))
         self.switch_namespace(table.namespace)
         self.output_doc(table)
         self.o(f"class {table.name}In: public scalgoproto::TableIn {{")
@@ -986,15 +1127,33 @@ class Generator:
         self.o(
             "\ttemplate <typename, typename> friend class scalgoproto::ListAccessHelp;"
         )
+        if jagged:
+            self.o(
+                "\ttemplate <typename> friend class scalgoproto::JaggedDirectListIn;"
+            )
         self.o("protected:")
         self.o(
             f"\t{table.name}In(const scalgoproto::Reader * reader, scalgoproto::Ptr p): scalgoproto::TableIn(reader, p) {{}}"
         )
+        if jagged:
+            self.o(f"\t{owner}JaggedCtx_ jaggedCtx_;")
+            self.o("\t// The next element in the list, or null for the last")
+            self.o("\tconst char * jaggedNext_ = nullptr;")
+            self.o(
+                f"\t{table.name}In(const scalgoproto::Reader * reader, scalgoproto::Ptr p, const {owner}JaggedCtx_ & ctx, const char * next)"
+            )
+            self.o(
+                "\t\t: scalgoproto::TableIn(reader, p), jaggedCtx_(ctx), jaggedNext_(next) {}"
+            )
         self.o("public:")
         self.o(f"\tstatic constexpr std::uint32_t MAGIC = 0x{table.magic:08X};")
         self.o(f"\tusing IN={table.name}In;")
+        if jagged:
+            self.o(f"\tusing JaggedCtx = {owner}JaggedCtx_;")
+        if lists:
+            self.generate_jagged_lists(table, lists)
         for node in table.members:
-            self.generate_value_in(node)
+            self.generate_value_in(node, table)
         self.o("};")
         self.output_metamagic(
             f"template <> struct MetaMagic<{self.qualify(table, True)}In> {{using t=TableTag;}};"
@@ -1026,6 +1185,23 @@ class Generator:
             f"template <> struct MetaMagic<{self.qualify(table, True)}Out> {{using t=TableTag;}};"
         )
         self.o("")
+
+    def generate_jagged_lists(self, table: Table, lists: list[Value]) -> None:
+        self.o("\t/// Look up the lists that jagged members name. A failed lookup is")
+        self.o("\t/// rethrown when an element reads the list.")
+        self.o(f"\t{table.name}JaggedCtx_ jaggedLists_() const {{")
+        self.o(f"\t\t{table.name}JaggedCtx_ c;")
+        for c in lists:
+            n = lcamel(self.value(c.identifier))
+            if c.direct and c.table:
+                get = f"c.{n} = scalgoproto::JaggedLookup_::directList<{self.qualify(c.table)}In>(reader_, getPtr_<false, scalgoproto::DIRECTLISTMAGIC, {c.offset}>());"
+            else:
+                get = f"c.{n}.ptr = getPtr_<false, scalgoproto::LISTMAGIC, {c.offset}, scalgoproto::ListAccess<{self.in_list_types(c)[0]}>::mult>();"
+            self.o(
+                f"\t\ttry {{ {get} }} catch (...) {{ c.{n}.error = std::current_exception(); }}"
+            )
+        self.o("\t\treturn c;")
+        self.o("\t}")
 
     def generate_struct(self, node: Struct) -> None:
         # Recursively generate direct contained members

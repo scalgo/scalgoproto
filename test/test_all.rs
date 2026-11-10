@@ -5,6 +5,10 @@
 use scalgoproto;
 mod base;
 mod complex2;
+mod jagged;
+mod jagged_added;
+mod jagged_narrow;
+mod jagged_removed;
 mod union;
 
 macro_rules! require {
@@ -1242,6 +1246,9 @@ fn test_in_union(path: &str) -> scalgoproto::Result<()> {
     Ok(())
 }
 
+// Declared after the macros so that it can use them.
+mod test_jagged;
+
 fn main() -> Result<(), scalgoproto::Error> {
     let mut args = std::env::args();
     args.next();
@@ -1266,6 +1273,14 @@ fn main() -> Result<(), scalgoproto::Error> {
         "in_extend2" => test_in_extend2(&file)?,
         "out_union" => test_out_union(&file)?,
         "in_union" => test_in_union(&file)?,
+        "out_jagged" => test_jagged::test_out(&file)?,
+        "claim_jagged" => test_jagged::test_claim(&file)?,
+        "claim_errors_jagged" => test_jagged::test_claim_errors()?,
+        "in_jagged" => test_jagged::test_in(&file)?,
+        "bad_jagged" => test_jagged::test_bad()?,
+        "removed_jagged" => test_jagged::test_removed(&file)?,
+        "added_jagged" => test_jagged::test_added(&file)?,
+        "narrow_jagged" => test_jagged::test_narrow()?,
         _ => {
             panic!("Unknown test");
         }
