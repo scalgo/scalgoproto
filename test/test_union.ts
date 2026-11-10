@@ -2,10 +2,10 @@
 import * as scalgoproto from 'scalgoproto'
 import * as union from 'union'
 
-import {bc, readMessage, require1, require2, validateOut} from './test_base'
+import {bc, newWriter, readMessage, require1, require2, validateOut} from './test_base'
 
 function forCopy(): union.Table3In {
-	const w = new scalgoproto.Writer();
+	const w = newWriter();
 	const root = w.constructTable(union.Table3Out);
 
 	const v1 = root.addV1();
@@ -25,12 +25,12 @@ function forCopy(): union.Table3In {
 	v4.b.addV4().a = 104;
 
 	const v5 = root.addV5();
-	v5.a.addV5(1)[0] = 'ctext3';
-	v5.b.addV5(1)[0] = 'ctext4';
+	v5.a.addV5(1).set(0, 'ctext3');
+	v5.b.addV5(1).set(0, 'ctext4');
 
 	const v6 = root.addV6();
-	v6.a.addV6(1)[0] = bc('cbytes3');
-	v6.b.addV6(1)[0] = bc('cbytes4');
+	v6.a.addV6(1).set(0, bc('cbytes3'));
+	v6.b.addV6(1).set(0, bc('cbytes4'));
 
 	const v7 = root.addV7();
 	v7.a.addV7(1).add(0).a = 105;
@@ -41,12 +41,12 @@ function forCopy(): union.Table3In {
 	v8.b.addV8(1).add(0).a = 108;
 
 	const v9 = root.addV9();
-	v9.a.addV9(1)[0] = 109;
-	v9.b.addV9(1)[0] = 110;
+	v9.a.addV9(1).set(0, 109);
+	v9.b.addV9(1).set(0, 110);
 
 	const v10 = root.addV10();
-	v10.a.addV10(1)[0] = true;
-	v10.b.addV10(1)[0] = true;
+	v10.a.addV10(1).set(0, true);
+	v10.b.addV10(1).set(0, true);
 
 	const d = w.finalize(root);
 
@@ -57,7 +57,7 @@ function forCopy(): union.Table3In {
 function test_out_union(path: string): boolean {
 	const i = forCopy();
 
-	const w = new scalgoproto.Writer();
+	const w = newWriter();
 	const root = w.constructTable(union.Table3Out);
 
 	const v1 = root.addV1()
@@ -93,20 +93,20 @@ function test_out_union(path: string): boolean {
 	v4.e.v4 = i.v4!.b.v4!;
 
 	const v5 = root.addV5();
-	v5.a.addV5(1)[0] = 'text4';
-	v5.b.addV5(1)[0] = 'text5';
+	v5.a.addV5(1).set(0, 'text4');
+	v5.b.addV5(1).set(0, 'text5');
 	const t5 = w.constructTextList(1);
-	t5[0] = 'text6';
+	t5.set(0, 'text6');
 	v5.c.v5 = t5;
 	v5.d.v5 = i.v5!.a.v5!;
 	v5.e.v5 = i.v5!.b.v5!;
 
 	const v6 = root.addV6();
-	v6.a.addV6(1)[0] = bc('bytes4');
+	v6.a.addV6(1).set(0, bc('bytes4'));
 	const tt6 = v6.b.addV6(1);
-	tt6[0] = w.constructBytes(bc('bytes5'));
+	tt6.set(0, w.constructBytes(bc('bytes5')));
 	const t6 = w.constructBytesList(1);
-	t6[0] = w.constructBytes(bc('bytes6'));
+	t6.set(0, w.constructBytes(bc('bytes6')));
 	v6.c.v6 = t6;
 	v6.d.v6 = i.v6!.a.v6!;
 	v6.e.v6 = i.v6!.b.v6!;
@@ -114,7 +114,7 @@ function test_out_union(path: string): boolean {
 	const v7 = root.addV7();
 	v7.a.addV7(1).add(0).a = 7;
 	v7.b.addV7(1).add(0).a = 8;
-	const t7 = w.constructTableList(union.Table1Out, 1);
+	const t7 = w.constructList(union.Table1_ListOut, 1);
 	t7.add(0).a = 9;
 	v7.c.v7 = t7;
 	v7.d.v7 = i.v7!.a.v7!;
@@ -123,26 +123,26 @@ function test_out_union(path: string): boolean {
 	const v8 = root.addV8();
 	v8.a.addV8(1).add(0).a = 10;
 	v8.b.addV8(1).add(0).a = 11;
-	const t8 = w.constructTableList(union.Union1V8Out, 1);
+	const t8 = w.constructList(union.Union1V8_ListOut, 1);
 	t8.add(0).a = 12;
 	v8.c.v8 = t8;
 	v8.d.v8 = i.v8!.a.v8!;
 	v8.e.v8 = i.v8!.b.v8!;
 
 	const v9 = root.addV9();
-	v9.a.addV9(1)[0] = 13;
-	v9.b.addV9(1)[0] = 14;
+	v9.a.addV9(1).set(0, 13);
+	v9.b.addV9(1).set(0, 14);
 	const t9 = w.constructUint32List(1);
-	t9[0] = 15;
+	t9.set(0, 15);
 	v9.c.v9 = t9;
 	v9.d.v9 = i.v9!.a.v9!;
 	v9.e.v9 = i.v9!.b.v9!;
 
 	const v10 = root.addV10();
-	v10.a.addV10(1)[0] = true;
-	v10.b.addV10(1)[0] = false;
+	v10.a.addV10(1).set(0, true);
+	v10.b.addV10(1).set(0, false);
 	const t10 = w.constructBoolList(1);
-	t10[0] = true;
+	t10.set(0, true);
 	v10.c.v10 = t10;
 	v10.d.v10 = i.v10!.a.v10!;
 	v10.e.v10 = i.v10!.b.v10!;

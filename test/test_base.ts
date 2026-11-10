@@ -15,6 +15,16 @@ function isBytes(v: unknown): v is ArrayBuffer | Uint8Array {
 	return v instanceof ArrayBuffer || v instanceof Uint8Array;
 }
 
+/**
+ * Construct a writer for the tests. If the environment variable SP_WRITER_CAPACITY is
+ * set the writer starts with that capacity; a tiny capacity makes the writer grow its
+ * buffer on nearly every write.
+ */
+export function newWriter(): scalgoproto.Writer {
+	const c = process.env.SP_WRITER_CAPACITY;
+	return c ? new scalgoproto.Writer(+c) : new scalgoproto.Writer();
+}
+
 export function cb(l: ArrayBuffer | Uint8Array, r: ArrayBuffer | Uint8Array): boolean {
 	const lb = l instanceof Uint8Array ? l : new Uint8Array(l);
 	const rb = r instanceof Uint8Array ? r : new Uint8Array(r);
@@ -24,7 +34,7 @@ export function cb(l: ArrayBuffer | Uint8Array, r: ArrayBuffer | Uint8Array): bo
 	return true;
 }
 
-export function validateOut(data_: ArrayBuffer, path: string): boolean {
+export function validateOut(data_: ArrayBuffer | Uint8Array, path: string): boolean {
 	const exp = new Uint8Array(readIn(path));
 	const data = new Uint8Array(data_);
 
@@ -141,14 +151,14 @@ export function require2<T>(b: boolean, v: T, e: T): boolean {
 }
 
 function testOutDefault(path: string): boolean {
-	const w = new scalgoproto.Writer();
+	const w = newWriter();
 	const s = w.constructTable(base.SimpleOut)
 	const data = w.finalize(s);
 	return validateOut(data, path)
 }
 
 function testOut(path: string): boolean {
-	const w = new scalgoproto.Writer();
+	const w = newWriter();
 	const s = w.constructTable(base.SimpleOut)
 	s.e = base.MyEnum.c
 	s.s = new base.FullStruct(
@@ -324,48 +334,48 @@ function testInDefault(path: string): boolean {
 }
 
 function testOutComplex(path: string): boolean {
-	const w = new scalgoproto.Writer();
+	const w = newWriter();
 
 	const m = w.constructTable(base.MemberOut);
 	m.id = 42;
 
 	const l = w.constructInt32List(31);
-	for (let i = 0; i < 31; ++i) l[i] = 100 - 2 * i;
+	for (let i = 0; i < 31; ++i) l.set(i, 100 - 2 * i);
 
 	const l2 = w.constructEnumList<base.MyEnum>(2);
-	l2[0] = base.MyEnum.a;
+	l2.set(0, base.MyEnum.a);
 
-	const l3 = w.constructStructList(base.MyStruct, 1);
+	const l3 = w.constructList(base.MyStruct_ListOut, 1);
 
 	const b = w.constructBytes(bc('bytes'));
 	const t = w.constructText('text');
 
 	const l4 = w.constructTextList(200);
-	for (let i = 1; i < l4.length; i += 2) l4[i] = 'HI THERE';
+	for (let i = 1; i < l4.length; i += 2) l4.set(i, 'HI THERE');
 	const l5 = w.constructBytesList(1);
-	l5[0] = b;
+	l5.set(0, b);
 
-	const l6 = w.constructTableList(base.MemberOut, 3);
-	l6[0] = m;
-	l6[2] = m;
+	const l6 = w.constructList(base.Member_ListOut, 3);
+	l6.set(0, m);
+	l6.set(2, m);
 
-	const l6a = w.constructDirectTableList(base.MemberOut, 3);
-	l6a.add(0).id = 43;
-	l6a.add(2).id = 43;
+	const l6a = w.constructList(base.Member_DirectListOut, 3);
+	l6a.get(0).id = 43;
+	l6a.get(2).id = 43;
 
 	const l7 = w.constructFloat32List(2);
-	l7[1] = 98.0;
+	l7.set(1, 98.0);
 
 	const l8 = w.constructFloat64List(3);
-	l8[2] = 78.0;
+	l8.set(2, 78.0);
 
 	const l9 = w.constructUint8List(2);
-	l9[0] = 4;
+	l9.set(0, 4);
 
 	const l10 = w.constructBoolList(10);
-	l10[0] = true;
-	l10[2] = true;
-	l10[8] = true;
+	l10.set(0, true);
+	l10.set(2, true);
+	l10.set(8, true);
 
 	const s = w.constructTable(base.ComplexOut);
 	s.member = m;
@@ -483,7 +493,7 @@ function testInComplex(path: string): boolean {
 }
 
 function testOutComplex2(path: string): boolean {
-	const w = new scalgoproto.Writer();
+	const w = newWriter();
 
 	const m = w.constructTable(base.MemberOut);
 	m.id = 42;
@@ -492,15 +502,15 @@ function testOutComplex2(path: string): boolean {
 	const t = w.constructText('text');
 
 	const l = w.constructEnumList<base.NamedUnionEnumList>(2);
-	l[0] = base.NamedUnionEnumList.x;
-	l[1] = base.NamedUnionEnumList.z;
+	l.set(0, base.NamedUnionEnumList.x);
+	l.set(1, base.NamedUnionEnumList.z);
 
-	const l2 = w.constructStructList(complex2.Complex2L, 1);
-	l2[0] = new complex2.Complex2L(2, true);
+	const l2 = w.constructList(complex2.Complex2L_ListOut, 1);
+	l2.set(0, new complex2.Complex2L(2, true));
 
-	const l3 = w.constructUnionList(base.NamedUnionOut, 2);
-	l3[0].text = t;
-	l3[1].myBytes = b;
+	const l3 = w.constructList(base.NamedUnion_ListOut, 2);
+	l3.get(0).text = t;
+	l3.get(1).myBytes = b;
 
 	const r = w.constructTable(complex2.Complex2Out);
 	r.u1.member = m;
@@ -554,7 +564,7 @@ function testInComplex2(path: string): boolean {
 }
 
 function testOutInplace(path: string): boolean {
-	const w = new scalgoproto.Writer();
+	const w = newWriter();
 	const name = w.constructText('nilson');
 	const u = w.constructTable(base.InplaceUnionOut);
 	u.u.addMonkey().name = name;
@@ -573,8 +583,8 @@ function testOutInplace(path: string): boolean {
 	const l = w.constructTable(base.InplaceListOut);
 	l.id = 47;
 	const ll = l.addL(2);
-	ll[0] = 24;
-	ll[1] = 99;
+	ll.set(0, 24);
+	ll.set(1, 99);
 
 	const root = w.constructTable(base.InplaceRootOut);
 	root.u = u;
@@ -624,7 +634,7 @@ function testInInplace(path: string): boolean {
 }
 
 function testOutExtend1(path: string): boolean {
-	const w = new scalgoproto.Writer();
+	const w = newWriter();
 	const root = w.constructTable(base.Gen1Out)
 	root.aa = 77;
 	const data = w.finalize(root);
@@ -641,17 +651,17 @@ function testInExtend1(path: string): boolean {
 }
 
 function testOutExtend2(path: string): boolean {
-	const w = new scalgoproto.Writer();
+	const w = newWriter();
 	const root = w.constructTable(base.Gen2Out);
 	root.aa = 80;
 	root.bb = 81;
 	const cake = root.u.addCake();
 	cake.v = 45;
 	const l = root.addDirectMemberList(4);
-	l.add(0).id = 100;
-	l.add(1).id = 101;
-	l.add(2).id = 102;
-	l.add(3).id = 103;
+	l.get(0).id = 100;
+	l.get(1).id = 101;
+	l.get(2).id = 102;
+	l.get(3).id = 103;
 	const data = w.finalize(root);
 	return validateOut(data, path);
 }

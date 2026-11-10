@@ -32,17 +32,6 @@ let textDecoder: TextDecoder | null = null;
 /** Binary input accepted by the writer */
 export type BytesLike = ArrayBuffer | Uint8Array;
 
-export class StructType {
-	static readonly _WIDTH: number = 0
-}
-
-interface StructTypeType<T> {
-	new(): T;
-	_WIDTH: number;
-	_write: (writer: Writer, offset: number, ins: T) => void;
-	_read: (reader: Reader, offset: number) => T;
-}
-
 /** Constructor type of generated table readers */
 export interface TableInType<T> {
 	new(reader: Reader, offset: number, size: number): T;
@@ -704,629 +693,763 @@ export abstract class DirectTableListIn<T> extends FixedListIn<T> {
 	abstract seek(c: T, i: number): T;
 }
 
+//////////////////////////////////////////////////////////////////////////////////////
+// Writer
+//
+// Objects are appended to a single growing buffer. Everything after the end of the
+// written data is zero, so newly allocated objects only need their non zero defaults
+// written. All writes go through one DataView; generated setters write directly at
+// constant offsets.
+//////////////////////////////////////////////////////////////////////////////////////
+
+let textEncoder: TextEncoder | null = null;
+
+/**
+ * Non ascii strings with at most this many remaining UTF-16 code units are encoded with
+ * a JS loop, longer ones with TextEncoder, which has a fixed cost per call. Measured
+ * crossover points: V8 32 to 48, SpiderMonkey above 128; at 48 V8 is within 10% of the
+ * faster method.
+ */
+const TEXT_ENCODER_THRESHOLD = 48;
+
+/**
+ * Encode t from index i as utf-8 into u8 at o and return the end offset. Lone
+ * surrogates become U+FFFD, like TextEncoder does. u8 must have room for 3 bytes per
+ * remaining code unit
+ */
+function encodeUtf8(t: string, i: number, u8: Uint8Array, o: number): number {
+	const n = t.length;
+	while (i < n) {
+		let c = t.charCodeAt(i++);
+		if (c < 0x80) {
+			u8[o++] = c;
+		} else if (c < 0x800) {
+			u8[o++] = 0xC0 | (c >> 6);
+			u8[o++] = 0x80 | (c & 0x3F);
+		} else {
+			if (c >= 0xD800 && c < 0xE000) {
+				const d = i < n ? t.charCodeAt(i) : 0;
+				if (c < 0xDC00 && d >= 0xDC00 && d < 0xE000) {
+					// A surrogate pair: 4 bytes
+					++i;
+					c = 0x10000 + ((c - 0xD800) << 10) + (d - 0xDC00);
+					u8[o++] = 0xF0 | (c >> 18);
+					u8[o++] = 0x80 | ((c >> 12) & 0x3F);
+					u8[o++] = 0x80 | ((c >> 6) & 0x3F);
+					u8[o++] = 0x80 | (c & 0x3F);
+					continue;
+				}
+				c = 0xFFFD; // Lone surrogate
+			}
+			u8[o++] = 0xE0 | (c >> 12);
+			u8[o++] = 0x80 | ((c >> 6) & 0x3F);
+			u8[o++] = 0x80 | (c & 0x3F);
+		}
+	}
+	return o;
+}
+
+/** Write v as an unsigned 48 bit integer at o */
+function setU48(dv: DataView, o: number, v: number): void {
+	const hi = Math.floor(v / TWO32);
+	dv.setUint32(o, v - hi * TWO32, true);
+	dv.setUint16(o + 4, hi, true);
+}
+
+/** Return a Uint8Array with the bytes of a latin1 encoded string. Used by generated code */
+export function _defaultBytes(s: string): Uint8Array {
+	const ans = new Uint8Array(s.length);
+	for (let i = 0; i < s.length; ++i) ans[i] = s.charCodeAt(i);
+	return ans;
+}
+
+/** A text in the message under construction, see Writer.constructText */
 export class TextOut {
-	constructor(public _offset: number) {};
+	declare readonly _w: Writer;
+	/** Offset of the magic of the text */
+	declare readonly _off: number;
+	constructor(writer: Writer, offset: number) {
+		this._w = writer;
+		this._off = offset;
+	}
 }
 
+/** Bytes in the message under construction, see Writer.constructBytes */
 export class BytesOut {
-	constructor(public _offset: number) {};
+	declare readonly _w: Writer;
+	/** Offset of the magic of the bytes */
+	declare readonly _off: number;
+	constructor(writer: Writer, offset: number) {
+		this._w = writer;
+		this._off = offset;
+	}
 }
 
-interface TableOutType<T> {
-	new(w: Writer, withHeader: boolean): T;
-	_MAGIC: number, _SIZE: number;
+/** Constructor type of generated table writers */
+export interface TableOutType<T> {
+	new(writer: Writer, offset: number): T;
+	readonly _MAGIC: number;
+	readonly _SIZE: number;
+	readonly _DEFAULT: Uint8Array;
+	/** True if all bytes of _DEFAULT are zero */
+	readonly _ZERO: boolean;
 }
 
-export abstract class TableOut {
-	static readonly _MAGIC: number = 0;
-	static readonly _SIZE: number = 0;
-	_offset: number = 0;
+/** Constructor type of list writers */
+export interface ListOutType<L> {
+	new(writer: Writer, length: number, withHeader: boolean): L;
+}
 
-	constructor(public _writer: Writer,
-				public withHeader: boolean,
-				def: string,
-				magic: number) {
-		this._writer._reserve(def.length + (withHeader ? 10 : 0))
-		if (withHeader) {
-			this._writer._data.setUint32(this._writer._size, magic, true);
-			this._writer._writeUint48(this._writer._size + 4, def.length);
-			this._writer._size += 10;
+/** Base class of all list writers */
+export abstract class ListOut<T> {
+	declare readonly _w: Writer;
+	/** Offset of the first element */
+	declare readonly _off: number;
+	/** Number of elements in the list */
+	declare readonly length: number;
+
+	constructor(writer: Writer, offset: number, length: number) {
+		this._w = writer;
+		this._off = offset;
+		this.length = length;
+	}
+
+	/** Set the i'th element */
+	abstract set(i: number, value: T): void;
+
+	/** Set the elements starting at element offset to values */
+	setAll(values: ArrayLike<T>, offset: number = 0): void {
+		const n = values.length;
+		if (!((offset >>> 0) === offset && offset + n <= this.length))
+			throw new RangeError('Values do not fit in the list at offset ' + offset);
+		for (let i = 0; i < n; ++i) this.set(offset + i, values[i]);
+	}
+
+	/** Copy the elements of a list read from another message */
+	abstract _copy(inp: ListIn<any>): void;
+}
+
+function checkIndex(i: number, length: number): void {
+	if (!((i >>> 0) === i && i < length)) _indexError(i, length);
+}
+
+function checkCopyLength(out: ListOut<unknown>, inp: ListIn<unknown>): void {
+	if (out.length !== inp.length)
+		throw new RangeError('Copying a list of length ' + inp.length + ' into one of length ' +
+							 out.length);
+}
+
+/** Copy a list with the same byte layout, taking bytes bytes, by copying its bytes */
+function copyBytes(out: ListOut<unknown>, inp: FixedListIn<unknown>, bytes: number): void {
+	checkCopyLength(out, inp);
+	const src = inp.bytes();
+	if (src.length !== bytes) throw new TypeError('Copying a list of a different type');
+	out._w._u8.set(src, out._off);
+}
+
+/**
+ * Copy a typed array into a list of the same element type by copying bytes. Returns
+ * false if values is not such a typed array
+ */
+function setAllTyped(out: ListOut<any>, values: ArrayLike<unknown>, offset: number,
+					 ctor: {new(...a: any[]): ArrayBufferView; readonly BYTES_PER_ELEMENT: number}):
+  boolean {
+	// Compare the type tag rather than use instanceof, which fails for typed arrays from
+	// another realm (iframe, worker module, vm)
+	if (!ArrayBuffer.isView(values) || (values as any)[Symbol.toStringTag] !== ctor.name ||
+		!LITTLE_ENDIAN)
+		return false;
+	const n = values.length;
+	if (!((offset >>> 0) === offset && offset + n <= out.length))
+		throw new RangeError('Values do not fit in the list at offset ' + offset);
+	const w = ctor.BYTES_PER_ELEMENT;
+	out._w._u8.set(new Uint8Array(values.buffer, values.byteOffset, n * w), out._off + offset * w);
+	return true;
+}
+
+/** Base class of lists of numbers */
+export abstract class NumberListOut<A> extends ListOut<number> {
+	// setAll of the subclasses copies a typed array A of the element type in one go
+	declare readonly _typedArray?: A;
+}
+
+export class Int8ListOut extends NumberListOut<Int8Array> {
+	constructor(writer: Writer, length: number, withHeader: boolean) {
+		super(writer, writer._list(length, length, withHeader, 0), length);
+	}
+	set(i: number, v: number): void {
+		checkIndex(i, this.length);
+		this._w._dv.setInt8(this._off + i, v);
+	}
+	setAll(values: ArrayLike<number> | Int8Array, offset: number = 0): void {
+		if (!setAllTyped(this, values, offset, Int8Array)) super.setAll(values, offset);
+	}
+	_copy(inp: Int8ListIn): void { copyBytes(this, inp, this.length); }
+}
+
+export class Uint8ListOut extends NumberListOut<Uint8Array> {
+	constructor(writer: Writer, length: number, withHeader: boolean) {
+		super(writer, writer._list(length, length, withHeader, 0), length);
+	}
+	set(i: number, v: number): void {
+		checkIndex(i, this.length);
+		this._w._dv.setUint8(this._off + i, v);
+	}
+	setAll(values: ArrayLike<number> | Uint8Array, offset: number = 0): void {
+		if (!setAllTyped(this, values, offset, Uint8Array)) super.setAll(values, offset);
+	}
+	_copy(inp: Uint8ListIn): void { copyBytes(this, inp, this.length); }
+}
+
+export class Int16ListOut extends NumberListOut<Int16Array> {
+	constructor(writer: Writer, length: number, withHeader: boolean) {
+		super(writer, writer._list(length, length * 2, withHeader, 0), length);
+	}
+	set(i: number, v: number): void {
+		checkIndex(i, this.length);
+		this._w._dv.setInt16(this._off + i * 2, v, true);
+	}
+	setAll(values: ArrayLike<number> | Int16Array, offset: number = 0): void {
+		if (!setAllTyped(this, values, offset, Int16Array)) super.setAll(values, offset);
+	}
+	_copy(inp: Int16ListIn): void { copyBytes(this, inp, this.length * 2); }
+}
+
+export class Uint16ListOut extends NumberListOut<Uint16Array> {
+	constructor(writer: Writer, length: number, withHeader: boolean) {
+		super(writer, writer._list(length, length * 2, withHeader, 0), length);
+	}
+	set(i: number, v: number): void {
+		checkIndex(i, this.length);
+		this._w._dv.setUint16(this._off + i * 2, v, true);
+	}
+	setAll(values: ArrayLike<number> | Uint16Array, offset: number = 0): void {
+		if (!setAllTyped(this, values, offset, Uint16Array)) super.setAll(values, offset);
+	}
+	_copy(inp: Uint16ListIn): void { copyBytes(this, inp, this.length * 2); }
+}
+
+export class Int32ListOut extends NumberListOut<Int32Array> {
+	constructor(writer: Writer, length: number, withHeader: boolean) {
+		super(writer, writer._list(length, length * 4, withHeader, 0), length);
+	}
+	set(i: number, v: number): void {
+		checkIndex(i, this.length);
+		this._w._dv.setInt32(this._off + i * 4, v, true);
+	}
+	setAll(values: ArrayLike<number> | Int32Array, offset: number = 0): void {
+		if (!setAllTyped(this, values, offset, Int32Array)) super.setAll(values, offset);
+	}
+	_copy(inp: Int32ListIn): void { copyBytes(this, inp, this.length * 4); }
+}
+
+export class Uint32ListOut extends NumberListOut<Uint32Array> {
+	constructor(writer: Writer, length: number, withHeader: boolean) {
+		super(writer, writer._list(length, length * 4, withHeader, 0), length);
+	}
+	set(i: number, v: number): void {
+		checkIndex(i, this.length);
+		this._w._dv.setUint32(this._off + i * 4, v, true);
+	}
+	setAll(values: ArrayLike<number> | Uint32Array, offset: number = 0): void {
+		if (!setAllTyped(this, values, offset, Uint32Array)) super.setAll(values, offset);
+	}
+	_copy(inp: Uint32ListIn): void { copyBytes(this, inp, this.length * 4); }
+}
+
+/** List of I64. set takes a number (exact up to 2^53) or a bigint */
+export class Int64ListOut extends NumberListOut<BigInt64Array> {
+	constructor(writer: Writer, length: number, withHeader: boolean) {
+		super(writer, writer._list(length, length * 8, withHeader, 0), length);
+	}
+	set(i: number, v: number | bigint): void {
+		checkIndex(i, this.length);
+		if (typeof v === 'bigint')
+			this._w._dv.setBigInt64(this._off + i * 8, v, true);
+		else
+			this._w._i64(this._off + i * 8, v);
+	}
+	setAll(values: ArrayLike<number> | BigInt64Array, offset: number = 0): void {
+		if (!setAllTyped(this, values, offset, BigInt64Array)) super.setAll(values as ArrayLike<any>, offset);
+	}
+	_copy(inp: Int64ListIn): void { copyBytes(this, inp, this.length * 8); }
+}
+
+/** List of U64. set takes a number (exact up to 2^53) or a bigint */
+export class Uint64ListOut extends NumberListOut<BigUint64Array> {
+	constructor(writer: Writer, length: number, withHeader: boolean) {
+		super(writer, writer._list(length, length * 8, withHeader, 0), length);
+	}
+	set(i: number, v: number | bigint): void {
+		checkIndex(i, this.length);
+		if (typeof v === 'bigint')
+			this._w._dv.setBigUint64(this._off + i * 8, v, true);
+		else
+			this._w._u64(this._off + i * 8, v);
+	}
+	setAll(values: ArrayLike<number> | BigUint64Array, offset: number = 0): void {
+		if (!setAllTyped(this, values, offset, BigUint64Array)) super.setAll(values as ArrayLike<any>, offset);
+	}
+	_copy(inp: Uint64ListIn): void { copyBytes(this, inp, this.length * 8); }
+}
+
+export class Float32ListOut extends NumberListOut<Float32Array> {
+	constructor(writer: Writer, length: number, withHeader: boolean) {
+		super(writer, writer._list(length, length * 4, withHeader, 0), length);
+	}
+	set(i: number, v: number): void {
+		checkIndex(i, this.length);
+		this._w._dv.setFloat32(this._off + i * 4, v, true);
+	}
+	setAll(values: ArrayLike<number> | Float32Array, offset: number = 0): void {
+		if (!setAllTyped(this, values, offset, Float32Array)) super.setAll(values, offset);
+	}
+	_copy(inp: Float32ListIn): void { copyBytes(this, inp, this.length * 4); }
+}
+
+export class Float64ListOut extends NumberListOut<Float64Array> {
+	constructor(writer: Writer, length: number, withHeader: boolean) {
+		super(writer, writer._list(length, length * 8, withHeader, 0), length);
+	}
+	set(i: number, v: number): void {
+		checkIndex(i, this.length);
+		this._w._dv.setFloat64(this._off + i * 8, v, true);
+	}
+	setAll(values: ArrayLike<number> | Float64Array, offset: number = 0): void {
+		if (!setAllTyped(this, values, offset, Float64Array)) super.setAll(values, offset);
+	}
+	_copy(inp: Float64ListIn): void { copyBytes(this, inp, this.length * 8); }
+}
+
+/** List of bools, packed 8 to a byte */
+export class BoolListOut extends ListOut<boolean> {
+	constructor(writer: Writer, length: number, withHeader: boolean) {
+		super(writer, writer._list(length, (length + 7) >> 3, withHeader, 0), length);
+	}
+	set(i: number, v: boolean): void {
+		checkIndex(i, this.length);
+		const dv = this._w._dv, o = this._off + (i >> 3), b = 1 << (i & 7);
+		const x = dv.getUint8(o);
+		dv.setUint8(o, v ? x | b : x & ~b);
+	}
+	_copy(inp: BoolListIn): void {
+		copyBytes(this, inp, (this.length + 7) >> 3);
+		// Clear unused bits of the last byte
+		if (this.length & 7) {
+			const o = this._off + (this.length >> 3);
+			this._w._u8[o] &= (1 << (this.length & 7)) - 1;
 		}
-		const o = this._offset = this._writer._size;
-		for (let i = 0; i < def.length; ++i)
-			this._writer._data.setUint8(o + i, def.charCodeAt(i));
-		this._writer._size += def.length;
-	}
-
-	_setInt8(o: number, v: number) { this._writer._data.setInt8(this._offset + o, v); }
-
-	_setUint8(o: number, v: number) { this._writer._data.setUint8(this._offset + o, v); }
-
-	_setInt16(o: number, v: number) {
-		this._writer._data.setInt16(this._offset + o, v, true);
-	}
-
-	_setUint16(o: number, v: number) {
-		this._writer._data.setUint16(this._offset + o, v, true);
-	}
-
-	_setInt32(o: number, v: number) {
-		this._writer._data.setInt32(this._offset + o, v, true);
-	}
-
-	_setUint32(o: number, v: number) {
-		this._writer._data.setUint32(this._offset + o, v, true);
-	}
-
-	_setUint48(o: number, v: number) { this._writer._writeUint48(this._offset + o, v); }
-
-	_setInt64(o: number, v: number) { this._writer._writeInt64(this._offset + o, v); }
-
-	_setUint64(o: number, v: number) { this._writer._writeUint64(this._offset + o, v); }
-
-	_setFloat32(o: number, v: number) {
-		this._writer._data.setFloat32(this._offset + o, v, true);
-	}
-
-	_setFloat64(o: number, v: number) {
-		this._writer._data.setFloat64(this._offset + o, v, true);
-	}
-
-	_setBit(o: number, bit: number) {
-		const b = this._writer._data.getUint8(this._offset + o);
-		this._writer._data.setUint8(this._offset + o, b | (1 << bit));
-	}
-
-	_unsetBit(o: number, bit: number) {
-		const b = this._writer._data.getUint8(this._offset + o);
-		this._writer._data.setUint8(this._offset + o, b & ~(1 << bit));
-	}
-
-	_setTable<T extends TableOut>(o: number, v: T) {
-		this._writer._writeUint48(this._offset + o, v._offset - 10);
-	}
-
-	_setText(o: number, v: TextOut|string) {
-		if (!(v instanceof TextOut)) v = this._writer.constructText(v);
-		this._writer._writeUint48(this._offset + o, v._offset - 10);
-	}
-
-	_setBytes(o: number, v: BytesOut|BytesLike) {
-		if (!(v instanceof BytesOut)) v = this._writer.constructBytes(v);
-		this._writer._writeUint48(this._offset + o, v._offset - 10);
-	}
-
-	_setList<T, IT>(o: number, v: ListOut<T, IT>) {
-		this._writer._writeUint48(this._offset + o, v._offset - 10)
-	}
-
-	_addInplaceText(o: number, t: string) {
-		const s = this._writer._writeText(t);
-		this._writer._writeUint48(this._offset + o, s);
-	}
-
-	_addInplaceBytes(o: number, t: BytesLike) {
-		this._writer._writeUint48(this._offset + o, t.byteLength);
-		const tt = new Uint8Array(t);
-		this._writer._reserve(t.byteLength);
-		for (let i = 0; i < t.byteLength; ++i)
-			this._writer._data.setUint8(this._writer._size++, tt[i]);
-	}
-
-	_setInplaceList(o: number, size: number): void {
-		this._writer._writeUint48(this._offset + o, size);
 	}
 }
 
-export abstract class UnionOut {
-	constructor(public _writer: Writer,
-				public _offset: number,
-				public _end: number|null) {}
-
-	_set(idx: number, offset: number): void {
-		this._writer._data.setInt16(this._offset, idx, true);
-		this._writer._writeUint48(this._offset + 2, offset);
+/** List of enums. null means no value */
+export class EnumListOut<E> extends ListOut<E | null> {
+	constructor(writer: Writer, length: number, withHeader: boolean) {
+		super(writer, writer._list(length, length, withHeader, 255), length);
 	}
-
-	_setText(idx: number, v: TextOut|string): void {
-		if (!(v instanceof TextOut)) v = this._writer.constructText(v);
-		this._set(idx, v._offset - 10);
+	set(i: number, v: E | null): void {
+		checkIndex(i, this.length);
+		this._w._dv.setUint8(this._off + i, v === null ? 255 : v as any as number);
 	}
+	_copy(inp: EnumListIn<E>): void { copyBytes(this, inp, this.length); }
+}
 
-	_setBytes(idx: number, v: BytesOut|BytesLike): void {
-		if (!(v instanceof BytesOut)) v = this._writer.constructBytes(v);
-		this._set(idx, v._offset - 10);
+/** List of texts. null means no value */
+export class TextListOut extends ListOut<string | TextOut | null> {
+	constructor(writer: Writer, length: number, withHeader: boolean) {
+		super(writer, writer._list(length, length * 6, withHeader, 0), length);
 	}
-
-	_addInplaceText(idx: number, v: string): void {
-		console.assert(this._writer._size == this._end);
-		const l = this._writer._writeText(v);
-		this._set(idx, l);
+	set(i: number, v: string | TextOut | null): void {
+		checkIndex(i, this.length);
+		this._w._setText(this._off + i * 6, v);
 	}
-
-	_addInplaceBytes(idx: number, t: BytesLike): void {
-		console.assert(this._writer._size == this._end);
-		this._set(idx, t.byteLength);
-		const tt = new Uint8Array(t);
-		this._writer._reserve(t.byteLength);
-		for (let i = 0; i < t.byteLength; ++i)
-			this._writer._data.setUint8(this._writer._size++, tt[i]);
+	_copy(inp: TextListIn): void {
+		checkCopyLength(this, inp);
+		// Copy the bytes of the texts, without decoding and encoding them
+		const r = inp._r, w = this._w;
+		for (let i = 0; i < this.length; ++i) {
+			const p = r._u48(inp._off + i * 6);
+			w._u48(this._off + i * 6, p === 0 ? 0 : w._copyText(r, p));
+		}
 	}
 }
 
-export class ListOut<T, IT = T> {
-	_offset: number;
-
-	[i: number]: T;
-	get length(): number { return this.size; }
-
-	add(idx: number): T {
-		if (!this._add) throw Error('Cannot add on this list');
-		return this._add(this._offset, idx);
+/** List of bytes. null means no value */
+export class BytesListOut extends ListOut<BytesLike | BytesOut | null> {
+	constructor(writer: Writer, length: number, withHeader: boolean) {
+		super(writer, writer._list(length, length * 6, withHeader, 0), length);
 	}
-
-	get(idx: number): T {
-		if (!this._get) throw Error('Cannot get on this list');
-		return this._get(this._offset, idx);
+	set(i: number, v: BytesLike | BytesOut | null): void {
+		checkIndex(i, this.length);
+		this._w._setBytes(this._off + i * 6, v);
 	}
-
-	_copy(inp: ListIn<IT>): void {
-		console.assert(this.length == inp.length);
-		for (let i = 0; i < this.length; ++i) this.set(this._offset, i, inp.get(i));
+	_copy(inp: BytesListIn): void {
+		checkCopyLength(this, inp);
+		for (let i = 0; i < this.length; ++i) this.set(i, inp.get(i));
 	}
+}
 
-	constructor(public writer: Writer,
-				public size: number,
-				d: string,
-				dCnt: number,
-				withHeader: boolean,
-				public set: (off: number, index: number, v: T|IT) => void,
-				public _add?: ((off: number, index: number) => T),
-				public _get?: ((off: number, index: number) => T)) {
-		writer._reserve(d.length * dCnt + 10);
-		if (withHeader) {
-			writer._data.setUint32(writer._size, LIST_MAGIC, true);
-			writer._writeUint48(writer._size + 4, size);
-			writer._size += 10;
-		}
-		this._offset = writer._size;
-		for (let i = 0; i < dCnt; ++i)
-			for (let j = 0; j < d.length; ++j)
-				writer._data.setUint8(writer._size++, d.charCodeAt(j));
+/** Base class of generated lists of structs */
+export abstract class StructListOut<S> extends ListOut<S> {
+	/** Width of a struct in bytes */
+	abstract get _width(): number;
+	_copy(inp: StructListIn<S>): void { copyBytes(this, inp, this.length * this._width); }
+}
+
+/** Base class of generated lists of tables */
+export abstract class TableListOut<T, TIn> extends ListOut<T | TIn | null> {
+	/** Construct a new table, store it at index i and return it */
+	abstract add(i: number): T;
+	_copy(inp: ListIn<TIn | null>): void {
+		checkCopyLength(this, inp);
+		for (let i = 0; i < this.length; ++i) this.set(i, inp.get(i));
 	}
-};
+}
 
-const listOutHandel = {
-	get : <T, IT>(obj: ListOut<T, IT>, prop: string) : any => {
-		if (prop === 'length') return obj.size;
-		if (prop === '_offset') return obj._offset;
-		if (prop === 'add') return (idx: number) => { return obj.add(idx); };
-		if (prop === '_copy') return (i: ListIn<IT>) => { obj._copy(i); };
-		const index = +prop;
-		if (Number.isInteger(+index)) {
-			if (index < 0 || index >= obj.size) throw Error('Index outside range');
-			return obj.get(index);
-		}
-		throw Error('Only length can be accessed ' + prop);
-	},
-	set : <T, IT>(obj: ListOut<T, IT>, prop: string, value: T|IT) : boolean => {
-		const index = +prop;
-		if (!Number.isInteger(index) || index < 0 || index >= obj.size)
-			throw Error('Index outside range');
-		obj.set(obj._offset, index, value);
-		return true;
+/**
+ * Base class of generated direct lists of tables. The tables are stored inline and
+ * initialized with their defaults; get(i) returns a writer for the i'th table
+ */
+export abstract class DirectTableListOut<T, TIn> extends ListOut<TIn> {
+	/** Return a writer for the i'th table */
+	abstract get(i: number): T;
+	_copy(inp: ListIn<TIn>): void {
+		checkCopyLength(this, inp);
+		for (let i = 0; i < this.length; ++i) this.set(i, inp.get(i));
 	}
-};
+}
 
-type CopyType<T> = T extends { _copy(i: infer IN) : void } ? IN : never;
+/** Base class of generated lists of unions; get(i) returns a writer for the i'th union */
+export abstract class UnionListOut<U, UIn> extends ListOut<UIn> {
+	/** Return a writer for the i'th union */
+	abstract get(i: number): U;
+	_copy(inp: ListIn<UIn>): void {
+		checkCopyLength(this, inp);
+		for (let i = 0; i < this.length; ++i) this.set(i, inp.get(i));
+	}
+}
 
+/** Responsible for constructing a message */
 export class Writer {
-	_buffer: ArrayBuffer;
-	_data: DataView;
-	_size: number;
+	declare _buffer: ArrayBuffer;
+	declare _u8: Uint8Array;
+	declare _dv: DataView;
+	/** Number of bytes written */
+	declare _size: number;
 
-	constructor() {
-		this._buffer = new ArrayBuffer(1024);
-		this._data = new DataView(this._buffer);
-		this._size = 10;
+	/** Construct a writer, with an initial capacity in bytes */
+	constructor(capacity: number = 1024) {
+		this._buffer = new ArrayBuffer(Math.max(capacity, 16));
+		this._u8 = new Uint8Array(this._buffer);
+		this._dv = new DataView(this._buffer);
+		this._size = 10; // Room for the message header
 	}
 
-	_reserve(o: number) {
-		if (this._size + o <= this._buffer.byteLength) return;
-		const nb = new ArrayBuffer(this._buffer.byteLength * 2);
-		const nd = new Uint8Array(nb);
-		nd.set(new Uint8Array(this._buffer));
+	/** Make room for n more bytes */
+	_reserve(n: number): void {
+		const need = this._size + n;
+		if (need <= this._buffer.byteLength) return;
+		const nb = new ArrayBuffer(Math.max(this._buffer.byteLength * 2, need));
+		const u8 = new Uint8Array(nb);
+		u8.set(this._u8.subarray(0, this._size));
 		this._buffer = nb;
-		this._data = new DataView(this._buffer);
+		this._u8 = u8;
+		this._dv = new DataView(nb);
 	}
 
-	_writeUint48(o: number, v: number) {
-		const hi = v / 2 ** 32 | 0;
-		const lo = (v - hi * 2 ** 32) | 0;
-		this._data.setUint32(o, lo, true);
-		this._data.setUint16(o + 4, hi, true);
+	/** Allocate n zeroed bytes at the end, and return their offset */
+	_alloc(n: number): number {
+		this._reserve(n);
+		const o = this._size;
+		this._size = o + n;
+		return o;
 	}
 
-	_writeInt64(o: number, v: number) {
-		let hi = v / 2 ** 32 | 0;
-		if (v < 0) --hi;
-		const lo = (v - hi * 2 ** 32) | 0;
-		this._data.setUint32(o, lo, true);
-		this._data.setInt32(o + 4, hi, true);
+	_u48(o: number, v: number): void { setU48(this._dv, o, v); }
+
+	_i64(o: number, v: number): void {
+		const hi = Math.floor(v / TWO32);
+		this._dv.setUint32(o, v - hi * TWO32, true);
+		this._dv.setInt32(o + 4, hi, true);
 	}
 
-	_writeUint64(o: number, v: number) {
-		const hi = v / 2 ** 32 | 0;
-		const lo = (v - hi * 2 ** 32) | 0;
-		this._data.setUint32(o, lo, true);
-		this._data.setUint32(o + 4, hi, true);
+	_u64(o: number, v: number): void {
+		const hi = Math.floor(v / TWO32);
+		this._dv.setUint32(o, v - hi * TWO32, true);
+		this._dv.setUint32(o + 4, hi, true);
 	}
 
+	/** Set the bits in mask of the byte at o */
+	_setBits(o: number, mask: number): void {
+		this._dv.setUint8(o, this._dv.getUint8(o) | mask);
+	}
+
+	/** Set or clear the bits in mask of the byte at o */
+	_bit(o: number, mask: number, v: boolean): void {
+		const x = this._dv.getUint8(o);
+		this._dv.setUint8(o, v ? x | mask : x & ~mask);
+	}
+
+	/**
+	 * Allocate a table with the given default content, optionally with a header, and
+	 * return the offset of its content
+	 */
+	_table(magic: number, def: Uint8Array, zero: boolean, withHeader: boolean): number {
+		const h = withHeader ? 10 : 0;
+		const o = this._alloc(h + def.length);
+		if (withHeader) {
+			this._dv.setUint32(o, magic, true);
+			setU48(this._dv, o + 4, def.length);
+		}
+		// Newly allocated bytes are zero
+		if (!zero) this._u8.set(def, o + h);
+		return o + h;
+	}
+
+	/**
+	 * Allocate a list of length elements taking bytes bytes, optionally with a
+	 * header, with all bytes set to fill. Return the offset of the first element
+	 */
+	_list(length: number, bytes: number, withHeader: boolean, fill: number): number {
+		if (!((length >>> 0) === length)) throw new RangeError('Invalid list length ' + length);
+		const h = withHeader ? 10 : 0;
+		const o = this._alloc(h + bytes);
+		if (withHeader) {
+			this._dv.setUint32(o, LIST_MAGIC, true);
+			setU48(this._dv, o + 4, length);
+		}
+		if (fill !== 0) this._u8.fill(fill, o + h, o + h + bytes);
+		return o + h;
+	}
+
+	/**
+	 * Allocate a direct list of length tables with the given default content,
+	 * optionally with a header, and return the offset of the first table
+	 */
+	_directList(length: number, magic: number, def: Uint8Array, zero: boolean,
+				withHeader: boolean): number {
+		if (!((length >>> 0) === length)) throw new RangeError('Invalid list length ' + length);
+		const h = withHeader ? 10 : 0;
+		const o = this._alloc(h + 8 + length * def.length);
+		if (withHeader) {
+			this._dv.setUint32(o, DIRECT_LIST_MAGIC, true);
+			setU48(this._dv, o + 4, length);
+		}
+		// The magic and size of the tables, followed by the tables
+		this._dv.setUint32(o + h, magic, true);
+		this._dv.setUint32(o + h + 4, def.length, true);
+		const start = o + h + 8;
+		if (!zero && length !== 0) {
+			// Write the defaults once, then double the written part
+			const u8 = this._u8, total = length * def.length;
+			u8.set(def, start);
+			for (let done = def.length; done < total; done *= 2)
+				u8.copyWithin(start + done, start, start + Math.min(done, total - done));
+		}
+		return start;
+	}
+
+	/** Check that inplace content of the table ending at end is added right after it */
+	_checkInplace(end: number): void {
+		if (this._size !== end)
+			throw new Error('Inplace members must be added right after their table is ' +
+							'constructed, before anything else is written');
+	}
+
+	/**
+	 * Write utf-8 encoded text followed by a zero byte, and return the number of bytes
+	 * not including the zero
+	 */
 	_writeText(t: string): number {
-		// Write utf-8 encoded text and return the number of bytes not including the 0
-		// termination
-		const s0 = this._size;
-		for (let i = 0; i < t.length; ++i) {
-			this._reserve(5);
+		const n = t.length;
+		this._reserve(n + 1);
+		const start = this._size;
+		let u8 = this._u8;
+		let i = 0;
+		for (; i < n; ++i) {
 			const c = t.charCodeAt(i);
-			if (c < 128) {
-				this._data.setUint8(this._size++, c);
-			} else if (c < 2048) {
-				this._data.setUint8(this._size++, 192 + (c & 31));
-				this._data.setUint8(this._size++, 128 + (c >> 5));
-			} else if (c < 65536) {
-				this._data.setUint8(this._size++, 224 + (c & 15));
-				this._data.setUint8(this._size++, 128 + ((c >> 4) & 63));
-				this._data.setUint8(this._size++, 128 + (c >> 10));
+			if (c >= 0x80) break;
+			u8[start + i] = c;
+		}
+		let len = i;
+		if (i < n) {
+			// Non ascii: at most 3 bytes per remaining UTF-16 code unit. Growing the
+			// buffer only keeps the bytes before _size, so include the ascii prefix
+			this._size = start + i;
+			this._reserve((n - i) * 3 + 1);
+			u8 = this._u8;
+			if (n - i > TEXT_ENCODER_THRESHOLD) {
+				if (textEncoder === null) textEncoder = new TextEncoder();
+				len += textEncoder.encodeInto(t.substring(i), u8.subarray(start + i)).written;
 			} else {
-				this._data.setUint8(this._size++, 240 + (c & 7));
-				this._data.setUint8(this._size++, 128 + ((c >> 3) & 63));
-				this._data.setUint8(this._size++, 128 + (c >> 9) & 63);
-				this._data.setUint8(this._size++, 128 + c >> 15);
+				len = encodeUtf8(t, i, u8, start + i) - start;
 			}
 		}
-		this._data.setUint8(this._size++, 0);
-		return this._size - s0 - 1;
+		u8[start + len] = 0;
+		this._size = start + len + 1;
+		return len;
 	}
 
-	constructTable<T extends TableOut>(type: {
-		new(writer: Writer, header: boolean): T;
-	}): T {
-		return new type(this, true);
+	/** Store a pointer to text (written if it is a string) at o; null stores no text */
+	_setText(o: number, v: string | TextOut | null): void {
+		let p = 0;
+		if (v !== null) p = (v instanceof TextOut ? this._own(v) : this.constructText(v))._off;
+		setU48(this._dv, o, p);
 	}
 
-	constructInt8List(size: number, _inplace: boolean = false): ListOut<number> {
-		return new Proxy<ListOut<number>>(
-		  new ListOut<number>(this,
-							  size,
-							  '\0',
-							  size,
-							  !_inplace,
-							  (off: number, idx: number, v: number):
-								void => { this._data.setInt8(off + idx, v); }),
-		  listOutHandel);
+	/** Store a pointer to bytes (written if needed) at o; null stores no bytes */
+	_setBytes(o: number, v: BytesLike | BytesOut | null): void {
+		let p = 0;
+		if (v !== null) p = (v instanceof BytesOut ? this._own(v) : this.constructBytes(v))._off;
+		setU48(this._dv, o, p);
 	}
 
-	constructUint8List(size: number, _inplace: boolean = false): ListOut<number> {
-		return new Proxy<ListOut<number>>(
-		  new ListOut<number>(this,
-							  size,
-							  '\0',
-							  size,
-							  !_inplace,
-							  (off: number, idx: number, v: number):
-								void => { this._data.setUint8(off + idx, v); }),
-		  listOutHandel);
+	/** Check that an object (table, list, text or bytes) belongs to this writer */
+	_own<T extends {_w: Writer}>(v: T): T {
+		if (v._w !== this) throw new Error('Object from another writer');
+		return v;
 	}
 
-	constructInt16List(size: number, _inplace: boolean = false): ListOut<number> {
-		return new Proxy<ListOut<number>>(
-		  new ListOut<number>(this,
-							  size,
-							  '\0\0',
-							  size,
-							  !_inplace,
-							  (off: number, idx: number, v: number):
-								void => { this._data.setInt16(off + 2 * idx, v, true); }),
-		  listOutHandel);
+	/**
+	 * Copy the text at p (the offset of its magic) of the message read by r, and return
+	 * the offset of the copy. The bytes are copied as they are, without decoding
+	 */
+	_copyText(r: Reader, p: number): number {
+		return this._textFromBytes(r._bytes(p + 10, r._size(p, TEXT_MAGIC)));
 	}
 
-	constructUint16List(size: number, _inplace: boolean = false): ListOut<number> {
-		return new Proxy<ListOut<number>>(
-		  new ListOut<number>(
-			this,
-			size,
-			'\0\0',
-			size,
-			!_inplace,
-			(off: number, idx: number, v: number):
-			  void => { this._data.setUint16(off + 2 * idx, v, true); }),
-		  listOutHandel);
+	/** Write a text with the given utf-8 bytes, and return the offset of its magic */
+	_textFromBytes(b: Uint8Array): number {
+		const o = this._alloc(11 + b.length);
+		this._dv.setUint32(o, TEXT_MAGIC, true);
+		setU48(this._dv, o + 4, b.length);
+		this._u8.set(b, o + 10); // The zero termination is already zero
+		return o;
 	}
 
-	constructInt32List(size: number, _inplace: boolean = false): ListOut<number> {
-		return new Proxy<ListOut<number>>(
-		  new ListOut<number>(this,
-							  size,
-							  '\0\0\0\0',
-							  size,
-							  !_inplace,
-							  (off: number, idx: number, v: number):
-								void => { this._data.setInt32(off + 4 * idx, v, true); }),
-		  listOutHandel);
+	/** Write the utf-8 bytes of an inplace text and return their length */
+	_inplaceTextFromBytes(b: Uint8Array): number {
+		const o = this._alloc(b.length + 1);
+		this._u8.set(b, o); // The zero termination is already zero
+		return b.length;
 	}
 
-	constructUint32List(size: number, _inplace: boolean = false): ListOut<number> {
-		return new Proxy<ListOut<number>>(
-		  new ListOut<number>(
-			this,
-			size,
-			'\0\0\0\0',
-			size,
-			!_inplace,
-			(off: number, idx: number, v: number):
-			  void => { this._data.setUint32(off + 4 * idx, v, true); }),
-		  listOutHandel);
+	/** Copy the 8 bytes at q of src to o */
+	_copy8(o: number, src: DataView, q: number): void {
+		this._dv.setUint32(o, src.getUint32(q, true), true);
+		this._dv.setUint32(o + 4, src.getUint32(q + 4, true), true);
 	}
 
-	constructInt64List(size: number, _inplace: boolean = false): ListOut<number> {
-		return new Proxy<ListOut<number>>(
-		  new ListOut<number>(this,
-							  size,
-							  '\0\0\0\0\0\0\0\0',
-							  size,
-							  !_inplace,
-							  (off: number, idx: number, v: number):
-								void => { this._writeInt64(off + 8 * idx, v); }),
-		  listOutHandel);
+	/** Write bytes without a header and return their length */
+	_writeBytes(b: BytesLike): number {
+		const u = b instanceof Uint8Array ? b : new Uint8Array(b);
+		const o = this._alloc(u.length);
+		this._u8.set(u, o);
+		return u.length;
 	}
 
-	constructUint64List(size: number, _inplace: boolean = false): ListOut<number> {
-		return new Proxy<ListOut<number>>(
-		  new ListOut<number>(this,
-							  size,
-							  '\0\0\0\0\0\0\0\0',
-							  size,
-							  !_inplace,
-							  (off: number, idx: number, v: number):
-								void => { this._writeUint64(off + 8 * idx, v); }),
-		  listOutHandel);
+	/** Construct a table of the given type */
+	constructTable<T>(type: TableOutType<T>): T {
+		return new type(this, this._table(type._MAGIC, type._DEFAULT, type._ZERO, true));
 	}
 
-	constructFloat32List(size: number, _inplace: boolean = false): ListOut<number> {
-		return new Proxy<ListOut<number>>(
-		  new ListOut<number>(
-			this,
-			size,
-			'\0\0\0\0',
-			size,
-			!_inplace,
-			(off: number, idx: number, v: number):
-			  void => { this._data.setFloat32(off + 4 * idx, v, true); }),
-		  listOutHandel);
-	}
-
-	constructFloat64List(size: number, _inplace: boolean = false): ListOut<number> {
-		return new Proxy<ListOut<number>>(
-		  new ListOut<number>(
-			this,
-			size,
-			'\0\0\0\0\0\0\0\0',
-			size,
-			!_inplace,
-			(off: number, idx: number, v: number):
-			  void => { this._data.setFloat64(off + 8 * idx, v, true); }),
-		  listOutHandel);
-	}
-
-	constructEnumList<T>(size: number, _inplace: boolean = false): ListOut<T, T|null> {
-		return new Proxy<ListOut<T, T|null>>(
-		  new ListOut<T, T|null>(this,
-								 size,
-								 '\xff',
-								 size,
-								 !_inplace,
-								 (off: number, idx: number, v: T|null):
-								   void => {
-									   if (v !== null)
-										   this._data.setUint8(off + idx,
-															   v as any as number);
-								   }),
-		  listOutHandel);
-	}
-
-	constructStructList<T extends StructType>(type: StructTypeType<T>,
-											  size: number,
-											  _inplace: boolean = false): ListOut<T> {
-		return new Proxy<ListOut<T>>(
-		  new ListOut<T>(this,
-						 size,
-						 '\0',
-						 size * type._WIDTH,
-						 !_inplace,
-						 (off: number, idx: number, v: T):
-						   void => { type._write(this, off + idx * type._WIDTH, v); }),
-		  listOutHandel);
-	};
-
-	constructTableList<T extends TableOut>(type: {
-		new(writer: Writer, withHeader: boolean): T;
-		_IN : { new(reader: Reader, offset: number, size: number) : CopyType<T>}
-	},
-										   size: number,
-										   _inplace: boolean = false):
-	  ListOut<T, CopyType<T>|null> {
-		return new Proxy<ListOut<T, CopyType<T>|null>>(
-		  new ListOut<T, CopyType<T>|null>(
-			this,
-			size,
-			'\0\0\0\0\0\0',
-			size,
-			!_inplace,
-			(off: number, idx: number, v: T|CopyType<T>|null) => {
-				if (v === null) return;
-				if (v instanceof type._IN) {
-					const v2 = this.constructTable(type);
-					(v2 as any)._copy(v); // TODO get rid of any here
-					v = v2;
-				}
-				this._writeUint48(off + idx * 6, (v as T)._offset - 10);
-			},
-			(off: number, idx: number):
-			  T => {
-				  const v = this.constructTable(type);
-				  this._writeUint48(off + idx * 6, v._offset - 10);
-				  return v;
-			  }),
-		  listOutHandel);
-	}
-
-	constructDirectTableList<T extends TableOut>(type: {
-		new(writer: Writer, withHeader: boolean): T;
-		_MAGIC: number; _SIZE: number;
-		_IN: { new(reader: Reader, offset: number, size: number): CopyType<T> };
-	}, size: number): ListOut<T, CopyType<T>> {
-		// Write DIRECT_LIST header: DIRECT_LIST_MAGIC (4) + size as uint48 (6) = 10 bytes
-		// Then inline: table_magic (4) + item_size (4) + size * _SIZE zeroed bytes
-		this._reserve(18 + size * type._SIZE);
-		this._data.setUint32(this._size, DIRECT_LIST_MAGIC, true);
-		this._writeUint48(this._size + 4, size);
-		this._size += 10;
-		// Create ListOut now: _offset = this._size (just after header), so _setList stores header start ✓
-		let dataStart = 0;
-		const listOut = new ListOut<T, CopyType<T>>(
-			this,
-			size,
-			'',
-			0,
-			false,
-			(off: number, idx: number, v: T|CopyType<T>) => {
-				if (v instanceof type._IN) {
-					const s = this._size;
-					this._size = dataStart + idx * type._SIZE;
-					const item = new type(this, false);
-					this._size = s;
-					(item as any)._copy(v);
-				}
-			},
-			(off: number, idx: number): T => {
-				const s = this._size;
-				this._size = dataStart + idx * type._SIZE;
-				const item = new type(this, false);
-				this._size = s;
-				return item;
-			});
-		// Write inline data after creating listOut (closures capture dataStart by reference)
-		this._data.setUint32(this._size, type._MAGIC, true);
-		this._data.setUint32(this._size + 4, type._SIZE, true);
-		this._size += 8;
-		dataStart = this._size;
-		for (let i = 0; i < size * type._SIZE; ++i) this._data.setUint8(this._size++, 0);
-		return new Proxy<ListOut<T, CopyType<T>>>(listOut, listOutHandel);
-	}
-
-	constructTextList(size: number,
-					  _inplace: boolean = false): ListOut<string|TextOut, string|null> {
-		return new Proxy<ListOut<string|TextOut, string|null>>(
-		  new ListOut<string|TextOut, string|null>(
-			this,
-			size,
-			'\0\0\0\0\0\0',
-			size,
-			!_inplace,
-			(off: number, idx: number, v: TextOut|string|null) => {
-				if (v === null) return;
-				if (!(v instanceof TextOut)) { v = this.constructText(v); }
-				this._writeUint48(off + idx * 6, v._offset - 10);
-			}),
-		  listOutHandel);
-	}
-
-	constructBytesList(size: number, _inplace: boolean = false):
-	  ListOut<BytesLike|BytesOut, Uint8Array|null> {
-		return new Proxy<ListOut<BytesLike|BytesOut, Uint8Array|null>>(
-		  new ListOut<BytesLike|BytesOut, Uint8Array|null>(
-			this,
-			size,
-			'\0\0\0\0\0\0',
-			size,
-			!_inplace,
-			(off: number, idx: number, v: BytesOut|BytesLike|null) => {
-				if (v === null) return;
-				let o;
-				if (!(v instanceof BytesOut)) { v = this.constructBytes(v); }
-				this._writeUint48(off + idx * 6, v._offset - 10);
-			}),
-		  listOutHandel);
-	}
-
-	constructBoolList(size: number, _inplace: boolean = false): ListOut<boolean> {
-		return new Proxy<ListOut<boolean>>(
-		  new ListOut<boolean>(this,
-							   size,
-							   '\0',
-							   (size + 7) >> 3,
-							   !_inplace,
-							   (off: number, idx: number, v: boolean) => {
-								   const o = idx >> 3;
-								   const b = 1 << (idx & 7);
-								   const vv = this._data.getUint8(off + o);
-								   this._data.setUint8(off + o, v ? (vv | b) : (vv & ~b));
-							   }),
-		  listOutHandel);
-	}
-
-	constructUnionList<T extends UnionOut>(type: {
-		new(writer: Writer, offset: number): T; _IN : {
-			new(reader: Reader, type: number, offset: number, size: number|null) :
-			  CopyType<T>;
-		}
-	},
-										   size: number,
-										   _inplace: boolean = false):
-	  ListOut<T, CopyType<T>|null> {
-		return new Proxy<ListOut<T, CopyType<T>|null>>(
-		  new ListOut<T, CopyType<T>|null>(
-			this,
-			size,
-			'\0\0\0\0\0\0\0\0',
-			size,
-			!_inplace,
-			(off: number, idx: number, v: T|CopyType<T>|null) => {
-				if (!(v instanceof type._IN)) throw Error('Ups');
-				const vv = new type(this, off + idx * 8);
-				(vv as any)._copy(v);
-			},
-			undefined,
-			(off: number, idx: number): T => { return new type(this, off + idx * 8); }),
-		  listOutHandel);
-	}
-
+	/** Write a text, which can then be stored in several places */
 	constructText(t: string): TextOut {
-		this._reserve(10);
-		const s = this._size;
-		this._data.setUint32(s, TEXT_MAGIC, true);
-		this._size += 10;
-		const bytes = this._writeText(t);
-		this._writeUint48(s + 4, bytes);
-		return new TextOut(s + 10);
+		const o = this._alloc(10);
+		// Note: writing may grow the buffer, so only use this._dv afterwards
+		const len = this._writeText(t);
+		this._dv.setUint32(o, TEXT_MAGIC, true);
+		setU48(this._dv, o + 4, len);
+		return new TextOut(this, o);
 	}
 
-	constructBytes(t: BytesLike): BytesOut {
-		this._reserve(t.byteLength + 10);
-		this._data.setUint32(this._size, BYTES_MAGIC, true);
-		this._writeUint48(this._size + 4, t.byteLength);
-		this._size += 10;
-		const o = this._size;
-		const b = new Uint8Array(t);
-		for (let i = 0; i < t.byteLength; ++i) this._data.setUint8(o + i, b[i]);
-		this._size += t.byteLength;
-		return new BytesOut(o);
+	/** Write bytes, which can then be stored in several places */
+	constructBytes(b: BytesLike): BytesOut {
+		const o = this._alloc(10);
+		const len = this._writeBytes(b); // May grow the buffer
+		this._dv.setUint32(o, BYTES_MAGIC, true);
+		setU48(this._dv, o + 4, len);
+		return new BytesOut(this, o);
 	}
 
-	finalize<T extends TableOut>(root: T): ArrayBuffer {
-		this._data.setUint32(0, MESSAGE_MAGIC, true);
-		this._writeUint48(4, root._offset - 10);
-		return this._buffer.slice(0, this._size);
+	/**
+	 * Construct a list of the given list type, e.g. Int32ListOut or a generated
+	 * T_ListOut. values, if given, is stored in the list
+	 */
+	constructList<L extends ListOut<any>>(type: ListOutType<L>,
+										   lengthOrValues: number | ArrayLike<any>): L {
+		if (typeof lengthOrValues === 'number') return new type(this, lengthOrValues, true);
+		const l = new type(this, lengthOrValues.length, true);
+		l.setAll(lengthOrValues);
+		return l;
+	}
+
+	constructInt8List(lengthOrValues: number | ArrayLike<number>): Int8ListOut {
+		return this.constructList(Int8ListOut, lengthOrValues);
+	}
+	constructUint8List(lengthOrValues: number | ArrayLike<number>): Uint8ListOut {
+		return this.constructList(Uint8ListOut, lengthOrValues);
+	}
+	constructInt16List(lengthOrValues: number | ArrayLike<number>): Int16ListOut {
+		return this.constructList(Int16ListOut, lengthOrValues);
+	}
+	constructUint16List(lengthOrValues: number | ArrayLike<number>): Uint16ListOut {
+		return this.constructList(Uint16ListOut, lengthOrValues);
+	}
+	constructInt32List(lengthOrValues: number | ArrayLike<number>): Int32ListOut {
+		return this.constructList(Int32ListOut, lengthOrValues);
+	}
+	constructUint32List(lengthOrValues: number | ArrayLike<number>): Uint32ListOut {
+		return this.constructList(Uint32ListOut, lengthOrValues);
+	}
+	constructInt64List(lengthOrValues: number | ArrayLike<number> | BigInt64Array):
+	  Int64ListOut {
+		return this.constructList(Int64ListOut, lengthOrValues);
+	}
+	constructUint64List(lengthOrValues: number | ArrayLike<number> | BigUint64Array):
+	  Uint64ListOut {
+		return this.constructList(Uint64ListOut, lengthOrValues);
+	}
+	constructFloat32List(lengthOrValues: number | ArrayLike<number>): Float32ListOut {
+		return this.constructList(Float32ListOut, lengthOrValues);
+	}
+	constructFloat64List(lengthOrValues: number | ArrayLike<number>): Float64ListOut {
+		return this.constructList(Float64ListOut, lengthOrValues);
+	}
+	constructBoolList(lengthOrValues: number | ArrayLike<boolean>): BoolListOut {
+		return this.constructList(BoolListOut, lengthOrValues);
+	}
+	constructEnumList<E>(lengthOrValues: number | ArrayLike<E | null>): EnumListOut<E> {
+		return this.constructList(EnumListOut, lengthOrValues) as EnumListOut<E>;
+	}
+	constructTextList(lengthOrValues: number | ArrayLike<string | TextOut | null>):
+	  TextListOut {
+		return this.constructList(TextListOut, lengthOrValues);
+	}
+	constructBytesList(lengthOrValues: number | ArrayLike<BytesLike | BytesOut | null>):
+	  BytesListOut {
+		return this.constructList(BytesListOut, lengthOrValues);
+	}
+
+	/**
+	 * Finish the message with the given root table and return a copy of it, in a buffer
+	 * of exactly its size
+	 */
+	finalize(root: {_w: Writer, _off: number}): Uint8Array {
+		return this.finalizeView(root).slice();
+	}
+
+	/**
+	 * Finish the message with the given root table and return it without copying, as a
+	 * view of the writer's buffer.
+	 *
+	 * The buffer is larger than the message, so use the view itself, not its .buffer.
+	 * The writer must not be used afterwards.
+	 */
+	finalizeView(root: {_w: Writer, _off: number}): Uint8Array {
+		this._own(root);
+		this._dv.setUint32(0, MESSAGE_MAGIC, true);
+		setU48(this._dv, 4, root._off - 10);
+		return this._u8.subarray(0, this._size);
 	}
 }

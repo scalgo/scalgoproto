@@ -7,14 +7,12 @@ import * as scalgoproto from 'scalgoproto'
 
 const NL = 1_000_000, NV = 300_000, NR = 200_000, NT = 200_000;
 
-function build(): ArrayBuffer {
+function build(): Uint8Array {
 	const w = new scalgoproto.Writer();
-	// The writer only doubles its buffer once per reservation, so grow it up front
-	while (w._buffer.byteLength < 64e6) w._reserve(w._buffer.byteLength);
 	const root = w.constructTable(read.ListsOut);
 	const rows = root.addRows(NR);
 	for (let i = 0; i < NR; ++i) {
-		const row = rows.add(i);
+		const row = rows.get(i);
 		row.x = 500000 + i * 0.5;
 		row.y = 6000000 - i * 0.25;
 		row.color = (i * 2654435761) >>> 0;
@@ -25,14 +23,14 @@ function build(): ArrayBuffer {
 	}
 	const f64 = root.addF64(NL), u32 = root.addU32(NL);
 	for (let i = 0; i < NL; ++i) {
-		f64[i] = i * 0.5;
-		u32[i] = i * 7;
+		f64.set(i, i * 0.5);
+		u32.set(i, i * 7);
 	}
 	const v = root.addV(NV);
-	for (let i = 0; i < NV; ++i) v[i] = new read.Vertex(500000 + i, 6000000 + i, i / 3);
+	for (let i = 0; i < NV; ++i) v.set(i, new read.Vertex(500000 + i, 6000000 + i, i / 3));
 	const t = root.addTexts(NT);
 	for (let i = 0; i < NT; ++i)
-		t[i] = i % 10 == 0 ? 'a somewhat longer text that is more than 32 bytes ' + i : 'name' + i;
+		t.set(i, i % 10 == 0 ? 'a somewhat longer text that is more than 32 bytes ' + i : 'name' + i);
 	return w.finalize(root);
 }
 

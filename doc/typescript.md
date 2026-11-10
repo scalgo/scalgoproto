@@ -19,17 +19,17 @@ const mesh = r.root(MeshIn);
 console.log(mesh.name, mesh.vertices?.length);
 ```
 
-`Reader` accepts an `ArrayBuffer`, a `SharedArrayBuffer` or any typed array/`DataView`.
-A typed array is read in place, also when it is a view into the middle of a larger
-buffer. Nothing is decoded up front: every getter reads directly from the message.
+`Reader` accepts an `ArrayBuffer` or any typed array/`DataView`; shared memory
+(`SharedArrayBuffer`) is not supported. A typed array is read in place, also when it is
+a view into the middle of a larger buffer. Nothing is decoded up front: every getter
+reads directly from the message.
 
 For each table `T` the generated code contains:
 
 * `TIn`: reader with a getter per member. Members that are absent (an older message
   with a shorter table) return their default value. Optional members, texts, bytes,
   tables and lists return `null` when not set. For 64 bit integers the getter returns a
-  `number` (exact up to 2^53); a `xxx_bigint` getter returns the exact value (the
-  underscore keeps it from colliding with member names, which cannot contain one).
+  `number` (exact up to 2^53); a `xxx_bigint` getter returns the exact value.
 * `T_ListIn` and `T_DirectListIn`: lists of the table.
 
 Unions get `UIn` with `type`, `isX` and `x` getters, and structs a class with a static
@@ -46,13 +46,8 @@ const l = mesh.indices!;            // scalgoproto.Uint32ListIn
 for (let i = 0; i < l.length; ++i) use(l.get(i));
 ```
 
-A plain loop over `get(i)` is the fastest way to access elements. `forEach` and
-`toArray()` are implemented separately for every kind of list, so they stay fast when
-an application uses many kinds of lists, but the callback of `forEach` still costs
-about a factor two. `for..of` is the slowest, especially in programs that iterate
-many kinds of lists.
-`get(i)` throws a `RangeError` unless `i` is an integer in `[0, length)`.
-Lists cannot be indexed with `l[i]`.
+A plain loop over `get(i)` is fastest; `forEach` is about half as fast, and `for..of`
+slower still. `get(i)` throws a `RangeError` unless `i` is an integer in `[0, length)`.
 
 Lists of numbers can be turned into typed arrays:
 
@@ -63,33 +58,28 @@ const raw: Uint8Array = mesh.vertices!.bytes(); // e.g. for gl.bufferData
 
 `toTypedArray()` returns a view of the message when the list data happens to be aligned
 to the element size, and a copy otherwise (the format is packed, so lists are not
-generally aligned). A typed array is not automatically faster than `get(i)`: a single
-pass over a copied list costs about as much as a pass with `get(i)`. Use it when the
-values are read several times, or must be passed on as a typed array (e.g. to WebGL).
-Pass `true` to always get a copy, e.g. one that can be transferred to another thread
-without transferring the whole message. `bytes()` is always a view.
+generally aligned). A typed array is not automatically faster than `get(i)`; use it
+when the values are read several times, or must be passed on as a typed array (e.g. to
+WebGL). Pass `true` to always get a copy, e.g. one that can be transferred to another
+thread without transferring the whole message. `bytes()` is always a view.
 
-When converting lists repeatedly, reuse the destination with `copyTo`:
+Allocating large typed arrays is expensive, so when converting lists repeatedly, reuse
+the destination with `copyTo` (it throws if the destination is too small):
 
 ```ts
 const xs = new Float64Array(maxLength);
 mesh.xs!.copyTo(xs);      // or copyTo(xs, offset) to place it at an element offset
 ```
 
-Allocating a new large typed array is expensive (in a benchmark converting a 1M element
-F64 list 20 times took 16 ms in V8 and 58 ms in SpiderMonkey with `toTypedArray()`,
-versus 3 and 2 ms with a reused destination). `copyTo` throws if the destination is too
-small.
 I64/U64 lists return `BigInt64Array`/`BigUint64Array` and have `getBigInt(i)`.
 `BoolListIn.toUint8Array()` unpacks the bits, and `EnumListIn.toTypedArray()` and
-`copyTo()` return the raw values (255 means not set). Lists of structs and direct lists of tables also have
-`bytes()`.
+`copyTo()` return the raw values (255 means not set). Lists of structs and direct lists
+of tables also have `bytes()`.
 
 ### Direct lists of tables
 
-`get(i)` creates a small object per row. V8 usually optimizes this allocation away in
-tight loops, so `get(i)` and a cursor are equally fast there. In SpiderMonkey, and when
-the row escapes the loop, the cursor avoids an allocation per row:
+`get(i)` creates a small object per row. To avoid that, for example when rows are
+passed to other functions, use a cursor:
 
 ```ts
 const rows = root.rows!;
@@ -117,16 +107,13 @@ for (let i = 0; i < c.x.length; ++i) draw(c.x[i], c.y[i], c.name[i]);
 * Optional members get an extra `x_has` column (`Uint8Array`) telling whether each row
   has a value. Optional floats use NaN, like the getters.
 * Struct members are flattened: a member `s` of a struct type with members `x` and `y`
-  becomes columns `s_x` and `s_y`. The `_` cannot occur in schema names, so these never
-  collide with members.
+  becomes columns `s_x` and `s_y`.
 * Texts, bytes, lists, tables and unions in table rows become plain arrays of what the
   getters return.
 * Rows written with an older version of the schema (with fewer members) get the default
   for the missing members.
 
-`toColumns()` reads the list in a single pass and is as fast as the equivalent
-hand-written loop with a cursor. The generated `T_Columns` interface describes the
-result.
+The generated `T_Columns` interface describes the result.
 
 ## Decoding in workers
 
@@ -167,69 +154,118 @@ Things to keep in mind:
   return views of the message buffer, so transferring their buffer transfers the whole
   message. That is fine if the message is not needed any more in the worker; otherwise
   use `toTypedArray(true)` or `copyTo` to get arrays of their own.
-* **Fetch in the worker.** Given a URL, the worker fetches the message itself, so the
-  bytes never pass through the main thread.
-* **A worker only pays off with real work.** Sending a message to a worker and the
-  result back costs a round trip. If the data is already in the form you need (e.g. F32
-  vertices and U32 indices that go straight to `gl.bufferData(..., list.bytes(), ...)`),
-  decoding on the main thread costs microseconds and a worker gains nothing. Use one
-  when there is per element work: converting coordinates, triangulating, building
-  render batches, decoding many strings, or many messages at once.
-
-In a test in Firefox, fetching and decoding an 11 MB message with 200k rows into columns
-took about 70 ms in a worker with the main thread staying responsive, while decoding it
-on the main thread blocked it for 30-50 ms.
-
-## Performance notes
-
-* Reads go through a `DataView`, which handles the unaligned data of the packed
-  format at full speed in both V8 and SpiderMonkey.
-* Generated classes have no base class and declare (rather than define) their fields,
-  so the speed does not depend on the compilation target or `useDefineForClassFields`.
-* Strings of up to 24 bytes are decoded in JavaScript, longer strings with
-  `TextDecoder`, which has a fixed cost per call. The best threshold differs between
-  engines (about 16 to 24 bytes in V8, 32 to 48 in SpiderMonkey); 24 is a compromise.
-* `test/bench_read.ts` is a benchmark of the reader.
-
-## Testing
-
-`python3 -m test` runs the tests of all languages. The TypeScript part needs node and
-installs TypeScript and tsx in `test/` with pnpm (or npm) on first use. It:
-
-* Generates code for `test/base.spr`, `complex2.spr`, `union.spr`, `read.spr` and
-  `names.spr`, and type checks the runtime, the generated code and the tests with `tsc`.
-* Runs the cross language tests in `test_base.ts` and `test_union.ts`: the writer must
-  produce exactly the bytes of the `.bin` files shared with C++, Python and Rust, and
-  the reader must read them. The reading tests are run a second time with the message
-  placed at an odd byte offset in memory, to test unaligned reads.
-* Runs `test_read.ts`, which tests the reader API at all 8 byte offsets: every list type,
-  `get`, iteration, `forEach`, `toArray`, typed array views versus copies, `copyTo`,
-  cursors, `toColumns` (compared column by column with the getters, including rows
-  written with an older schema), invalid indices, text decoding edge cases (multi byte
-  characters, byte order marks, texts cut off by the end of the message or of a
-  character), bigints above 2^53, and the accepted input types.
-
-`names.spr` contains names that would collide with generated accessors or shadow
-built-in types (`struct DataView`, a member `amountBigInt` next to `amount: U64`); it
-only has to compile.
-
-To test the TypeScript part alone, in `test/` after one run of `python3 -m test`:
-
-    ./node_modules/.bin/tsc -p .
-    ./node_modules/.bin/tsx test_read.ts
-    ./node_modules/.bin/tsx test_base.ts in test/simple.bin
-    SP_SHIFT=3 ./node_modules/.bin/tsx test_base.ts in test/simple.bin
+* **Fetch in the worker,** so the bytes never pass through the main thread.
+* **A worker only pays off with real work.** If the data is already in the form you
+  need (e.g. F32 vertices and U32 indices that go straight to
+  `gl.bufferData(..., list.bytes(), ...)`), decoding on the main thread costs
+  microseconds. Use a worker when there is per element work: converting coordinates,
+  triangulating, building render batches, decoding many strings, or many messages at
+  once.
 
 ## Writing
 
 ```ts
+import * as scalgoproto from 'scalgoproto'
+import {MeshOut, Vertex} from './mesh'
+
 const w = new scalgoproto.Writer();
-const root = w.constructTable(MeshOut);
-root.name = 'mesh';
-const l = root.addIndices(3);
-l[0] = 0; l[1] = 1; l[2] = 2;
-const data: ArrayBuffer = w.finalize(root);
+const mesh = w.constructTable(MeshOut);
+mesh.name = 'mesh';
+mesh.addIndices(new Uint32Array([0, 1, 2]));             // from values
+const v = mesh.addVertices(3);                           // or by length
+for (let i = 0; i < 3; ++i) v.set(i, new Vertex(i, 0, 0));
+const message: Uint8Array = w.finalize(mesh);
 ```
 
-Note that the writer currently encodes non ASCII text incorrectly, and does not grow
-its buffer enough for single writes larger than the current buffer.
+A message is written into one buffer that grows as needed. Objects are written when
+they are constructed, and members are stored in the table they belong to as you set
+them.
+
+For each table `T` the generated code contains `TOut`, with:
+
+* A setter for each member. Optional members are set by setting them; members that are
+  never set keep their default. 64 bit members also have a `xxx_bigint` setter for
+  exact values. Enums can be set to `null` (no value).
+* For texts and bytes, a setter taking a string (or bytes as a `Uint8Array` or
+  `ArrayBuffer`), or a `TextOut`/`BytesOut` from `w.constructText`/`w.constructBytes`,
+  which can then be stored in several places.
+* For tables, `addX()` which constructs the table and returns its writer, and a setter
+  taking a `TOut` constructed with `w.constructTable` (stored in several places), or a
+  `TIn` read from another message, which is copied.
+* For lists, `addX(lengthOrValues)` which constructs a list of the given length, or
+  with the given values, and returns its writer, and a setter taking a list writer or a
+  list read from another message, which is copied.
+* For unions, a getter returning the union writer, with a setter or adder for each
+  member like those of tables.
+* `_copy(i: TIn)`, which copies a table read from another message. Texts are copied byte
+  for byte.
+
+Lists:
+
+* All lists have `length`, `set(i, value)` and `setAll(values, offset = 0)`. For lists
+  of texts, bytes, tables and enums, `null` means no value, also when replacing one.
+* Number lists copy a typed array of their own element type (e.g. a `Float32Array`
+  into an F32 list, or a `BigInt64Array` into an I64 list) in one go. Other arrays are
+  converted element by element.
+* Lists of tables have `add(i)`, which constructs a table, stores it at index i and
+  returns its writer.
+* Direct lists of tables and lists of unions have `get(i)`, which returns a writer for
+  the i'th element. The tables of a direct list start out with their defaults.
+  `set(i, value)` replaces the i'th element with a copy of a table or union read from
+  another message.
+* Lists can also be constructed on their own with `w.constructList(T_ListOut, n)` (or
+  `w.constructInt32List(n)` etc. for basic types) and then stored in tables.
+
+Tables, lists, texts and bytes can only be stored in the message of the writer that
+constructed them; storing one from another writer throws.
+
+Inplace members (texts, bytes, lists, tables and unions marked `inplace` in the schema)
+are stored right after their table, so they must be added right after the table is
+constructed, before anything else is written. The writer throws otherwise. Their
+setters take a string, bytes, or a table or list read from another message, not a
+`TextOut`, `BytesOut` or writer constructed separately.
+
+`finalize(root)` writes the message header and returns the message as a `Uint8Array`
+with a buffer of its own, of exactly the message's size. `finalizeView(root)` returns it
+without copying, as a view of the writer's buffer; that buffer is larger than the
+message, so use the view itself and not its `.buffer` (e.g. when transferring it to a
+worker). The writer must not be used after either.
+
+Writing is fastest when:
+
+* Number lists are constructed from typed arrays of their element type, which are
+  copied in one go.
+* The writer starts with a capacity close to the size of the message,
+  `new scalgoproto.Writer(expectedBytes)`, which avoids growing (allocating and copying)
+  the buffer repeatedly.
+* `finalizeView` is used instead of `finalize`, which copies the message (about 5 ms for
+  an 8 MB message).
+
+## Testing
+
+`python3 -m test` runs the tests of all languages. The TypeScript part installs
+TypeScript and tsx in `test/` with pnpm (or npm) on first use, generates code for the
+test schemas, type checks everything with `tsc`, and runs:
+
+* `test_base.ts` and `test_union.ts`: the cross language tests. The writer must produce
+  exactly the bytes of the shared `.bin` files, and the reader must read them. They are
+  also run with the message at an odd byte offset in memory, and with a writer starting
+  with a 16 byte buffer.
+* `test_read.ts`: the reader API.
+* `test_write.ts`: the writer API.
+* `names.spr` and `names2.spr` contain schema names that must not break the generated
+  code; they only have to compile.
+
+To run the TypeScript tests alone, in `test/` after one run of `python3 -m test`:
+
+    ./node_modules/.bin/tsc -p .
+    ./node_modules/.bin/tsx test_read.ts
+    ./node_modules/.bin/tsx test_write.ts
+    ./node_modules/.bin/tsx test_base.ts in test/simple.bin
+    SP_SHIFT=3 ./node_modules/.bin/tsx test_base.ts in test/simple.bin
+    SP_WRITER_CAPACITY=16 ./node_modules/.bin/tsx test_base.ts out test/simple.bin
+
+`bench_read.ts` and `bench_write.ts` are benchmarks of the reader and writer:
+
+    ./node_modules/.bin/tsx bench_read.ts
+    ./node_modules/.bin/tsx bench_write.ts

@@ -19,6 +19,15 @@ struct Array {
 	x: U32;
 }
 
+struct ArrayLike {
+	x: U32;
+}
+
+union Choice {
+	a: Text;
+	b: list U8;
+}
+
 table Inner @5E3A9C18 {
 	t: Text;
 }
@@ -36,4 +45,7 @@ table Names @5E3A9C17 {
 	dl: list DataView;
 	al: list Array;
 	nl: direct list Inner;
+	ch: Choice;
+	ich: optional inplace Choice;
+	ul: list Choice;
 }

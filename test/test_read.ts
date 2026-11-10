@@ -65,21 +65,21 @@ function build(): Uint8Array {
 	const v = root.addV(N), rows = root.addRows(N), texts = root.addTexts(N);
 	const blobs = root.addBlobs(3);
 	for (let i = 0; i < N; ++i) {
-		i8[i] = I8(i);
-		u8[i] = U8(i);
-		i16[i] = I16(i);
-		u16[i] = U16(i);
-		i32[i] = I32(i);
-		u32[i] = U32(i);
-		i64[i] = I64(i);
-		u64[i] = U64(i);
-		f32[i] = F32(i);
-		f64[i] = F64(i);
-		b[i] = B(i);
+		i8.set(i, I8(i));
+		u8.set(i, U8(i));
+		i16.set(i, I16(i));
+		u16.set(i, U16(i));
+		i32.set(i, I32(i));
+		u32.set(i, U32(i));
+		i64.set(i, I64(i));
+		u64.set(i, U64(i));
+		f32.set(i, F32(i));
+		f64.set(i, F64(i));
+		b.set(i, B(i));
 		const ev = E(i);
-		if (ev !== null) e[i] = ev;
-		v[i] = new read.Vertex(i * 1.5, -i * 2.5, Math.fround(i / 3));
-		const row = rows.add(i);
+		if (ev !== null) e.set(i, ev);
+		v.set(i, new read.Vertex(i * 1.5, -i * 2.5, Math.fround(i / 3)));
+		const row = rows.get(i);
 		row.x = i * 0.5;
 		row.y = -i * 0.25;
 		row.color = U32(i);
@@ -87,11 +87,11 @@ function build(): Uint8Array {
 		row.flag = i % 2 == 1;
 		row.kind = (i % 3) as read.Color;
 		const t = TEXT(i);
-		if (t !== null) texts[i] = t;
+		if (t !== null) texts.set(i, t);
 	}
 	const wide = root.addWide(NW);
 	for (let i = 0; i < NW; ++i) {
-		const x = wide.add(i);
+		const x = wide.get(i);
 		x.a = i - 10;
 		if (i % 3) x.b = i * 1000;
 		if (i % 4) x.c = i % 8 == 1;
@@ -106,17 +106,17 @@ function build(): Uint8Array {
 		if (i % 3 == 0) x.by = new Uint8Array([i, i + 1]);
 		if (i % 2) {
 			const l = x.addL(i % 4);
-			for (let j = 0; j < i % 4; ++j) l[j] = j + i;
+			for (let j = 0; j < i % 4; ++j) l.set(j, j + i);
 		}
 		if (i % 7 == 0) x.addM().x = i;
 		if (i % 3 == 1) x.u.x = 'u' + i;
-		else if (i % 3 == 2) x.u.addY(2)[1] = i;
+		else if (i % 3 == 2) x.u.addY(2).set(1, i);
 	}
 	const outer = root.addOuter(NW);
 	for (let i = 0; i < NW; ++i)
-		outer[i] = new read.Outer(i - 5, new read.Vertex(i, -i, i / 2), (i % 3) as read.Color, i % 2 == 1);
-	blobs[0] = new Uint8Array([1, 2, 3]);
-	blobs[2] = new Uint8Array([]);
+		outer.set(i, new read.Outer(i - 5, new read.Vertex(i, -i, i / 2), (i % 3) as read.Color, i % 2 == 1));
+	blobs.set(0, new Uint8Array([1, 2, 3]));
+	blobs.set(2, new Uint8Array([]));
 	return new Uint8Array(w.finalize(root));
 }
 
@@ -491,7 +491,7 @@ function testIndexChecks(): void {
 	// A one element bool list must not accept 2^32
 	const w = new scalgoproto.Writer();
 	const lr = w.constructTable(read.ListsOut);
-	lr.addB(1)[0] = true;
+	lr.addB(1).set(0, true);
 	const b = new scalgoproto.Reader(w.finalize(lr)).root(read.ListsIn).b!;
 	eq(b.get(0), true, 'one bool');
 	throws(() => b.get(2 ** 32), 'one bool get(2^32)');

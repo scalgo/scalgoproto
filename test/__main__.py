@@ -117,12 +117,17 @@ def runTsSetup(schemas: list[str]) -> bool:
     return True
 
 
-def runTs(name: str, bin: str, mod="test_base.ts", shift: int = 0) -> bool:
+def runTs(
+    name: str, bin: str, mod="test_base.ts", shift: int = 0, capacity: int = 0
+) -> bool:
     """Run a TS test. For reading tests, shift places the message at an
-    unaligned offset in memory"""
+    unaligned offset in memory. For writing tests, capacity is the initial
+    capacity of the writer; a small one makes it grow its buffer often"""
     env = dict(os.environ)
     if shift:
         env["SP_SHIFT"] = str(shift)
+    if capacity:
+        env["SP_WRITER_CAPACITY"] = str(capacity)
     subprocess.check_call(
         ["./node_modules/.bin/tsx", "./%s" % mod, name, bin],
         cwd="test/",
@@ -362,6 +367,7 @@ def main():
                 "test/union.spr",
                 "test/read.spr",
                 "test/names.spr",
+                "test/names2.spr",
             ]
         ),
     ):
@@ -398,7 +404,21 @@ def main():
                 "ts %s unaligned" % name.replace("_", " "),
                 lambda name=name, bin=bin: runTs(name, bin, shift=3),
             )
+        for name, bin in [
+            ("out_default", "test/simple_default.bin"),
+            ("out", "test/simple.bin"),
+            ("out_complex", "test/complex.bin"),
+            ("out_complex2", "test/complex2.bin"),
+            ("out_inplace", "test/inplace.bin"),
+            ("out_extend1", "test/extend1.bin"),
+            ("out_extend2", "test/extend2.bin"),
+        ]:
+            runTest(
+                "ts %s small buffer" % name.replace("_", " "),
+                lambda name=name, bin=bin: runTs(name, bin, capacity=16),
+            )
         runTest("ts read", lambda: runTsScript("test_read.ts"))
+        runTest("ts write", lambda: runTsScript("test_write.ts"))
 
     if runTest("ts setup union", lambda: runTsSetup(["test/union.spr"])):
         runTest(
@@ -407,6 +427,10 @@ def main():
         )
         runTest(
             "ts in union", lambda: runTs("in_union", "test/union.bin", "test_union.ts")
+        )
+        runTest(
+            "ts out union small buffer",
+            lambda: runTs("out_union", "test/union.bin", "test_union.ts", capacity=16),
         )
         runTest(
             "ts in union unaligned",
