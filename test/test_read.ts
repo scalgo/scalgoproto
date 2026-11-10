@@ -39,6 +39,7 @@ function at(msg: Uint8Array, shift: number): Uint8Array {
 }
 
 const N = 37;
+const NW = 23;
 const I8 = (i: number) => ((i * 53) & 0xFF) - 128;
 const U8 = (i: number) => (i * 53) & 0xFF;
 const I16 = (i: number) => ((i * 4099) & 0xFFFF) - 32768;
@@ -88,6 +89,32 @@ function build(): Uint8Array {
 		const t = TEXT(i);
 		if (t !== null) texts[i] = t;
 	}
+	const wide = root.addWide(NW);
+	for (let i = 0; i < NW; ++i) {
+		const x = wide.add(i);
+		x.a = i - 10;
+		if (i % 3) x.b = i * 1000;
+		if (i % 4) x.c = i % 8 == 1;
+		x.d = i % 2 == 0;
+		if (i % 5) x.e = (i % 3) as read.Color;
+		if (i % 2) x.f = i / 4;
+		x.g = (i - 11) * 1e10;
+		if (i % 6) x.h = i * 3;
+		x.s = new read.Outer(i * 7, new read.Vertex(i, -i, i / 2), (i % 3) as read.Color, i % 2 == 1);
+		if (i % 4 == 0) x.os = new read.Vertex(i + 0.5, i - 0.5, i);
+		if (i % 5) x.t = 'wide ' + i;
+		if (i % 3 == 0) x.by = new Uint8Array([i, i + 1]);
+		if (i % 2) {
+			const l = x.addL(i % 4);
+			for (let j = 0; j < i % 4; ++j) l[j] = j + i;
+		}
+		if (i % 7 == 0) x.addM().x = i;
+		if (i % 3 == 1) x.u.x = 'u' + i;
+		else if (i % 3 == 2) x.u.addY(2)[1] = i;
+	}
+	const outer = root.addOuter(NW);
+	for (let i = 0; i < NW; ++i)
+		outer[i] = new read.Outer(i - 5, new read.Vertex(i, -i, i / 2), (i % 3) as read.Color, i % 2 == 1);
 	blobs[0] = new Uint8Array([1, 2, 3]);
 	blobs[2] = new Uint8Array([]);
 	return new Uint8Array(w.finalize(root));
@@ -177,6 +204,80 @@ function checkNumberList<A extends ArrayLike<number | bigint>>(
 	eq(tc.length, N, name + ' copy length');
 }
 
+function sameBytes(a: Uint8Array | null, b: Uint8Array | null): boolean {
+	if (a === null || b === null) return a === b;
+	return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+
+function checkColumns(root: read.ListsIn, s: string): void {
+	// Every column must agree with the getters of the rows
+	const rows = root.rows!;
+	const rc = rows.toColumns();
+	for (let i = 0; i < N; ++i) {
+		const row = rows.get(i);
+		eq(rc.name[i], row.name, 'rows column name' + s);
+		eq(rc.x[i], row.x, 'rows column x' + s);
+		eq(rc.y[i], row.y, 'rows column y' + s);
+		eq(rc.color[i], row.color, 'rows column color' + s);
+		eq(rc.id[i], row.id, 'rows column id' + s);
+		eq(rc.flag[i], row.flag ? 1 : 0, 'rows column flag' + s);
+		eq(rc.kind[i], row.kind ?? 255, 'rows column kind' + s);
+	}
+
+	const wide = root.wide!;
+	const wc = wide.toColumns();
+	eq(wc.a.length, NW, 'wide columns length' + s);
+	for (let i = 0; i < NW; ++i) {
+		const w = wide.get(i);
+		const m = 'wide column ';
+		eq(wc.a[i], w.a, m + 'a' + s);
+		eq(wc.b_has[i], w.b === null ? 0 : 1, m + 'b_has' + s);
+		eq(wc.b[i], w.b ?? 0, m + 'b' + s);
+		eq(wc.c_has[i], w.c === null ? 0 : 1, m + 'c_has' + s);
+		eq(wc.c[i], w.c ? 1 : 0, m + 'c' + s);
+		eq(wc.d[i], w.d ? 1 : 0, m + 'd' + s);
+		eq(wc.e[i], w.e ?? 255, m + 'e' + s);
+		eq(wc.f[i], w.f ?? NaN, m + 'f' + s);
+		eq(wc.g[i], w.g, m + 'g' + s);
+		eq(wc.h[i], w.h, m + 'h' + s);
+		eq(wc.s_id[i], w.s.id, m + 's_id' + s);
+		eq(wc.s_v_x[i], w.s.v.x, m + 's_v_x' + s);
+		eq(wc.s_v_y[i], w.s.v.y, m + 's_v_y' + s);
+		eq(wc.s_v_z[i], w.s.v.z, m + 's_v_z' + s);
+		eq(wc.s_c[i], w.s.c, m + 's_c' + s);
+		eq(wc.s_b[i], w.s.b ? 1 : 0, m + 's_b' + s);
+		eq(wc.os_has[i], w.os === null ? 0 : 1, m + 'os_has' + s);
+		eq(wc.os_x[i], w.os?.x ?? 0, m + 'os_x' + s);
+		eq(wc.os_y[i], w.os?.y ?? 0, m + 'os_y' + s);
+		eq(wc.os_z[i], w.os?.z ?? 0, m + 'os_z' + s);
+		eq(wc.t[i], w.t, m + 't' + s);
+		check(sameBytes(wc.by[i], w.by), m + 'by' + s);
+		eq(wc.l[i]?.length ?? -1, w.l?.length ?? -1, m + 'l' + s);
+		eq(wc.m[i]?.x ?? -1, w.m?.x ?? -1, m + 'm' + s);
+		eq(wc.u[i].type, w.u.type, m + 'u' + s);
+		eq(wc.u[i].x, w.u.x, m + 'u.x' + s);
+	}
+	// The values themselves, not only agreement with the getters
+	eq(wc.b[4], 4000, 'wide b value' + s);
+	eq(wc.b_has[3], 0, 'wide b unset' + s);
+	eq(wc.e[5], read.Color.blue, 'wide e default' + s); // The writer stores the default
+	eq(wc.h[6], 7, 'wide h default' + s);
+	eq(wc.os_x[4], 4.5, 'wide os value' + s);
+
+	const outer = root.outer!;
+	const oc = outer.toColumns();
+	for (let i = 0; i < NW; ++i) {
+		const o = outer.get(i);
+		eq(oc.id[i], o.id, 'outer id' + s);
+		eq(oc.v_x[i], o.v.x, 'outer v_x' + s);
+		eq(oc.v_y[i], o.v.y, 'outer v_y' + s);
+		eq(oc.v_z[i], o.v.z, 'outer v_z' + s);
+		eq(oc.c[i], o.c, 'outer c' + s);
+		eq(oc.b[i], o.b ? 1 : 0, 'outer b' + s);
+	}
+	eq(root.v!.toColumns().z[3], Math.fround(1), 'vertex columns' + s);
+}
+
 function testLists(msg: Uint8Array, shift: number): void {
 	const r = new scalgoproto.Reader(at(msg, shift));
 	const root = r.root(read.ListsIn);
@@ -258,6 +359,8 @@ function testLists(msg: Uint8Array, shift: number): void {
 	throws(() => rows.seek(c, N), 'direct seek(N)');
 	eq(rows.bytes().length, N * rows._itemSize, 'direct bytes');
 
+	checkColumns(root, s);
+
 	const texts = root.texts!;
 	texts.forEach((t, i) => eq(t, TEXT(i), 'text forEach' + s));
 	for (let i = 0; i < N; ++i) eq(texts.get(i), TEXT(i), 'text list' + s);
@@ -338,6 +441,23 @@ function testBigIntExact(): void {
 }
 
 function testOldItems(): void {
+	{
+		// Columns of members missing from the old items get the default
+		const s = new scalgoproto.Reader(readIn('test/extend2.bin')).root(base.Gen3In);
+		const c = s.directMemberList!.toColumns();
+		eq(c.id.length, 4, 'old columns length');
+		for (let i = 0; i < 4; ++i) {
+			eq(c.id[i], 100 + i, 'old columns id');
+			eq(c.cookie[i], 37, 'old columns default');
+		}
+		// Empty direct list
+		const w = new scalgoproto.Writer();
+		const root = w.constructTable(read.ListsOut);
+		root.addRows(0);
+		const e = new scalgoproto.Reader(w.finalize(root)).root(read.ListsIn).rows!.toColumns();
+		eq(e.x.length, 0, 'empty columns');
+		eq(e.name.length, 0, 'empty text columns');
+	}
 	// extend2.bin is written with Member items; read with the larger MemberV2
 	const s = new scalgoproto.Reader(readIn('test/extend2.bin')).root(base.Gen3In);
 	const l = s.directMemberList!;

@@ -44,6 +44,20 @@ typeMap: dict[TokenType, TypeInfo] = {
 }
 
 
+column_array: dict[TokenType, str] = {
+    TokenType.I8: "Int8Array",
+    TokenType.I16: "Int16Array",
+    TokenType.I32: "Int32Array",
+    TokenType.I64: "Float64Array",
+    TokenType.U8: "Uint8Array",
+    TokenType.U16: "Uint16Array",
+    TokenType.UI32: "Uint32Array",
+    TokenType.UI64: "Float64Array",
+    TokenType.F32: "Float32Array",
+    TokenType.F64: "Float64Array",
+}
+
+
 class Generator:
     def __init__(self, documents: Documents, out: TextIO, import_prefix: str) -> None:
         self.documents: Documents = documents
@@ -51,6 +65,7 @@ class Generator:
         if import_prefix and import_prefix[-1] != ".":
             import_prefix += "."
         self.import_prefix: str = import_prefix
+        self.indent = ""
 
     def out_list_type(self, node: Value) -> str:
         if node.type_.type == TokenType.BOOL:
@@ -193,6 +208,8 @@ class Generator:
         self.o("\t\t}")
 
     def o(self, text="") -> None:
+        if text and self.indent:
+            text = self.indent + text
         print(text, file=self.out)
 
     def value(self, t: Token) -> str:
@@ -334,6 +351,179 @@ class Generator:
             )
             self.o("\t}")
             self.o()
+
+    def column_specs(
+        self, members: list[Value], base: int, prefix: str, in_table: bool
+    ) -> list[tuple]:
+        """Describe the columns produced by toColumns for the given members.
+
+        Each spec is one of
+        ("num", name, offset, array type, read expression of {o}, default),
+        ("bit", name, offset, bit),
+        ("obj", name, ts type, getter name)"""
+        specs: list[tuple] = []
+        for v in members:
+            if v.type_.type == TokenType.REMOVED:
+                continue
+            lname = lcamel(self.value(v.identifier))
+            name = prefix + lname
+            off = base + v.offset
+            tt = v.type_.type
+            is_float = tt in (TokenType.F32, TokenType.F64)
+            if in_table and v.optional and not is_float and not v.list_:
+                if tt in typeMap or v.struct:
+                    specs.append(("bit", name + "_has", base + v.has_offset, v.has_bit))
+            if v.list_ or tt in (TokenType.TEXT, TokenType.BYTES) or v.union:
+                if in_table:
+                    specs.append(("obj", name, self.getter_type(v), lname))
+            elif v.table:
+                if in_table and not v.table.empty:
+                    specs.append(("obj", name, "%sIn | null" % v.table.name, lname))
+            elif tt == TokenType.BOOL:
+                if in_table:
+                    specs.append(("bit", name, off, v.bit))
+                else:
+                    specs.append(
+                        ("num", name, off, "Uint8Array", "dv.getUint8({o})", "0")
+                    )
+            elif tt in typeMap:
+                array = column_array[tt]
+                read = self.read_basic(tt, "{o}", "dv", "r")
+                default = self.default_value(v) if in_table else "0"
+                specs.append(("num", name, off, array, read, default))
+            elif v.enum:
+                default = self.default_value(v) if in_table else "0"
+                specs.append(
+                    ("num", name, off, "Uint8Array", "dv.getUint8({o})", default)
+                )
+            elif v.struct:
+                specs.extend(
+                    self.column_specs(v.struct.members, off, name + "_", False)
+                )
+            else:
+                raise ICE()
+        return specs
+
+    def getter_type(self, v: Value) -> str:
+        """Type returned by the reader getter of a pointer member"""
+        if v.list_:
+            return "%s | null" % self.in_list_help(v)[1]
+        if v.type_.type == TokenType.TEXT:
+            return "string | null"
+        if v.type_.type == TokenType.BYTES:
+            return "globalThis.Uint8Array | null"
+        if v.union:
+            return "%sIn" % v.union.name
+        raise ICE()
+
+    def columns_interface(self, name: str, specs: list[tuple], doc: str) -> None:
+        self.o("/** %s */" % doc)
+        self.o("export interface %s_Columns {" % name)
+        for spec in specs:
+            if spec[0] == "num":
+                self.o("\t%s: globalThis.%s;" % (spec[1], spec[3]))
+            elif spec[0] == "bit":
+                self.o("\t%s: globalThis.Uint8Array;" % spec[1])
+            else:
+                self.o("\t%s: Array<%s>;" % (spec[1], spec[2]))
+        self.o("}")
+        self.o()
+
+    def to_columns(
+        self, name: str, specs: list[tuple], width: str, size: int, cursor: bool
+    ) -> None:
+        """Output the toColumns method of a list class.
+
+        width is an expression giving the size of each element, and size the size of an
+        element in this version of the schema. Elements written with an older schema
+        may be smaller; members beyond their end get their default"""
+        self.o("\t/** Read the list into one array per field */")
+        self.o("\ttoColumns(): %s_Columns {" % name)
+        self.o("\t\tconst _n = this.length, _w = %s, _o = this._off;" % width)
+        if any(sp[0] != "obj" for sp in specs):
+            self.o("\t\tconst dv = this._dv;")
+        if any(sp[0] == "num" and "r._" in sp[4] for sp in specs):
+            self.o("\t\tconst r = this._r;")
+        for spec in specs:
+            if spec[0] == "num":
+                self.o("\t\tconst c_%s = new globalThis.%s(_n);" % (spec[1], spec[3]))
+            elif spec[0] == "bit":
+                self.o("\t\tconst c_%s = new globalThis.Uint8Array(_n);" % spec[1])
+            else:
+                self.o("\t\tconst c_%s = new Array<%s>(_n);" % (spec[1], spec[2]))
+        objs = [spec for spec in specs if spec[0] == "obj"]
+        if cursor:
+            self.o("\t\tconst c = this.cursor();")
+
+        def row(i: str, o: str) -> None:
+            for spec in specs:
+                kind, col = spec[0], "c_" + spec[1]
+                if kind == "num":
+                    at = "%s + %d" % (o, spec[2]) if spec[2] else o
+                    self.o("\t\t\t%s[%s] = %s;" % (col, i, spec[4].format(o=at)))
+                elif kind == "bit":
+                    at = "%s + %d" % (o, spec[2]) if spec[2] else o
+                    self.o(
+                        "\t\t\t%s[%s] = (dv.getUint8(%s) >> %d) & 1;"
+                        % (col, i, at, spec[3])
+                    )
+
+        if not cursor:
+            # Structs have a fixed size, so the elements are always whole
+            self.o("\t\tfor (let i = 0, o = _o; i < _n; ++i, o += _w) {")
+            row("i", "o")
+            self.o("\t\t}")
+            self.o(
+                "\t\treturn {%s};"
+                % ", ".join("%s: c_%s" % (sp[1], sp[1]) for sp in specs)
+            )
+            self.o("\t}")
+            self.o()
+            return
+
+        # Common case: whole elements in a single pass, which is cache friendly
+        self.o("\t\tif (_w >= %d) {" % size)
+        self.o("\t\t\tfor (let i = 0, o = _o; i < _n; ++i, o += _w) {")
+        self.indent = "\t"
+        row("i", "o")
+        if objs:
+            self.o("\t\t\tc._off = o;")
+            for spec in objs:
+                self.o("\t\t\tc_%s[i] = c.%s;" % (spec[1], spec[3]))
+        self.indent = ""
+        self.o("\t\t\t}")
+        self.o("\t\t} else {")
+        # Elements from an older schema: check once per column whether it exists
+        for spec in specs:
+            kind, col = spec[0], "c_" + spec[1]
+            if kind == "num":
+                _, _, off, array, read, default = spec
+                self.o("\t\t\tif (%d < _w)" % off)
+                self.o(
+                    "\t\t\t\tfor (let i = 0, o = _o + %d; i < _n; ++i, o += _w) %s[i] = %s;"
+                    % (off, col, read.format(o="o"))
+                )
+                if default not in ("0", "0.0"):
+                    self.o("\t\t\telse %s.fill(%s);" % (col, default))
+            elif kind == "bit":
+                _, _, off, bit = spec
+                self.o("\t\t\tif (%d < _w)" % off)
+                self.o(
+                    "\t\t\t\tfor (let i = 0, o = _o + %d; i < _n; ++i, o += _w) %s[i] = (dv.getUint8(o) >> %d) & 1;"
+                    % (off, col, bit)
+                )
+        if objs:
+            self.o("\t\t\tfor (let i = 0, o = _o; i < _n; ++i, o += _w) {")
+            self.o("\t\t\t\tc._off = o;")
+            for spec in objs:
+                self.o("\t\t\t\tc_%s[i] = c.%s;" % (spec[1], spec[3]))
+            self.o("\t\t\t}")
+        self.o("\t\t}")
+        self.o(
+            "\t\treturn {%s};" % ", ".join("%s: c_%s" % (sp[1], sp[1]) for sp in specs)
+        )
+        self.o("\t}")
+        self.o()
 
     def list_helpers(self, t: str) -> None:
         """Output forEach and toArray for a generated list class with element type t.
@@ -1134,9 +1324,14 @@ class Generator:
         self.o("\t\treturn c;")
         self.o("\t}")
         self.o()
+        specs = self.column_specs(table.members, 0, "", True)
+        self.to_columns(n, specs, "this._itemSize", len(table.default), True)
         self.list_helpers("%sIn" % n)
         self.o("}")
         self.o()
+        self.columns_interface(
+            n, specs, "Columns of a direct list of %s, see toColumns" % n
+        )
 
         # Generate Table writer
         self.output_doc(table, "")
@@ -1349,8 +1544,12 @@ class Generator:
         self.o("\t\treturn %s._read(this._r, this._off + i * %d);" % (n, node.bytes))
         self.o("\t}")
         self.o()
+        specs = self.column_specs(node.members, 0, "", False)
+        self.to_columns(n, specs, str(node.bytes), node.bytes, False)
         self.list_helpers(n)
         self.o("}")
+        self.o()
+        self.columns_interface(n, specs, "Columns of a list of %s, see toColumns" % n)
         self.o()
 
     def generate_enum(self, node: Enum) -> None:

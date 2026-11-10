@@ -131,8 +131,8 @@ def runTs(name: str, bin: str, mod="test_base.ts", shift: int = 0) -> bool:
     return True
 
 
-def runTsRead() -> bool:
-    subprocess.check_call(["./node_modules/.bin/tsx", "./test_read.ts"], cwd="test/")
+def runTsScript(script: str) -> bool:
+    subprocess.check_call(["./node_modules/.bin/tsx", "./%s" % script], cwd="test/")
     return True
 
 
@@ -398,7 +398,7 @@ def main():
                 "ts %s unaligned" % name.replace("_", " "),
                 lambda name=name, bin=bin: runTs(name, bin, shift=3),
             )
-        runTest("ts read", runTsRead)
+        runTest("ts read", lambda: runTsScript("test_read.ts"))
 
     if runTest("ts setup union", lambda: runTsSetup(["test/union.spr"])):
         runTest(

@@ -109,6 +109,28 @@ bench('direct rows 200k: cursor', () => {
 	}
 	return s;
 });
+bench('direct rows 200k: same columns by hand', () => {
+	const l = root.rows!, n = l.length, r = l.cursor();
+	const x = new Float64Array(n), y = new Float64Array(n), color = new Uint32Array(n),
+		  id = new Float64Array(n), flag = new Uint8Array(n), kind = new Uint8Array(n);
+	const name = new Array<string | null>(n);
+	for (let i = 0; i < n; ++i) {
+		l.seek(r, i);
+		x[i] = r.x;
+		y[i] = r.y;
+		color[i] = r.color;
+		id[i] = r.id;
+		flag[i] = r.flag ? 1 : 0;
+		kind[i] = r.kind ?? 255;
+		name[i] = r.name;
+	}
+	return x.length + name.length;
+});
+bench('direct rows 200k: toColumns', () => {
+	const c = root.rows!.toColumns();
+	return c.x.length + c.name.length;
+});
+bench('struct list 300k: toColumns', () => root.v!.toColumns().x.length);
 bench('direct rows 200k: name', () => {
 	const l = root.rows!;
 	let s = 0;

@@ -21,6 +21,35 @@ table Row @6B1D2E7A {
 	kind: Color;
 }
 
+struct Outer {
+	id: I16;
+	v: Vertex;
+	c: Color;
+	b: Bool;
+}
+
+/** A table with every kind of member, for toColumns */
+table Wide @3D7B21C5 {
+	a: I8 = -3;
+	b: optional U16;
+	c: optional Bool;
+	d: Bool;
+	e: Color = blue;
+	f: optional F32;
+	g: I64;
+	h: U64 = 7;
+	s: Outer;
+	os: optional Vertex;
+	t: Text;
+	by: Bytes;
+	l: list U8;
+	m: Row;
+	u: union {
+		x: Text;
+		y: list I32;
+	};
+}
+
 table Lists @2C4F7A91 {
 	i8: list I8;
 	u8: list U8;
@@ -38,4 +67,6 @@ table Lists @2C4F7A91 {
 	rows: direct list Row;
 	texts: list Text;
 	blobs: list Bytes;
+	wide: direct list Wide;
+	outer: list Outer;
 }
