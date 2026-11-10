@@ -5,16 +5,19 @@ import * as fs from 'fs';
 import * as process from 'process';
 import * as scalgoproto from 'scalgoproto'
 
-export function bc(data: string): ArrayBuffer {
-	const b = new ArrayBuffer(data.length);
-	const b2 = new Uint8Array(b);
-	for (let i = 0; i < data.length; ++i) b2[i] = data.charCodeAt(i);
+export function bc(data: string): Uint8Array {
+	const b = new Uint8Array(data.length);
+	for (let i = 0; i < data.length; ++i) b[i] = data.charCodeAt(i);
 	return b;
 }
 
-export function cb(l: ArrayBuffer, r: ArrayBuffer): boolean {
-	const lb = new Uint8Array(l);
-	const rb = new Uint8Array(r);
+function isBytes(v: unknown): v is ArrayBuffer | Uint8Array {
+	return v instanceof ArrayBuffer || v instanceof Uint8Array;
+}
+
+export function cb(l: ArrayBuffer | Uint8Array, r: ArrayBuffer | Uint8Array): boolean {
+	const lb = l instanceof Uint8Array ? l : new Uint8Array(l);
+	const rb = r instanceof Uint8Array ? r : new Uint8Array(r);
 	if (lb.length != rb.length) return false;
 	for (let i = 0; i < lb.length; ++i)
 		if (lb[i] != rb[i]) return false;
@@ -97,12 +100,24 @@ export function validateOut(data_: ArrayBuffer, path: string): boolean {
 
 export function readIn(path: string): ArrayBuffer {
 	const b = fs.readFileSync('../' + path);
-	return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
+	return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
+}
+
+/**
+ * Read a message for reading tests. If the environment variable SP_SHIFT is set the
+ * message is placed at that byte offset in a larger buffer, to test unaligned reads.
+ */
+export function readMessage(path: string): Uint8Array {
+	const b = new Uint8Array(readIn(path));
+	const shift = +(process.env.SP_SHIFT || 0);
+	const ans = new Uint8Array(new ArrayBuffer(b.length + shift + 7), shift, b.length);
+	ans.set(b);
+	return ans;
 }
 
 export function require1<T>(v: T, e: T): boolean {
-	if (v instanceof ArrayBuffer) {
-		if (e instanceof ArrayBuffer && cb(v, e)) return false;
+	if (isBytes(v)) {
+		if (isBytes(e) && cb(v, e)) return false;
 	} else {
 		if (e === v) return false;
 	}
@@ -115,8 +130,8 @@ export function require2<T>(b: boolean, v: T, e: T): boolean {
 		console.error('Precondition not met');
 		return true
 	}
-	if (v instanceof ArrayBuffer) {
-		if (e instanceof ArrayBuffer && cb(v, e)) return false;
+	if (isBytes(v)) {
+		if (isBytes(e) && cb(v, e)) return false;
 	} else {
 		if (e === v) return false;
 	}
@@ -179,7 +194,7 @@ function testOut(path: string): boolean {
 }
 
 function testIn(path: string): boolean {
-	const r = new scalgoproto.Reader(readIn(path))
+	const r = new scalgoproto.Reader(readMessage(path))
 	const s = r.root(base.SimpleIn)
 	if (require1(s.e !== null, true)) return false;
 	if (require1(s.e, base.MyEnum.c)) return false;
@@ -252,7 +267,7 @@ function testIn(path: string): boolean {
 }
 
 function testInDefault(path: string): boolean {
-	const r = new scalgoproto.Reader(readIn(path))
+	const r = new scalgoproto.Reader(readMessage(path))
 	const s = r.root(base.SimpleIn)
 	if (require1(s.e, null)) return false;
 	if (require1(s.s.e, base.MyEnum.a)) return false;
@@ -373,7 +388,7 @@ function testOutComplex(path: string): boolean {
 }
 
 function testInComplex(path: string): boolean {
-	const r = new scalgoproto.Reader(readIn(path))
+	const r = new scalgoproto.Reader(readMessage(path))
 	const s = r.root(base.ComplexIn)
 	if (require1(s.nmember, null)) return false;
 	if (require1(s.ntext, null)) return false;
@@ -393,13 +408,13 @@ function testInComplex(path: string): boolean {
 	if (require1(l.length, 31)) return false;
 
 	for (let i = 0; i < 31; ++i)
-		if (require1(l[i], 100 - 2 * i)) return false;
+		if (require1(l.get(i), 100 - 2 * i)) return false;
 
 	if (require1(s.enumList !== null, true)) return false;
 	const l2 = s.enumList!;
-	if (require1(l2[0] !== null, true)) return false;
-	if (require1(l2[1] !== null, false)) return false;
-	if (require1(l2[0], base.MyEnum.a)) return false;
+	if (require1(l2.get(0) !== null, true)) return false;
+	if (require1(l2.get(1) !== null, false)) return false;
+	if (require1(l2.get(0), base.MyEnum.a)) return false;
 	if (require1(l2.length, 2)) return false;
 
 	if (require1(s.structList !== null, true)) return false;
@@ -411,59 +426,59 @@ function testInComplex(path: string): boolean {
 	if (require1(l4.length, 200)) return false;
 	for (let i = 0; i < l4.length; ++i) {
 		if (i % 2 == 0) {
-			if (require1(l4[i] !== null, false)) return false;
+			if (require1(l4.get(i) !== null, false)) return false;
 		} else {
-			if (require1(l4[i] !== null, true)) return false;
-			if (require1(l4[i], 'HI THERE')) return false;
+			if (require1(l4.get(i) !== null, true)) return false;
+			if (require1(l4.get(i), 'HI THERE')) return false;
 		}
 	}
 
 	if (require1(s.bytesList !== null, true)) return false;
 	const l5 = s.bytesList!;
 	if (require1(l5.length, 1)) return false;
-	if (require1(l5[0] !== null, true)) return false;
-	if (require1(l5[0], bc('bytes'))) return false;
+	if (require1(l5.get(0) !== null, true)) return false;
+	if (require1(l5.get(0), bc('bytes'))) return false;
 	if (require1(s.memberList !== null, true)) return false;
 	const l6 = s.memberList!;
 	if (require1(l6.length, 3)) return false;
-	if (require1(l6[0] !== null, true)) return false;
-	if (require1(l6[1] !== null, false)) return false;
-	if (require1(l6[2] !== null, true)) return false;
-	if (require1(l6[0]!.id, 42)) return false;
-	if (require1(l6[2]!.id, 42)) return false;
+	if (require1(l6.get(0) !== null, true)) return false;
+	if (require1(l6.get(1) !== null, false)) return false;
+	if (require1(l6.get(2) !== null, true)) return false;
+	if (require1(l6.get(0)!.id, 42)) return false;
+	if (require1(l6.get(2)!.id, 42)) return false;
 
 	if (require1(s.f32list !== null, true)) return false;
 	const l7 = s.f32list!;
 	if (require1(l7.length, 2)) return false;
-	if (require1(l7[0], 0.0)) return false;
-	if (require1(l7[1], 98.0)) return false;
+	if (require1(l7.get(0), 0.0)) return false;
+	if (require1(l7.get(1), 98.0)) return false;
 
 	if (require1(s.f64list !== null, true)) return false;
 	const l8 = s.f64list!;
 	if (require1(l8.length, 3)) return false;
-	if (require1(l8[0], 0.0)) return false;
-	if (require1(l8[1], 0.0)) return false;
-	if (require1(l8[2], 78.0)) return false;
+	if (require1(l8.get(0), 0.0)) return false;
+	if (require1(l8.get(1), 0.0)) return false;
+	if (require1(l8.get(2), 78.0)) return false;
 
 	if (require1(s.u8list !== null, true)) return false;
 	const l9 = s.u8list!;
 	if (require1(l9.length, 2)) return false;
-	if (require1(l9[0], 4)) return false;
-	if (require1(l9[1], 0)) return false;
+	if (require1(l9.get(0), 4)) return false;
+	if (require1(l9.get(1), 0)) return false;
 
 	if (require1(s.blist !== null, true)) return false;
 	const l10 = s.blist!;
 	if (require1(l10.length, 10)) return false;
-	if (require1(l10[0], true)) return false;
-	if (require1(l10[1], false)) return false;
-	if (require1(l10[2], true)) return false;
-	if (require1(l10[3], false)) return false;
-	if (require1(l10[4], false)) return false;
-	if (require1(l10[5], false)) return false;
-	if (require1(l10[6], false)) return false;
-	if (require1(l10[7], false)) return false;
-	if (require1(l10[8], true)) return false;
-	if (require1(l10[9], false)) return false;
+	if (require1(l10.get(0), true)) return false;
+	if (require1(l10.get(1), false)) return false;
+	if (require1(l10.get(2), true)) return false;
+	if (require1(l10.get(3), false)) return false;
+	if (require1(l10.get(4), false)) return false;
+	if (require1(l10.get(5), false)) return false;
+	if (require1(l10.get(6), false)) return false;
+	if (require1(l10.get(7), false)) return false;
+	if (require1(l10.get(8), true)) return false;
+	if (require1(l10.get(9), false)) return false;
 	return true;
 }
 
@@ -505,7 +520,7 @@ function testOutComplex2(path: string): boolean {
 }
 
 function testInComplex2(path: string): boolean {
-	const r = new scalgoproto.Reader(readIn(path))
+	const r = new scalgoproto.Reader(readMessage(path))
 	const s = r.root(complex2.Complex2In)
 	if (require1(s.u1.isMember, true)) return false;
 	if (require1(s.u1.member!.id, 42)) return false;
@@ -516,25 +531,25 @@ function testInComplex2(path: string): boolean {
 	if (require1(s.u4.isEnumList, true)) return false;
 	const l = s.u4.enumList!;
 	if (require1(l.length, 2)) return false;
-	if (require1(l[0], base.NamedUnionEnumList.x)) return false;
-	if (require1(l[1], base.NamedUnionEnumList.z)) return false;
+	if (require1(l.get(0), base.NamedUnionEnumList.x)) return false;
+	if (require1(l.get(1), base.NamedUnionEnumList.z)) return false;
 	if (require1(s.u5.isA, true)) return false;
 	if (require1(s.hat !== null, true)) return false;
 	if (require1(s.hat!.id, 43)) return false;
 	if (require1(s !== null, true)) return false;
 	const l2 = s.l!;
 	if (require1(l2.length, 1)) return false;
-	if (require1(l2[0].a, 2)) return false;
-	if (require1(l2[0].b, true)) return false;
+	if (require1(l2.get(0).a, 2)) return false;
+	if (require1(l2.get(0).b, true)) return false;
 	if (require1(s.s.x, complex2.Complex2SX.p)) return false;
 	if (require1(s.s.y.z, 8)) return false;
 	if (require1(s.l2 !== null, true)) return false;
 	const l3 = s.l2!;
 	if (require1(l3.length, 2)) return false;
-	if (require1(l3[0].isText, true)) return false;
-	if (require1(l3[0].text, 'text')) return false;
-	if (require1(l3[1].isMyBytes, true)) return false;
-	if (require1(l3[1].myBytes, bc('bytes'))) return false;
+	if (require1(l3.get(0).isText, true)) return false;
+	if (require1(l3.get(0).text, 'text')) return false;
+	if (require1(l3.get(1).isMyBytes, true)) return false;
+	if (require1(l3.get(1).myBytes, bc('bytes'))) return false;
 	return true;
 }
 
@@ -572,8 +587,7 @@ function testOutInplace(path: string): boolean {
 }
 
 function testInInplace(path: string): boolean {
-	const o = readIn(path)
-	const r = new scalgoproto.Reader(o)
+	const r = new scalgoproto.Reader(readMessage(path))
 	const s = r.root(base.InplaceRootIn)
 
 	if (require1(s.u !== null, true)) return false;
@@ -604,8 +618,8 @@ function testInInplace(path: string): boolean {
 	if (require1(l.l !== null, true)) return false;
 	const ll = l.l!;
 	if (require1(ll.length, 2)) return false;
-	if (require1(ll[0], 24)) return false;
-	if (require1(ll[1], 99)) return false;
+	if (require1(ll.get(0), 24)) return false;
+	if (require1(ll.get(1), 99)) return false;
 	return true
 }
 
@@ -618,8 +632,7 @@ function testOutExtend1(path: string): boolean {
 }
 
 function testInExtend1(path: string): boolean {
-	const data = readIn(path)
-	const r = new scalgoproto.Reader(data)
+	const r = new scalgoproto.Reader(readMessage(path))
 	const s = r.root(base.Gen2In)
 	if (require1(s.aa, 77)) return false;
 	if (require1(s.bb, 42)) return false;
@@ -644,8 +657,7 @@ function testOutExtend2(path: string): boolean {
 }
 
 function testInExtend2(path: string): boolean {
-	const o = readIn(path)
-	const r = new scalgoproto.Reader(o)
+	const r = new scalgoproto.Reader(readMessage(path))
 	const s = r.root(base.Gen3In)
 	if (require1(s.aa, 80)) return false;
 	if (require1(s.bb, 81)) return false;

@@ -1,0 +1,29 @@
+// Names that must not collide with generated accessors or shadow built in types
+struct DataView {
+	x: U32;
+}
+
+struct Uint8Array {
+	x: U32;
+}
+
+struct RangeError {
+	x: U32;
+}
+
+struct Infinity {
+	x: U32;
+}
+
+table Names @5E3A9C17 {
+	amount: U64;
+	amountBigInt: U32;
+	o: optional F32;
+	d: DataView;
+	u: Uint8Array;
+	r: RangeError;
+	i: Infinity;
+	b: Bytes;
+	bl: list Bytes;
+	dl: list DataView;
+}

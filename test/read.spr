@@ -1,0 +1,41 @@
+namespace scalgoprototest;
+
+enum Color {
+	red, green, blue
+}
+
+/** Packed struct with mixed widths, so members are unaligned in lists */
+struct Vertex {
+	x: F64;
+	y: F64;
+	z: F32;
+}
+
+table Row @6B1D2E7A {
+	name: Text;
+	x: F64;
+	y: F64;
+	color: U32;
+	id: U64;
+	flag: Bool;
+	kind: Color;
+}
+
+table Lists @2C4F7A91 {
+	i8: list I8;
+	u8: list U8;
+	i16: list I16;
+	u16: list U16;
+	i32: list I32;
+	u32: list U32;
+	i64: list I64;
+	u64: list U64;
+	f32: list F32;
+	f64: list F64;
+	b: list Bool;
+	e: list Color;
+	v: list Vertex;
+	rows: direct list Row;
+	texts: list Text;
+	blobs: list Bytes;
+}

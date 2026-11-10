@@ -1,19 +1,18 @@
 {
-    "compilerOptions": {
-        "target": "es5",
-        "lib": [
-          "es2017","es2015","es6"
-         ],
-        "module": "commonjs",
-        "sourceMap": true,
-
-        "strict": true,
-        "baseUrl": ".",
-        "paths": {
-            "scalgoproto": ["../lib/ts/scalgoproto.ts"],
-            "*":  ["*", "../tmp/*"]
-        },
-    }
+	"compilerOptions": {
+		"target": "es2020",
+		"lib": ["es2020", "dom"],
+		"module": "commonjs",
+		"moduleResolution": "node",
+		"types": ["node"],
+		"strict": true,
+		"noEmit": true,
+		"sourceMap": true,
+		"baseUrl": ".",
+		"paths": {
+			"scalgoproto": ["../lib/ts/scalgoproto.ts"],
+			"*": ["*", "../tmp/*"]
+		}
+	},
+	"include": ["*.ts", "../tmp/*.ts", "../lib/ts/*.ts"]
 }
-
-   

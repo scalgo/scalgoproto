@@ -1,10 +1,36 @@
-import { setFlagsFromString } from "v8";
+// -*- mode: typescript; tab-width: 4; indent-tabs-mode: t; coding: utf-8 -*-
+//
+// scalgoproto TypeScript runtime.
+//
+// The reader is designed for decoding speed:
+// * All reads go through a single DataView, which handles the packed (unaligned)
+//   layout of the format at full speed.
+// * Generated table classes are standalone (no base class) and inline their field
+//   offsets, so the JIT can keep them monomorphic.
+// * Lists are plain classes with a get(i) method (no Proxy). Numeric lists can be
+//   returned as typed arrays, which are views on the message when the data happens to
+//   be aligned, and copies otherwise.
 
 export const MESSAGE_MAGIC = 0xB5C0C4B3
 export const TEXT_MAGIC = 0xD812C8F5
 export const BYTES_MAGIC = 0xDCDBBE10
 export const LIST_MAGIC = 0x3400BB46
 export const DIRECT_LIST_MAGIC = 0xE2C6CC05
+
+const TWO32 = 4294967296;
+const LITTLE_ENDIAN = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
+
+/**
+ * Strings of at most this many bytes are decoded with a plain JS loop, longer strings
+ * with TextDecoder, which has a fixed cost per call. Measured crossover points: V8
+ * 16 bytes (ASCII) to 24 bytes (Danish text), SpiderMonkey 32 to 48 bytes. 24 keeps
+ * both within about 40% of the faster method.
+ */
+const TEXT_DECODER_THRESHOLD = 24;
+let textDecoder: TextDecoder | null = null;
+
+/** Binary input accepted by the writer */
+export type BytesLike = ArrayBuffer | Uint8Array;
 
 export class StructType {
 	static readonly _WIDTH: number = 0
@@ -17,353 +43,665 @@ interface StructTypeType<T> {
 	_read: (reader: Reader, offset: number) => T;
 }
 
-export class ListIn<T> {
-	[i: number]: T;
-	get length(): number { return this.size; }
-	constructor(public size: number,
-				public offset: number,
-				public acc: (start: number, index: number) => T) {}
-};
+/** Constructor type of generated table readers */
+export interface TableInType<T> {
+	new(reader: Reader, offset: number, size: number): T;
+	readonly _MAGIC: number;
+}
 
-const listInHandler = {
-	get : <T>(obj: ListIn<T>, prop: string) : number | T => {
-		if (prop === 'length') return obj.size;
-		const index = +prop;
-		if (!Number.isInteger(index) || index < 0 || index >= obj.size)
-			throw Error('Index outside range');
-		return obj.acc(obj.offset, index);
+/** Throw an error for an invalid list index. Used by generated code */
+export function _indexError(i: number, length: number): never {
+	throw new RangeError('Index ' + i + ' outside list of length ' + length);
+}
+
+function magicError(o: number, magic: number, found: number): never {
+	throw new Error('Bad magic at offset ' + o + ': expected 0x' + magic.toString(16) +
+					' found 0x' + found.toString(16));
+}
+
+/** Responsible for reading a message */
+export class Reader {
+	// Fields are declared, not defined, so their initialization does not depend on
+	// useDefineForClassFields and the compilation target
+	/** View of the message */
+	declare readonly _dv: DataView;
+	/** Bytes of the message */
+	declare readonly _u8: Uint8Array;
+
+	/**
+	 * Construct a reader for a message.
+	 *
+	 * Typed arrays (e.g. a subarray of a larger buffer) are read in place without copying.
+	 * Shared memory (SharedArrayBuffer) is not supported.
+	 */
+	constructor(data: ArrayBuffer | ArrayBufferView) {
+		const buffer = ArrayBuffer.isView(data) ? data.buffer : data;
+		if (Object.prototype.toString.call(buffer) === '[object SharedArrayBuffer]')
+			throw new TypeError('scalgoproto: messages in a SharedArrayBuffer are not supported');
+		if (ArrayBuffer.isView(data))
+			this._u8 = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+		else
+			this._u8 = new Uint8Array(data);
+		this._dv = new DataView(this._u8.buffer, this._u8.byteOffset, this._u8.byteLength);
 	}
-};
 
-export abstract class UnionIn {
-	constructor(public _reader: Reader,
-				public _type: number,
-				public _offset: number,
-				public _size: number|null = null) {}
+	/** Return root node of message, of type type */
+	root<T>(type: TableInType<T>): T {
+		const magic = this._dv.getUint32(0, true);
+		if (magic !== MESSAGE_MAGIC) magicError(0, MESSAGE_MAGIC, magic);
+		const offset = this._u48(4);
+		const size = this._size(offset, type._MAGIC);
+		return new type(this, offset + 10, size);
+	}
 
-	_getPtr(magic: number): [ number, number ] {
-		if (this._size !== null) return [ this._offset, this._size ];
-		return [ this._offset + 10, this._reader._readSize(this._offset, magic) ];
+	/** The bytes of the message */
+	get bytes(): Uint8Array { return this._u8; }
+
+	_u48(o: number): number {
+		// Note we cannot use shifts here as it would turn it into a 32bit int
+		const dv = this._dv;
+		return dv.getUint32(o, true) + dv.getUint16(o + 4, true) * TWO32;
+	}
+
+	_i64(o: number): number {
+		const dv = this._dv;
+		return dv.getUint32(o, true) + dv.getInt32(o + 4, true) * TWO32;
+	}
+
+	_u64(o: number): number {
+		const dv = this._dv;
+		return dv.getUint32(o, true) + dv.getUint32(o + 4, true) * TWO32;
+	}
+
+	/** Check the magic at o and return the size stored after it */
+	_size(o: number, magic: number): number {
+		const m = this._dv.getUint32(o, true);
+		if (m !== magic) magicError(o, magic, m);
+		return this._u48(o + 4);
+	}
+
+	/** Decode len bytes of utf-8 starting at o */
+	_text(o: number, len: number): string {
+		const u8 = this._u8;
+		const start = o;
+		const end = o + len;
+		if (end > u8.length) throw new RangeError('Text outside message');
+		if (len <= TEXT_DECODER_THRESHOLD) {
+			// Decode well formed utf-8 in JS; anything malformed is left to TextDecoder so
+			// the result does not depend on the length of the text
+			let ans = '';
+			for (;;) {
+				if (o === end) return ans;
+				const c = u8[o];
+				if (c < 0x80) {
+					ans += String.fromCharCode(c);
+					o += 1;
+				} else if (c >= 0xC2 && c <= 0xDF) {
+					if (o + 1 >= end) break;
+					const c1 = u8[o + 1];
+					if ((c1 & 0xC0) !== 0x80) break;
+					ans += String.fromCharCode(((c & 0x1F) << 6) | (c1 & 0x3F));
+					o += 2;
+				} else if (c >= 0xE0 && c <= 0xEF) {
+					if (o + 2 >= end) break;
+					const c1 = u8[o + 1], c2 = u8[o + 2];
+					// No overlong forms (E0) and no surrogates (ED)
+					if (c1 < (c === 0xE0 ? 0xA0 : 0x80) || c1 > (c === 0xED ? 0x9F : 0xBF) ||
+						(c2 & 0xC0) !== 0x80)
+						break;
+					ans += String.fromCharCode(((c & 0x0F) << 12) | ((c1 & 0x3F) << 6) | (c2 & 0x3F));
+					o += 3;
+				} else if (c >= 0xF0 && c <= 0xF4) {
+					if (o + 3 >= end) break;
+					const c1 = u8[o + 1], c2 = u8[o + 2], c3 = u8[o + 3];
+					// No overlong forms (F0) and nothing above U+10FFFF (F4)
+					if (c1 < (c === 0xF0 ? 0x90 : 0x80) || c1 > (c === 0xF4 ? 0x8F : 0xBF) ||
+						(c2 & 0xC0) !== 0x80 || (c3 & 0xC0) !== 0x80)
+						break;
+					const cp = (((c & 0x07) << 18) | ((c1 & 0x3F) << 12) | ((c2 & 0x3F) << 6) |
+								(c3 & 0x3F)) -
+							   0x10000;
+					ans += String.fromCharCode(0xD800 + (cp >> 10), 0xDC00 + (cp & 0x3FF));
+					o += 4;
+				} else {
+					break;
+				}
+			}
+		}
+		// ignoreBOM: keep a leading U+FEFF like the JS loop does
+		if (textDecoder === null) textDecoder = new TextDecoder('utf-8', {ignoreBOM: true});
+		return textDecoder.decode(u8.subarray(start, end));
+	}
+
+	/** Return a view of len bytes starting at o */
+	_bytes(o: number, len: number): Uint8Array {
+		if (o + len > this._u8.length) throw new RangeError('Bytes outside message');
+		return this._u8.subarray(o, o + len);
 	}
 }
 
-export abstract class TableIn {
-	static readonly _MAGIC: number = 0;
+//////////////////////////////////////////////////////////////////////////////////////
+// Lists
+//////////////////////////////////////////////////////////////////////////////////////
 
-	/**
-	 * Private constructor. Use the accessor methods on tables or the root method on
-	 * Reader to get an instance
-	 */
-	constructor(public _reader: Reader, public _offset: number, public _size: number) {}
+/**
+ * Base class of all read only lists.
+ *
+ * Use get(i) in performance critical loops; iteration and toArray() are convenient
+ * but slightly slower.
+ */
+export abstract class ListIn<T> implements Iterable<T> {
+	declare readonly _r: Reader;
+	declare readonly _dv: DataView;
+	/** Offset of the first element in the message */
+	declare readonly _off: number;
+	/** Number of elements in the list */
+	declare readonly length: number;
 
-	_getUint48F(o: number): number { return this._reader._readUint48(o + this._offset); }
-
-	_getInt8(o: number, d: number): number {
-		if (o >= this._size) return d;
-		return this._reader._data.getInt8(o + this._offset);
+	constructor(reader: Reader, offset: number, length: number) {
+		this._r = reader;
+		this._dv = reader._dv;
+		this._off = offset;
+		this.length = length;
 	}
 
-	_getUint8(o: number, d: number): number {
-		if (o >= this._size) return d;
-		return this._reader._data.getUint8(o + this._offset);
-	}
+	/** Return the i'th element of the list */
+	abstract get(i: number): T;
 
-	_getInt16(o: number, d: number): number {
-		if (o >= this._size) return d;
-		return this._reader._data.getInt16(o + this._offset, true);
-	}
+	[Symbol.iterator](): Iterator<T> { return new ListIterator<T>(this); }
 
-	_getUint16(o: number, d: number): number {
-		if (o >= this._size) return d;
-		return this._reader._data.getUint16(o + this._offset, true);
-	}
+	// forEach and toArray are repeated in each concrete list class (also the generated
+	// ones) on purpose: every copy gets its own type feedback, which keeps them fast when
+	// an application uses many kinds of lists. These are fallbacks.
 
-	_getInt32(o: number, d: number): number {
-		if (o >= this._size) return d;
-		return this._reader._data.getInt32(o + this._offset, true);
-	}
-
-	_getUint32(o: number, d: number): number {
-		if (o >= this._size) return d;
-		return this._reader._data.getUint32(o + this._offset, true);
-	}
-
-	_getUint48(o: number): number {
-		if (o >= this._size) return 0;
-		return this._reader._readUint48(o + this._offset);
-	}
-
-	_getInt64(o: number, d: number): number {
-		if (o >= this._size) return d;
-		return this._reader._readInt64(o + this._offset);
-	}
-
-	_getUint64(o: number, d: number): number {
-		if (o >= this._size) return d;
-		return this._reader._readUint64(o + this._offset);
-	}
-
-	_getFloat32(o: number, d: number): number {
-		if (o >= this._size) return d;
-		return this._reader._data.getFloat32(o + this._offset, true);
-	}
-
-	_getFloat64(o: number, d: number): number {
-		if (o >= this._size) return d;
-		return this._reader._data.getFloat64(o + this._offset, true);
-	}
-
-	_getBit(o: number, b: number, d: boolean): boolean {
-		if (o >= this._size) return d;
-		const v = this._reader._data.getUint8(o + this._offset);
-		return (v & (1 << b)) != 0;
-	}
-
-	_getPtr(o: number, magic: number): [ number, number ] {
-		const off = this._getUint48(o);
-		if (off == 0) return [ 0, 0 ];
-		const size = this._reader._readSize(off, magic);
-		return [ off + 10, size ];
-	}
-
-	_getPtrInplace(o: number, magic: number): [ number, number ] {
-		const size = this._getUint48(o);
-		if (size == 0) return [ 0, 0 ];
-		return [ this._offset + this._size, size ];
-	}
-};
-
-// Responsible for reading a message
-export class Reader {
-	_data: DataView;
-
-	constructor(data: ArrayBuffer) { this._data = new DataView(data); }
-
-	_readUint48(o: number): number {
-		// Note we cannot use shifts here as it would turn it into a 32bit instead of a
-		// double
-		return this._data.getUint32(o, true) +
-			   this._data.getUint16(o + 4, true) * 2 ** 32;
-	}
-
-	_readInt64(o: number): number {
-		return this._data.getUint32(o, true) + this._data.getInt32(o + 4, true) * 2 ** 32;
-	}
-
-	_readUint64(o: number): number {
-		return this._data.getUint32(o, true) +
-			   this._data.getUint32(o + 4, true) * 2 ** 32;
-	}
-
-	_readSize(o: number, magic: number): number {
-		const m = this._data.getUint32(o, true);
-		if (m != magic) throw Error('Bad magic');
-		return this._readUint48(o + 4);
-	}
-
-	_readText(offset: number, len: number): string {
-		let ans = '';
-		const end = offset + len;
-		while (offset < end) {
-			const c = this._data.getUint8(offset++);
-			switch (c >> 4) {
-			case 0:
-			case 1:
-			case 2:
-			case 3:
-			case 4:
-			case 5:
-			case 6:
-			case 7: ans += String.fromCharCode(c); break;
-			case 12:
-			case 13: {
-				const char2 = this._data.getUint8(offset++);
-				ans += String.fromCharCode(((c & 0x1F) << 6) | (char2 & 0x3F));
-				break;
-			}
-			case 14: {
-				const char2 = this._data.getUint8(offset++);
-				const char3 = this._data.getUint8(offset++);
-				ans += String.fromCharCode(((c & 0x0F) << 12) | ((char2 & 0x3F) << 6) |
-										   ((char3 & 0x3F) << 0));
-			} break;
-			}
-		}
+	/** Return the elements of the list as an array */
+	toArray(): Array<T> {
+		const n = this.length;
+		const ans = new Array<T>(n);
+		for (let i = 0; i < n; ++i) ans[i] = this.get(i);
 		return ans;
 	}
 
-	_getInt8List(o: number, s: number): ListIn<number> {
-		return new Proxy<ListIn<number>>(
-		  new ListIn<number>(
-			s, o, (s: number, i: number) => { return this._data.getInt8(s + i); }),
-		  listInHandler);
+	forEach(fn: (value: T, index: number) => void): void {
+		const n = this.length;
+		for (let i = 0; i < n; ++i) fn(this.get(i), i);
+	}
+}
+
+/** Iterator over a list. Faster than a generator function */
+class ListIterator<T> implements Iterator<T> {
+	declare _list: ListIn<T>;
+	declare _i: number;
+
+	constructor(list: ListIn<T>) {
+		this._list = list;
+		this._i = 0;
 	}
 
-	_getInt16List(o: number, s: number): ListIn<number> {
-		return new Proxy<ListIn<number>>(
-		  new ListIn<number>(
-			s,
-			o,
-			(s: number, i: number) => { return this._data.getInt16(s + i * 2, true); }),
-		  listInHandler);
+	next(): IteratorResult<T> {
+		const i = this._i;
+		if (i < this._list.length) {
+			this._i = i + 1;
+			return {value: this._list.get(i), done: false};
+		}
+		return {value: undefined, done: true};
 	}
 
-	_getInt32List(o: number, s: number): ListIn<number> {
-		return new Proxy<ListIn<number>>(
-		  new ListIn<number>(
-			s,
-			o,
-			(s: number, i: number) => { return this._data.getInt32(s + i * 4, true); }),
-		  listInHandler);
+	[Symbol.iterator](): Iterator<T> { return this; }
+}
+
+type TypedArrayCtor<A> = {
+	new(buffer: ArrayBufferLike, byteOffset: number, length: number): A;
+	readonly BYTES_PER_ELEMENT: number;
+};
+
+function typedArray<A>(list: ListIn<unknown>, ctor: TypedArrayCtor<A>, copy: boolean): A {
+	if (!LITTLE_ENDIAN) throw new Error('toTypedArray requires a little endian host');
+	const u8 = list._r._u8;
+	const w = ctor.BYTES_PER_ELEMENT;
+	const n = list.length;
+	const start = u8.byteOffset + list._off;
+	if (list._off + n * w > u8.length) throw new RangeError('List outside message');
+	if (!copy && start % w === 0) return new ctor(u8.buffer, start, n);
+	return new ctor(u8.buffer.slice(start, start + n * w), 0, n);
+}
+
+function copyTyped<A extends ArrayBufferView>(list: ListIn<unknown>, dst: A, offset: number,
+											  w: number): A {
+	if (!LITTLE_ENDIAN) throw new Error('copyTo requires a little endian host');
+	const u8 = list._r._u8;
+	const bytes = list.length * w;
+	if (!((offset >>> 0) === offset && offset * w + bytes <= dst.byteLength))
+		throw new RangeError('List does not fit in destination at offset ' + offset);
+	if (list._off + bytes > u8.length) throw new RangeError('List outside message');
+	new Uint8Array(dst.buffer, dst.byteOffset + offset * w, bytes)
+	  .set(u8.subarray(list._off, list._off + bytes));
+	return dst;
+}
+
+/** Base class of lists of fixed width elements */
+export abstract class FixedListIn<T> extends ListIn<T> {
+	/** Number of bytes taken by the elements of the list */
+	abstract get byteLength(): number;
+
+	/** Return a view of the raw bytes of the elements of the list */
+	bytes(): Uint8Array { return this._r._bytes(this._off, this.byteLength); }
+}
+
+/** Base class of lists of numbers */
+export abstract class NumberListIn<A> extends FixedListIn<number> {
+	/**
+	 * Return the list as a typed array.
+	 *
+	 * If the data in the message is suitably aligned (and copy is false) the returned
+	 * array is a view of the message buffer, otherwise it is a copy.
+	 */
+	abstract toTypedArray(copy?: boolean): A;
+
+	/**
+	 * Copy the list into the typed array dst starting at element offset, and return dst.
+	 *
+	 * Reusing dst for repeated conversions avoids allocating a new array each time, which
+	 * is much faster than toTypedArray() when the list is not aligned.
+	 */
+	abstract copyTo(dst: A, offset?: number): A;
+}
+
+export class Int8ListIn extends NumberListIn<Int8Array> {
+	forEach(fn: (value: number, index: number) => void): void {
+		const dv = this._dv, o = this._off, n = this.length;
+		for (let i = 0; i < n; ++i) fn(dv.getInt8(o + i), i);
+	}
+	toArray(): Array<number> {
+		const dv = this._dv, o = this._off, n = this.length;
+		const ans = new Array<number>(n);
+		for (let i = 0; i < n; ++i) ans[i] = dv.getInt8(o + i);
+		return ans;
+	}
+	copyTo(dst: Int8Array, offset: number = 0): Int8Array {
+		return copyTyped(this, dst, offset, 1);
+	}
+	get byteLength(): number { return this.length; }
+	get(i: number): number {
+		if (!((i >>> 0) === i && i < this.length)) _indexError(i, this.length);
+		return this._dv.getInt8(this._off + i);
+	}
+	toTypedArray(copy: boolean = false): Int8Array { return typedArray(this, Int8Array, copy); }
+}
+
+export class Uint8ListIn extends NumberListIn<Uint8Array> {
+	forEach(fn: (value: number, index: number) => void): void {
+		const dv = this._dv, o = this._off, n = this.length;
+		for (let i = 0; i < n; ++i) fn(dv.getUint8(o + i), i);
+	}
+	toArray(): Array<number> {
+		const dv = this._dv, o = this._off, n = this.length;
+		const ans = new Array<number>(n);
+		for (let i = 0; i < n; ++i) ans[i] = dv.getUint8(o + i);
+		return ans;
+	}
+	copyTo(dst: Uint8Array, offset: number = 0): Uint8Array {
+		return copyTyped(this, dst, offset, 1);
+	}
+	get byteLength(): number { return this.length; }
+	get(i: number): number {
+		if (!((i >>> 0) === i && i < this.length)) _indexError(i, this.length);
+		return this._dv.getUint8(this._off + i);
+	}
+	toTypedArray(copy: boolean = false): Uint8Array { return typedArray(this, Uint8Array, copy); }
+}
+
+export class Int16ListIn extends NumberListIn<Int16Array> {
+	forEach(fn: (value: number, index: number) => void): void {
+		const dv = this._dv, o = this._off, n = this.length;
+		for (let i = 0; i < n; ++i) fn(dv.getInt16(o + i * 2, true), i);
+	}
+	toArray(): Array<number> {
+		const dv = this._dv, o = this._off, n = this.length;
+		const ans = new Array<number>(n);
+		for (let i = 0; i < n; ++i) ans[i] = dv.getInt16(o + i * 2, true);
+		return ans;
+	}
+	copyTo(dst: Int16Array, offset: number = 0): Int16Array {
+		return copyTyped(this, dst, offset, 2);
+	}
+	get byteLength(): number { return this.length * 2; }
+	get(i: number): number {
+		if (!((i >>> 0) === i && i < this.length)) _indexError(i, this.length);
+		return this._dv.getInt16(this._off + i * 2, true);
+	}
+	toTypedArray(copy: boolean = false): Int16Array { return typedArray(this, Int16Array, copy); }
+}
+
+export class Uint16ListIn extends NumberListIn<Uint16Array> {
+	forEach(fn: (value: number, index: number) => void): void {
+		const dv = this._dv, o = this._off, n = this.length;
+		for (let i = 0; i < n; ++i) fn(dv.getUint16(o + i * 2, true), i);
+	}
+	toArray(): Array<number> {
+		const dv = this._dv, o = this._off, n = this.length;
+		const ans = new Array<number>(n);
+		for (let i = 0; i < n; ++i) ans[i] = dv.getUint16(o + i * 2, true);
+		return ans;
+	}
+	copyTo(dst: Uint16Array, offset: number = 0): Uint16Array {
+		return copyTyped(this, dst, offset, 2);
+	}
+	get byteLength(): number { return this.length * 2; }
+	get(i: number): number {
+		if (!((i >>> 0) === i && i < this.length)) _indexError(i, this.length);
+		return this._dv.getUint16(this._off + i * 2, true);
+	}
+	toTypedArray(copy: boolean = false): Uint16Array {
+		return typedArray(this, Uint16Array, copy);
+	}
+}
+
+export class Int32ListIn extends NumberListIn<Int32Array> {
+	forEach(fn: (value: number, index: number) => void): void {
+		const dv = this._dv, o = this._off, n = this.length;
+		for (let i = 0; i < n; ++i) fn(dv.getInt32(o + i * 4, true), i);
+	}
+	toArray(): Array<number> {
+		const dv = this._dv, o = this._off, n = this.length;
+		const ans = new Array<number>(n);
+		for (let i = 0; i < n; ++i) ans[i] = dv.getInt32(o + i * 4, true);
+		return ans;
+	}
+	copyTo(dst: Int32Array, offset: number = 0): Int32Array {
+		return copyTyped(this, dst, offset, 4);
+	}
+	get byteLength(): number { return this.length * 4; }
+	get(i: number): number {
+		if (!((i >>> 0) === i && i < this.length)) _indexError(i, this.length);
+		return this._dv.getInt32(this._off + i * 4, true);
+	}
+	toTypedArray(copy: boolean = false): Int32Array { return typedArray(this, Int32Array, copy); }
+}
+
+export class Uint32ListIn extends NumberListIn<Uint32Array> {
+	forEach(fn: (value: number, index: number) => void): void {
+		const dv = this._dv, o = this._off, n = this.length;
+		for (let i = 0; i < n; ++i) fn(dv.getUint32(o + i * 4, true), i);
+	}
+	toArray(): Array<number> {
+		const dv = this._dv, o = this._off, n = this.length;
+		const ans = new Array<number>(n);
+		for (let i = 0; i < n; ++i) ans[i] = dv.getUint32(o + i * 4, true);
+		return ans;
+	}
+	copyTo(dst: Uint32Array, offset: number = 0): Uint32Array {
+		return copyTyped(this, dst, offset, 4);
+	}
+	get byteLength(): number { return this.length * 4; }
+	get(i: number): number {
+		if (!((i >>> 0) === i && i < this.length)) _indexError(i, this.length);
+		return this._dv.getUint32(this._off + i * 4, true);
+	}
+	toTypedArray(copy: boolean = false): Uint32Array {
+		return typedArray(this, Uint32Array, copy);
+	}
+}
+
+/**
+ * List of I64. get returns a number, which is exact up to 2^53, use getBigInt or
+ * toTypedArray for exact values.
+ */
+export class Int64ListIn extends NumberListIn<BigInt64Array> {
+	forEach(fn: (value: number, index: number) => void): void {
+		const r = this._r, o = this._off, n = this.length;
+		for (let i = 0; i < n; ++i) fn(r._i64(o + i * 8), i);
+	}
+	toArray(): Array<number> {
+		const r = this._r, o = this._off, n = this.length;
+		const ans = new Array<number>(n);
+		for (let i = 0; i < n; ++i) ans[i] = r._i64(o + i * 8);
+		return ans;
+	}
+	copyTo(dst: BigInt64Array, offset: number = 0): BigInt64Array {
+		return copyTyped(this, dst, offset, 8);
+	}
+	get byteLength(): number { return this.length * 8; }
+	get(i: number): number {
+		if (!((i >>> 0) === i && i < this.length)) _indexError(i, this.length);
+		return this._r._i64(this._off + i * 8);
+	}
+	getBigInt(i: number): bigint {
+		if (!((i >>> 0) === i && i < this.length)) _indexError(i, this.length);
+		return this._dv.getBigInt64(this._off + i * 8, true);
+	}
+	toTypedArray(copy: boolean = false): BigInt64Array {
+		return typedArray(this, BigInt64Array, copy);
+	}
+}
+
+/**
+ * List of U64. get returns a number, which is exact up to 2^53, use getBigInt or
+ * toTypedArray for exact values.
+ */
+export class Uint64ListIn extends NumberListIn<BigUint64Array> {
+	forEach(fn: (value: number, index: number) => void): void {
+		const r = this._r, o = this._off, n = this.length;
+		for (let i = 0; i < n; ++i) fn(r._u64(o + i * 8), i);
+	}
+	toArray(): Array<number> {
+		const r = this._r, o = this._off, n = this.length;
+		const ans = new Array<number>(n);
+		for (let i = 0; i < n; ++i) ans[i] = r._u64(o + i * 8);
+		return ans;
+	}
+	copyTo(dst: BigUint64Array, offset: number = 0): BigUint64Array {
+		return copyTyped(this, dst, offset, 8);
+	}
+	get byteLength(): number { return this.length * 8; }
+	get(i: number): number {
+		if (!((i >>> 0) === i && i < this.length)) _indexError(i, this.length);
+		return this._r._u64(this._off + i * 8);
+	}
+	getBigInt(i: number): bigint {
+		if (!((i >>> 0) === i && i < this.length)) _indexError(i, this.length);
+		return this._dv.getBigUint64(this._off + i * 8, true);
+	}
+	toTypedArray(copy: boolean = false): BigUint64Array {
+		return typedArray(this, BigUint64Array, copy);
+	}
+}
+
+export class Float32ListIn extends NumberListIn<Float32Array> {
+	forEach(fn: (value: number, index: number) => void): void {
+		const dv = this._dv, o = this._off, n = this.length;
+		for (let i = 0; i < n; ++i) fn(dv.getFloat32(o + i * 4, true), i);
+	}
+	toArray(): Array<number> {
+		const dv = this._dv, o = this._off, n = this.length;
+		const ans = new Array<number>(n);
+		for (let i = 0; i < n; ++i) ans[i] = dv.getFloat32(o + i * 4, true);
+		return ans;
+	}
+	copyTo(dst: Float32Array, offset: number = 0): Float32Array {
+		return copyTyped(this, dst, offset, 4);
+	}
+	get byteLength(): number { return this.length * 4; }
+	get(i: number): number {
+		if (!((i >>> 0) === i && i < this.length)) _indexError(i, this.length);
+		return this._dv.getFloat32(this._off + i * 4, true);
+	}
+	toTypedArray(copy: boolean = false): Float32Array {
+		return typedArray(this, Float32Array, copy);
+	}
+}
+
+export class Float64ListIn extends NumberListIn<Float64Array> {
+	forEach(fn: (value: number, index: number) => void): void {
+		const dv = this._dv, o = this._off, n = this.length;
+		for (let i = 0; i < n; ++i) fn(dv.getFloat64(o + i * 8, true), i);
+	}
+	toArray(): Array<number> {
+		const dv = this._dv, o = this._off, n = this.length;
+		const ans = new Array<number>(n);
+		for (let i = 0; i < n; ++i) ans[i] = dv.getFloat64(o + i * 8, true);
+		return ans;
+	}
+	copyTo(dst: Float64Array, offset: number = 0): Float64Array {
+		return copyTyped(this, dst, offset, 8);
+	}
+	get byteLength(): number { return this.length * 8; }
+	get(i: number): number {
+		if (!((i >>> 0) === i && i < this.length)) _indexError(i, this.length);
+		return this._dv.getFloat64(this._off + i * 8, true);
+	}
+	toTypedArray(copy: boolean = false): Float64Array {
+		return typedArray(this, Float64Array, copy);
+	}
+}
+
+/** List of bools, packed 8 to a byte */
+export class BoolListIn extends FixedListIn<boolean> {
+	forEach(fn: (value: boolean, index: number) => void): void {
+		const dv = this._dv, o = this._off, n = this.length;
+		for (let i = 0; i < n; ++i) fn(((dv.getUint8(o + (i >> 3)) >> (i & 7)) & 1) !== 0, i);
+	}
+	toArray(): Array<boolean> {
+		const dv = this._dv, o = this._off, n = this.length;
+		const ans = new Array<boolean>(n);
+		for (let i = 0; i < n; ++i) ans[i] = ((dv.getUint8(o + (i >> 3)) >> (i & 7)) & 1) !== 0;
+		return ans;
+	}
+	get byteLength(): number { return (this.length + 7) >> 3; }
+	get(i: number): boolean {
+		if (!((i >>> 0) === i && i < this.length)) _indexError(i, this.length);
+		return ((this._dv.getUint8(this._off + (i >> 3)) >> (i & 7)) & 1) !== 0;
+	}
+	/** Return the list unpacked as one byte (0 or 1) per element */
+	toUint8Array(): Uint8Array {
+		const n = this.length;
+		const ans = new Uint8Array(n);
+		const b = this.bytes();
+		for (let i = 0; i < n; ++i) ans[i] = (b[i >> 3] >> (i & 7)) & 1;
+		return ans;
+	}
+}
+
+/** List of enums. Missing values are returned as null */
+export class EnumListIn<E> extends FixedListIn<E | null> {
+	forEach(fn: (value: E | null, index: number) => void): void {
+		const dv = this._dv, o = this._off, n = this.length;
+		for (let i = 0; i < n; ++i) {
+			const v = dv.getUint8(o + i);
+			fn(v === 255 ? null : v as any as E, i);
+		}
+	}
+	toArray(): Array<E | null> {
+		const dv = this._dv, o = this._off, n = this.length;
+		const ans = new Array<E | null>(n);
+		for (let i = 0; i < n; ++i) {
+			const v = dv.getUint8(o + i);
+			ans[i] = v === 255 ? null : v as any as E;
+		}
+		return ans;
+	}
+	/** Copy the raw enum values (255 means not set) into dst starting at offset */
+	copyTo(dst: Uint8Array, offset: number = 0): Uint8Array {
+		return copyTyped(this, dst, offset, 1);
+	}
+	get byteLength(): number { return this.length; }
+	get(i: number): E | null {
+		if (!((i >>> 0) === i && i < this.length)) _indexError(i, this.length);
+		const v = this._dv.getUint8(this._off + i);
+		return v === 255 ? null : v as any as E;
+	}
+	/** Return the raw enum values, where 255 denotes a missing value */
+	toTypedArray(copy: boolean = false): Uint8Array { return typedArray(this, Uint8Array, copy); }
+}
+
+export class TextListIn extends ListIn<string | null> {
+	forEach(fn: (value: string | null, index: number) => void): void {
+		const n = this.length;
+		for (let i = 0; i < n; ++i) fn(this.get(i), i);
+	}
+	toArray(): Array<string | null> {
+		const n = this.length;
+		const ans = new Array<string | null>(n);
+		for (let i = 0; i < n; ++i) ans[i] = this.get(i);
+		return ans;
+	}
+	get(i: number): string | null {
+		if (!((i >>> 0) === i && i < this.length)) _indexError(i, this.length);
+		const r = this._r;
+		const p = r._u48(this._off + i * 6);
+		if (p === 0) return null;
+		return r._text(p + 10, r._size(p, TEXT_MAGIC));
+	}
+}
+
+/** List of bytes. Elements are returned as views of the message */
+export class BytesListIn extends ListIn<Uint8Array | null> {
+	forEach(fn: (value: Uint8Array | null, index: number) => void): void {
+		const n = this.length;
+		for (let i = 0; i < n; ++i) fn(this.get(i), i);
+	}
+	toArray(): Array<Uint8Array | null> {
+		const n = this.length;
+		const ans = new Array<Uint8Array | null>(n);
+		for (let i = 0; i < n; ++i) ans[i] = this.get(i);
+		return ans;
+	}
+	get(i: number): Uint8Array | null {
+		if (!((i >>> 0) === i && i < this.length)) _indexError(i, this.length);
+		const r = this._r;
+		const p = r._u48(this._off + i * 6);
+		if (p === 0) return null;
+		return r._bytes(p + 10, r._size(p, BYTES_MAGIC));
+	}
+}
+
+/** Base class of generated lists of structs */
+export abstract class StructListIn<S> extends FixedListIn<S> {
+	/** Width of a struct in bytes */
+	abstract get _width(): number;
+	get byteLength(): number { return this.length * this._width; }
+}
+
+/** Base class of generated lists of tables */
+export abstract class TableListIn<T> extends ListIn<T | null> {}
+
+/** Base class of generated lists of unions */
+export abstract class UnionListIn<U> extends ListIn<U> {}
+
+/**
+ * Base class of generated direct lists of tables. The tables are stored inline
+ * with a fixed size.
+ *
+ * For fast iteration without allocating an object per row, use cursor and seek:
+ *
+ *     const c = list.cursor();
+ *     for (let i = 0; i < list.length; ++i) {
+ *         list.seek(c, i);
+ *         ... c.x ...
+ *     }
+ */
+export abstract class DirectTableListIn<T> extends FixedListIn<T> {
+	/** Size of each table in the list */
+	declare readonly _itemSize: number;
+
+	constructor(reader: Reader, offset: number, length: number, magic: number) {
+		let itemSize = 0;
+		if (length !== 0) {
+			const m = reader._dv.getUint32(offset, true);
+			if (m !== magic) magicError(offset, magic, m);
+			itemSize = reader._dv.getUint32(offset + 4, true);
+		}
+		super(reader, offset + 8, length);
+		this._itemSize = itemSize;
 	}
 
-	_getInt64List(o: number, s: number): ListIn<number> {
-		return new Proxy<ListIn<number>>(
-		  new ListIn<number>(
-			s, o, (s: number, i: number) => { return this._readInt64(s + i * 8); }),
-		  listInHandler);
-	}
+	get byteLength(): number { return this.length * this._itemSize; }
 
-	_getUint8List(o: number, s: number): ListIn<number> {
-		return new Proxy<ListIn<number>>(
-		  new ListIn<number>(
-			s, o, (s: number, i: number) => { return this._data.getUint8(s + i); }),
-		  listInHandler);
-	}
+	/** Return a reusable table object, positioned at the first element */
+	abstract cursor(): T;
 
-	_getUint16List(o: number, s: number): ListIn<number> {
-		return new Proxy<ListIn<number>>(
-		  new ListIn<number>(
-			s,
-			o,
-			(s: number, i: number) => { return this._data.getUint16(s + i * 2, true); }),
-		  listInHandler);
-	}
-
-	_getUint32List(o: number, s: number): ListIn<number> {
-		return new Proxy<ListIn<number>>(
-		  new ListIn<number>(
-			s,
-			o,
-			(s: number, i: number) => { return this._data.getUint32(s + i * 4, true); }),
-		  listInHandler);
-	}
-
-	_getUint64List(o: number, s: number): ListIn<number> {
-		return new Proxy<ListIn<number>>(
-		  new ListIn<number>(
-			s, o, (s: number, i: number) => { return this._readUint64(s + i * 8); }),
-		  listInHandler);
-	}
-
-	_getFloat32List(o: number, s: number): ListIn<number> {
-		return new Proxy<ListIn<number>>(
-		  new ListIn<number>(
-			s,
-			o,
-			(s: number, i: number) => { return this._data.getFloat32(s + i * 4, true); }),
-		  listInHandler);
-	}
-
-	_getFloat64List(o: number, s: number): ListIn<number> {
-		return new Proxy<ListIn<number>>(
-		  new ListIn<number>(
-			s,
-			o,
-			(s: number, i: number) => { return this._data.getFloat64(s + i * 8, true); }),
-		  listInHandler);
-	}
-
-	_getBoolList(o: number, s: number): ListIn<boolean> {
-		return new Proxy<ListIn<boolean>>(
-		  new ListIn<boolean>(s, o, (s: number, i: number) => {
-			  return ((this._data.getUint8(s + (i >> 3)) >> (i & 7)) & 1) != 0;
-		  }), listInHandler);
-	}
-
-	_getStructList<S>(o: number,
-					  s: number,
-					  type: { _WIDTH: number, _read(reader: Reader, o: Number): S }):
-	  ListIn<S> {
-		return new Proxy<ListIn<S>>(new ListIn<S>(s, o, (s: number, i: number) => {
-										return type._read(this, s + i * type._WIDTH);
-									}), listInHandler);
-	}
-
-	_getEnumList<E>(o: number, s: number): ListIn<E|null> {
-		return new Proxy<ListIn<E|null>>(
-		  new ListIn<E|null>(s, o, (s: number, i: number) => {
-			  const v = this._data.getUint8(s + i);
-			  if (v === 255) return null;
-			  return v as any as E;
-		  }), listInHandler);
-	}
-
-	_getTextList(o: number, s: number): ListIn<string|null> {
-		return new Proxy<ListIn<string|null>>(
-		  new ListIn<string|null>(s, o, (s: number, i: number) => {
-			  const off = this._readUint48(s + i * 6);
-			  if (off == 0) return null;
-			  const size = this._readSize(off, TEXT_MAGIC);
-			  return this._readText(off + 10, size);
-		  }), listInHandler);
-	}
-
-	_getBytesList(o: number, s: number): ListIn<ArrayBuffer|null> {
-		return new Proxy<ListIn<ArrayBuffer|null>>(
-		  new ListIn<ArrayBuffer|null>(s, o, (s: number, i: number) => {
-			  const off = this._readUint48(s + i * 6);
-			  if (off == 0) return null;
-			  const size = this._readSize(off, BYTES_MAGIC);
-			  const oo = off + 10 + (this._data.byteOffset || 0);
-			  return this._data.buffer.slice(oo, oo + size);
-		  }), listInHandler);
-	}
-
-	_getTableList<T extends TableIn>(o: number, s: number, type: {
-		new(r: Reader, o: number, s: number): T; _MAGIC : number
-	}): ListIn<T|null> {
-		return new Proxy<ListIn<T|null>>(
-		  new ListIn<T|null>(s, o, (s: number, i: number) => {
-			  const off = this._readUint48(s + i * 6);
-			  if (off == 0) return null;
-			  const size = this._readSize(off, type._MAGIC);
-			  return new type(this, off + 10, size);
-		  }), listInHandler);
-	}
-
-	_getDirectTableList<T extends TableIn>(o: number, s: number, type: {
-		new(r: Reader, o: number, s: number): T; _MAGIC : number
-	}): ListIn<T> {
-		const magic = this._data.getUint32(o, true);
-		if (magic != type._MAGIC) throw Error('Bad direct list magic');
-		const itemSize = this._data.getUint32(o + 4, true);
-		const dataStart = o + 8;
-		return new Proxy<ListIn<T>>(
-		  new ListIn<T>(s, dataStart, (s: number, i: number) => {
-			  return new type(this, s + i * itemSize, itemSize);
-		  }), listInHandler);
-	}
-
-	_getUnionList<T extends UnionIn>(o: number, s: number, type: {
-		new(r: Reader, o: number, s: number): T;
-	}): ListIn<T> {
-		return new Proxy<ListIn<T>>(new ListIn<T>(s, o, (s: number, i: number) => {
-												       const t = this._data.getUint16(s + i * 8, true);
-												       const off = this._readUint48(s + i * 8 + 2);
-												       return new type(this, t, off);
-												}), listInHandler);
-	}
-	/** Return root node of message, of type type */
-	root<T extends TableIn>(type: {
-		new(r: Reader, o: number, s: number): T; _MAGIC : number
-	}): T {
-		const magic = this._data.getUint32(0, true);
-		const offset = this._readUint48(4);
-		if (magic != MESSAGE_MAGIC) throw Error('Bad magic');
-		const size = this._readSize(offset, type._MAGIC);
-		return new type(this, offset + 10, size);
-	}
+	/** Position the cursor c at element i and return it */
+	abstract seek(c: T, i: number): T;
 }
 
 export class TextOut {
@@ -453,7 +791,7 @@ export abstract class TableOut {
 		this._writer._writeUint48(this._offset + o, v._offset - 10);
 	}
 
-	_setBytes(o: number, v: BytesOut|ArrayBuffer) {
+	_setBytes(o: number, v: BytesOut|BytesLike) {
 		if (!(v instanceof BytesOut)) v = this._writer.constructBytes(v);
 		this._writer._writeUint48(this._offset + o, v._offset - 10);
 	}
@@ -467,7 +805,7 @@ export abstract class TableOut {
 		this._writer._writeUint48(this._offset + o, s);
 	}
 
-	_addInplaceBytes(o: number, t: ArrayBuffer) {
+	_addInplaceBytes(o: number, t: BytesLike) {
 		this._writer._writeUint48(this._offset + o, t.byteLength);
 		const tt = new Uint8Array(t);
 		this._writer._reserve(t.byteLength);
@@ -495,7 +833,7 @@ export abstract class UnionOut {
 		this._set(idx, v._offset - 10);
 	}
 
-	_setBytes(idx: number, v: BytesOut|ArrayBuffer): void {
+	_setBytes(idx: number, v: BytesOut|BytesLike): void {
 		if (!(v instanceof BytesOut)) v = this._writer.constructBytes(v);
 		this._set(idx, v._offset - 10);
 	}
@@ -506,7 +844,7 @@ export abstract class UnionOut {
 		this._set(idx, l);
 	}
 
-	_addInplaceBytes(idx: number, t: ArrayBuffer): void {
+	_addInplaceBytes(idx: number, t: BytesLike): void {
 		console.assert(this._writer._size == this._end);
 		this._set(idx, t.byteLength);
 		const tt = new Uint8Array(t);
@@ -534,7 +872,7 @@ export class ListOut<T, IT = T> {
 
 	_copy(inp: ListIn<IT>): void {
 		console.assert(this.length == inp.length);
-		for (let i = 0; i < this.length; ++i) this.set(this._offset, i, inp[i]);
+		for (let i = 0; i < this.length; ++i) this.set(this._offset, i, inp.get(i));
 	}
 
 	constructor(public writer: Writer,
@@ -905,15 +1243,15 @@ export class Writer {
 	}
 
 	constructBytesList(size: number, _inplace: boolean = false):
-	  ListOut<ArrayBuffer|BytesOut, ArrayBuffer|null> {
-		return new Proxy<ListOut<ArrayBuffer|BytesOut, ArrayBuffer|null>>(
-		  new ListOut<ArrayBuffer|BytesOut, ArrayBuffer|null>(
+	  ListOut<BytesLike|BytesOut, Uint8Array|null> {
+		return new Proxy<ListOut<BytesLike|BytesOut, Uint8Array|null>>(
+		  new ListOut<BytesLike|BytesOut, Uint8Array|null>(
 			this,
 			size,
 			'\0\0\0\0\0\0',
 			size,
 			!_inplace,
-			(off: number, idx: number, v: BytesOut|ArrayBuffer|null) => {
+			(off: number, idx: number, v: BytesOut|BytesLike|null) => {
 				if (v === null) return;
 				let o;
 				if (!(v instanceof BytesOut)) { v = this.constructBytes(v); }
@@ -974,7 +1312,7 @@ export class Writer {
 		return new TextOut(s + 10);
 	}
 
-	constructBytes(t: ArrayBuffer): BytesOut {
+	constructBytes(t: BytesLike): BytesOut {
 		this._reserve(t.byteLength + 10);
 		this._data.setUint32(this._size, BYTES_MAGIC, true);
 		this._writeUint48(this._size + 4, t.byteLength);

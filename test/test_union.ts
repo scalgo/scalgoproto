@@ -2,7 +2,7 @@
 import * as scalgoproto from 'scalgoproto'
 import * as union from 'union'
 
-import {bc, readIn, require1, require2, validateOut} from './test_base'
+import {bc, readMessage, require1, require2, validateOut} from './test_base'
 
 function forCopy(): union.Table3In {
 	const w = new scalgoproto.Writer();
@@ -152,8 +152,7 @@ function test_out_union(path: string): boolean {
 }
 
 function test_in_union(path: string): boolean {
-	const o = readIn(path);
-	const r = new scalgoproto.Reader(o);
+	const r = new scalgoproto.Reader(readMessage(path));
 	const i = r.root(union.Table3In);
 
 	if (require1(i.v1 !== null, true)) return false;
@@ -192,60 +191,60 @@ function test_in_union(path: string): boolean {
 
 	if (require1(i.v5 !== null, true)) return false;
 	const v5 = i.v5!;
-	if (require2(v5.a.isV5 && v5.a.v5!.length == 1, v5.a.v5![0], 'text4')) return false;
-	if (require2(v5.b.isV5 && v5.b.v5!.length == 1, v5.b.v5![0], 'text5')) return false;
-	if (require2(v5.c.isV5 && v5.c.v5!.length == 1, v5.c.v5![0], 'text6')) return false;
-	if (require2(v5.d.isV5 && v5.d.v5!.length == 1, v5.d.v5![0], 'ctext3')) return false;
-	if (require2(v5.e.isV5 && v5.e.v5!.length == 1, v5.e.v5![0], 'ctext4')) return false;
+	if (require2(v5.a.isV5 && v5.a.v5!.length == 1, v5.a.v5!.get(0), 'text4')) return false;
+	if (require2(v5.b.isV5 && v5.b.v5!.length == 1, v5.b.v5!.get(0), 'text5')) return false;
+	if (require2(v5.c.isV5 && v5.c.v5!.length == 1, v5.c.v5!.get(0), 'text6')) return false;
+	if (require2(v5.d.isV5 && v5.d.v5!.length == 1, v5.d.v5!.get(0), 'ctext3')) return false;
+	if (require2(v5.e.isV5 && v5.e.v5!.length == 1, v5.e.v5!.get(0), 'ctext4')) return false;
 
 	if (require1(i.v6 !== null, true)) return false;
 	const v6 = i.v6!;
-	if (require2(v6.a.isV6 && v6.a.v6!.length == 1, v6.a.v6![0], bc('bytes4')))
+	if (require2(v6.a.isV6 && v6.a.v6!.length == 1, v6.a.v6!.get(0), bc('bytes4')))
 		return false;
-	if (require2(v6.b.isV6 && v6.b.v6!.length == 1, v6.b.v6![0], bc('bytes5')))
+	if (require2(v6.b.isV6 && v6.b.v6!.length == 1, v6.b.v6!.get(0), bc('bytes5')))
 		return false;
-	if (require2(v6.c.isV6 && v6.c.v6!.length == 1, v6.c.v6![0], bc('bytes6')))
+	if (require2(v6.c.isV6 && v6.c.v6!.length == 1, v6.c.v6!.get(0), bc('bytes6')))
 		return false;
-	if (require2(v6.d.isV6 && v6.d.v6!.length == 1, v6.d.v6![0], bc('cbytes3')))
+	if (require2(v6.d.isV6 && v6.d.v6!.length == 1, v6.d.v6!.get(0), bc('cbytes3')))
 		return false;
-	if (require2(v6.e.isV6 && v6.e.v6!.length == 1, v6.e.v6![0], bc('cbytes4')))
+	if (require2(v6.e.isV6 && v6.e.v6!.length == 1, v6.e.v6!.get(0), bc('cbytes4')))
 		return false;
 
 	if (require1(i.v7 !== null, true)) return false;
 	const v7 = i.v7!;
-	if (require2(v7.a.isV7 && v7.a.v7!.length == 1, v7.a.v7![0]!.a, 7)) return false;
-	if (require2(v7.b.isV7 && v7.b.v7!.length == 1, v7.b.v7![0]!.a, 8)) return false;
-	if (require2(v7.c.isV7 && v7.c.v7!.length == 1, v7.c.v7![0]!.a, 9)) return false;
-	if (require2(v7.d.isV7 && v7.d.v7!.length == 1, v7.d.v7![0]!.a, 105)) return false;
-	if (require2(v7.e.isV7 && v7.e.v7!.length == 1, v7.e.v7![0]!.a, 106)) return false;
+	if (require2(v7.a.isV7 && v7.a.v7!.length == 1, v7.a.v7!.get(0)!.a, 7)) return false;
+	if (require2(v7.b.isV7 && v7.b.v7!.length == 1, v7.b.v7!.get(0)!.a, 8)) return false;
+	if (require2(v7.c.isV7 && v7.c.v7!.length == 1, v7.c.v7!.get(0)!.a, 9)) return false;
+	if (require2(v7.d.isV7 && v7.d.v7!.length == 1, v7.d.v7!.get(0)!.a, 105)) return false;
+	if (require2(v7.e.isV7 && v7.e.v7!.length == 1, v7.e.v7!.get(0)!.a, 106)) return false;
 
 	if (require1(i.v8 !== null, true)) return false;
 	const v8 = i.v8!;
-	if (require2(v8.a.isV8 && v8.a.v8!.length == 1, v8.a.v8![0]!.a, 10)) return false;
-	if (require2(v8.b.isV8 && v8.b.v8!.length == 1, v8.b.v8![0]!.a, 11)) return false;
-	if (require2(v8.c.isV8 && v8.c.v8!.length == 1, v8.c.v8![0]!.a, 12)) return false;
-	if (require2(v8.d.isV8 && v8.d.v8!.length == 1, v8.d.v8![0]!.a, 107)) return false;
-	if (require2(v8.e.isV8 && v8.e.v8!.length == 1, v8.e.v8![0]!.a, 108)) return false;
+	if (require2(v8.a.isV8 && v8.a.v8!.length == 1, v8.a.v8!.get(0)!.a, 10)) return false;
+	if (require2(v8.b.isV8 && v8.b.v8!.length == 1, v8.b.v8!.get(0)!.a, 11)) return false;
+	if (require2(v8.c.isV8 && v8.c.v8!.length == 1, v8.c.v8!.get(0)!.a, 12)) return false;
+	if (require2(v8.d.isV8 && v8.d.v8!.length == 1, v8.d.v8!.get(0)!.a, 107)) return false;
+	if (require2(v8.e.isV8 && v8.e.v8!.length == 1, v8.e.v8!.get(0)!.a, 108)) return false;
 
 	if (require1(i.v8 !== null, true)) return false;
 	const v9 = i.v9!;
-	if (require2(v9.a.isV9 && v9.a.v9!.length == 1, v9.a.v9![0], 13)) return false;
-	if (require2(v9.b.isV9 && v9.b.v9!.length == 1, v9.b.v9![0], 14)) return false;
-	if (require2(v9.c.isV9 && v9.c.v9!.length == 1, v9.c.v9![0], 15)) return false;
-	if (require2(v9.d.isV9 && v9.d.v9!.length == 1, v9.d.v9![0], 109)) return false;
-	if (require2(v9.e.isV9 && v9.e.v9!.length == 1, v9.e.v9![0], 110)) return false;
+	if (require2(v9.a.isV9 && v9.a.v9!.length == 1, v9.a.v9!.get(0), 13)) return false;
+	if (require2(v9.b.isV9 && v9.b.v9!.length == 1, v9.b.v9!.get(0), 14)) return false;
+	if (require2(v9.c.isV9 && v9.c.v9!.length == 1, v9.c.v9!.get(0), 15)) return false;
+	if (require2(v9.d.isV9 && v9.d.v9!.length == 1, v9.d.v9!.get(0), 109)) return false;
+	if (require2(v9.e.isV9 && v9.e.v9!.length == 1, v9.e.v9!.get(0), 110)) return false;
 
 	if (require1(i.v10 !== null, true)) return false;
 	const v10 = i.v10!;
-	if (require2(v10.a.isV10 && v10.a.v10!.length == 1, v10.a.v10![0], true))
+	if (require2(v10.a.isV10 && v10.a.v10!.length == 1, v10.a.v10!.get(0), true))
 		return false;
-	if (require2(v10.b.isV10 && v10.b.v10!.length == 1, v10.b.v10![0], false))
+	if (require2(v10.b.isV10 && v10.b.v10!.length == 1, v10.b.v10!.get(0), false))
 		return false;
-	if (require2(v10.c.isV10 && v10.c.v10!.length == 1, v10.c.v10![0], true))
+	if (require2(v10.c.isV10 && v10.c.v10!.length == 1, v10.c.v10!.get(0), true))
 		return false;
-	if (require2(v10.d.isV10 && v10.d.v10!.length == 1, v10.d.v10![0], true))
+	if (require2(v10.d.isV10 && v10.d.v10!.length == 1, v10.d.v10!.get(0), true))
 		return false;
-	if (require2(v10.e.isV10 && v10.e.v10!.length == 1, v10.e.v10![0], true))
+	if (require2(v10.e.isV10 && v10.e.v10!.length == 1, v10.e.v10!.get(0), true))
 		return false;
 
 	return true;
