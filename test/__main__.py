@@ -52,6 +52,7 @@ def runRustSetup(schemas: list[str], main_file: str) -> bool:
     os.makedirs("tmp/rust/src", exist_ok=True)
     shutil.copyfile("lib/rust/scalgoproto.rs", "tmp/rust/src/scalgoproto.rs")
     shutil.copyfile("test/test_all.rs", "tmp/rust/src/test_all.rs")
+    shutil.copyfile("test/test_jagged.rs", "tmp/rust/src/test_jagged.rs")
     with open("tmp/rust/Cargo.toml", "w") as f:
         f.write(
             """
@@ -276,7 +277,89 @@ def main():
         "table @8908828B {}",
     )
 
+    runNeg(
+        "jagged unknown list",
+        "table M @8908828A {n: direct list table @8908828B {e: jagged %s} c: list U8}",
+        "d",
+        "c",
+    )
+    runNeg(
+        "jagged not list",
+        "table M @8908828A {n: direct list table @8908828B {e: jagged c} c: %s}",
+        "U8",
+        "list U8",
+    )
+    runNeg(
+        "jagged top-level",
+        "table M @8908828A {e: %s; c: list U8}",
+        "jagged c",
+        "U8",
+    )
+    runNeg(
+        "jagged inline non-list",
+        "table M @8908828A {n: table @8908828B {e: %s} c: list U8}",
+        "jagged c",
+        "U8",
+    )
+    runNeg(
+        "jagged named table",
+        "table T @8908828B {e: %s} table M @8908828A {n: list T; c: list U8}",
+        "jagged c",
+        "U8",
+    )
+    runNeg(
+        "jagged union table",
+        "table M @8908828A {u: union {a: table @8908828B {e: %s}} c: list U8}",
+        "jagged c",
+        "U8",
+    )
+    for modifier in ("optional", "list", "inplace"):
+        runNeg(
+            f"jagged {modifier}",
+            "table M @8908828A {n: direct list table @8908828B {e: %s jagged c} c: list U8}",
+            modifier,
+            "",
+        )
+    runNeg(
+        "jagged optional children",
+        "table M @8908828A {n: direct list table @8908828B {e: jagged c} c: %s list U8}",
+        "optional",
+        "",
+    )
+    runNeg(
+        "jagged shared list",
+        "table M @8908828A {n: direct list table @8908828B {e: jagged c; f: jagged %s} c: list U8; d: list U8}",
+        "c",
+        "d",
+    )
+    for bad in ("I32", "U64", "F32"):
+        runNeg(
+            f"jagged offset type {bad}",
+            "table M @8908828A {n: direct list table @8908828B {e: jagged %s c} c: list U8}",
+            bad,
+            "U16",
+        )
+    runNeg(
+        "jagged not direct",
+        "table M @8908828A {n: %s list table @8908828B {e: jagged c} c: list U8}",
+        "",
+        "direct",
+    )
+    runNeg(
+        "jagged offset name",
+        "table M @8908828A {n: direct list table @8908828B {e: jagged c; %s} c: list U8}",
+        "eOffset: U8;",
+        "eOffs: U8;",
+    )
+    runNeg(
+        "jagged writer name",
+        "table M @8908828A {n: direct list table @8908828B {e: jagged c} c: list U8; %s}",
+        "jaggedC: U8;",
+        "jaggedD: U8;",
+    )
+
     runTest("validate base", lambda: runValidate("test/base.spr"))
+    runTest("validate jagged", lambda: runValidate("test/jagged.spr"))
     runTest("validate complex2", lambda: runValidate("test/complex2.spr"))
     runTest("validate union", lambda: runValidate("test/union.spr"))
     if runTest(
@@ -321,6 +404,36 @@ def main():
         runTest("cpp in union", lambda: runCpp("in", "test/union.bin"))
 
     if runTest(
+        "cpp jagged setup",
+        lambda: runCppSetup(
+            [
+                "test/jagged.spr",
+                "test/jagged_added.spr",
+                "test/jagged_narrow.spr",
+                "test/jagged_removed.spr",
+            ],
+            "test/test_jagged.cc",
+        ),
+    ):
+        runTest("cpp out jagged", lambda: runCpp("out", "test/jagged.bin"))
+        runTest("cpp in jagged", lambda: runCpp("in", "test/jagged.bin"))
+        runTest("cpp claim jagged", lambda: runCpp("claim", "test/jagged.bin"))
+        runTest("cpp removed jagged", lambda: runCpp("removed", "test/jagged.bin"))
+        runTest("cpp added jagged", lambda: runCpp("added", "test/jagged.bin"))
+        runTest("cpp narrow jagged", lambda: runCpp("narrow", "test/jagged.bin"))
+        runTest(
+            "cpp claim errors jagged",
+            lambda: (
+                subprocess.check_call(["tmp/bin", "claim_errors", "test/jagged.bin"])
+                == 0
+            ),
+        )
+        runTest(
+            "cpp bad jagged",
+            lambda: subprocess.check_call(["tmp/bin", "bad", "test/jagged.bin"]) == 0,
+        )
+
+    if runTest(
         "py setup",
         lambda: runPySetup(["test/base.spr", "test/complex2.spr", "test/union.spr"]),
     ):
@@ -361,6 +474,42 @@ def main():
         )
 
     if runTest(
+        "py setup jagged",
+        lambda: runPySetup(
+            [
+                "test/jagged.spr",
+                "test/jagged_added.spr",
+                "test/jagged_narrow.spr",
+                "test/jagged_removed.spr",
+            ]
+        ),
+    ):
+        for name in (
+            "out_jagged",
+            "in_jagged",
+            "claim_jagged",
+            "bad_jagged",
+            "short_jagged",
+            "removed_jagged",
+            "added_jagged",
+            "narrow_jagged",
+        ):
+            runTest(
+                f"py {name}",
+                lambda name=name: runPy(name, "test/jagged.bin", "test_jagged.py"),
+            )
+
+    runTest(
+        "ts rejects jagged",
+        lambda: (
+            subprocess.call(
+                ["python3", "-m", "scalgoprotoc", "ts", "test/jagged.spr", "tmp"]
+            )
+            != 0
+        ),
+    )
+
+    if runTest(
         "ts setup",
         lambda: runTsSetup(["test/base.spr", "test/complex2.spr", "test/union.spr"]),
     ):
@@ -397,7 +546,15 @@ def main():
     if runTest(
         "rs setup",
         lambda: runRustSetup(
-            ["test/base.spr", "test/complex2.spr", "test/union.spr"],
+            [
+                "test/base.spr",
+                "test/complex2.spr",
+                "test/union.spr",
+                "test/jagged.spr",
+                "test/jagged_added.spr",
+                "test/jagged_narrow.spr",
+                "test/jagged_removed.spr",
+            ],
             "test/test_base.rs",
         ),
     ):
@@ -424,6 +581,20 @@ def main():
         runTest("rs in extend2", lambda: runRust("in_extend2", "test/extend2.bin"))
         runTest("rs out union", lambda: runRust("out_union", "test/union.bin"))
         runTest("rs in union", lambda: runRust("in_union", "test/union.bin"))
+        for name in (
+            "out_jagged",
+            "claim_jagged",
+            "claim_errors_jagged",
+            "in_jagged",
+            "bad_jagged",
+            "removed_jagged",
+            "added_jagged",
+            "narrow_jagged",
+        ):
+            runTest(
+                f"rs {name}",
+                lambda name=name: runRust(name, "test/jagged.bin"),
+            )
 
     print("=" * 80)
     if not failures:

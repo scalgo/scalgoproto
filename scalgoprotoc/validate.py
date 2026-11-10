@@ -183,12 +183,8 @@ def validate(
                     mismatches.append((None, new_members[i2]))
                 mismatches.reverse()
 
-                old_members_by_name = {
-                    ov(om.identifier): om for om in old_members
-                }
-                new_members_by_name = {
-                    nv(nm.identifier): nm for nm in new_members
-                }
+                old_members_by_name = {ov(om.identifier): om for om in old_members}
+                new_members_by_name = {nv(nm.identifier): nm for nm in new_members}
                 new_members_indexes = {
                     nv(nm.identifier): i for (i, nm) in enumerate(new_members)
                 }

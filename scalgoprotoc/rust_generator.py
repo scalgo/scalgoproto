@@ -6,7 +6,7 @@ import math
 import os
 from typing import NamedTuple, TextIO
 
-from .annotate import annotate
+from .annotate import annotate, has_jagged, jagged_lists
 from .documents import Documents
 from .parser import (
     ICE,
@@ -74,6 +74,8 @@ class Generator:
     def __init__(self, documents: Documents, out: TextIO) -> None:
         self.documents: Documents = documents
         self.out: TextIO = out
+        # Name of the table that holds the list of each element table with jagged members
+        self.jagged_owner: dict[int, str] = {}
 
     def out_list_type(self, node: Value) -> str:
         assert node.type_ is not None
@@ -225,6 +227,30 @@ class Generator:
         self.output_doc(node, "    ")
         directTable_ = "direct_table_" if node.direct else ""
         an = f"{node.table.name}In" if node.direct else tn
+        if node.table and has_jagged(node.table):
+            jt = f"scalgoproto::JaggedTableListRead<'a, {node.table.name}In<'a>>"
+            if node.optional:
+                self.o(
+                    f"""    #[inline]
+    pub fn {lname}(&self) -> Result<std::option::Option<scalgoproto::ListIn<'a, {jt}>>> {{
+        Ok(self._reader.get_optional_direct_table_list::<{an}>({node.offset})?.map(|l| scalgoproto::with_jagged(l, self._jagged_ctx())))
+    }}
+"""
+                )
+                return
+            self.o(
+                f"""    #[inline]
+    pub fn __opt_{lname}(&self) -> Result<std::option::Option<scalgoproto::ListIn<'a, {tn}>>> {{
+        self._reader.get_optional_direct_table_list::<{an}>({node.offset})
+    }}
+
+    #[inline]
+    pub fn {lname}(&self) -> Result<scalgoproto::ListIn<'a, {jt}>> {{
+        Ok(scalgoproto::with_jagged(self._reader.get_direct_table_list::<{an}>({node.offset})?, self._jagged_ctx()))
+    }}
+"""
+            )
+            return
         if node.optional:
             self.o(
                 f"""    #[inline]
@@ -343,6 +369,118 @@ class Generator:
     }}
 """
             )
+
+    def list_get_expr(self, node: Value) -> str:
+        tn = self.list_access_type_lt(node)
+        directTable_ = "direct_table_" if node.direct else ""
+        an = f"{node.table.name}In" if node.direct and node.table else tn
+        return f"self._reader.get_{directTable_}list{'_inplace' if node.inplace else ''}::<{an}>({node.offset})"
+
+    def generate_jagged_ctx(self, table: Table, lists: list[Value]) -> None:
+        self.o(
+            f"""/// The lists of {table.name} that jagged members name, looked up once.
+#[derive(Clone, Copy)]
+pub struct {table.name}JaggedCtx<'a> {{"""
+        )
+        for c in lists:
+            self.o(
+                f"    {snake(self.value(c.identifier))}: Result<scalgoproto::ListIn<'a, {self.list_access_type_lt(c)}>>,"
+            )
+        self.o("}")
+        self.o()
+
+    def generate_jagged_lists(self, table: Table, lists: list[Value]) -> None:
+        fields = "".join(
+            f"\n            {snake(self.value(c.identifier))}: {self.list_get_expr(c)},"
+            for c in lists
+        )
+        self.o(
+            f"""    /// Look up the lists that jagged members name. A failed lookup is
+    /// returned when an element reads the list.
+    fn _jagged_ctx(&self) -> {table.name}JaggedCtx<'a> {{
+        {table.name}JaggedCtx {{{fields}
+        }}
+    }}
+"""
+        )
+
+    def generate_jagged_out(self, node: Value, lname: str) -> None:
+        assert node.jagged_elements is not None and node.jagged_offset is not None
+        elements = node.jagged_elements
+        assert elements.table is not None
+        el = snake(self.value(elements.identifier))
+        offset = snake(self.value(node.jagged_offset.identifier)) + "_offset"
+        bits = node.jagged_offset.bytes * 8
+        et = f"{elements.table.name}Out<'a, Normal>"
+        self.o(
+            f"""    /// Add {lname} with `total` children and return a view that gives each element of
+    /// `elements` (the list added by add_{el}) its range of them.
+    #[inline]
+    pub fn add_jagged_{lname}(&mut self, elements: &scalgoproto::ListOut<'a, {self.out_list_type(elements)}, Normal>, total: usize) -> scalgoproto::JaggedOut<'a, {et}, {self.out_list_type(node)}> {{
+        assert!((total as u64) < 1 << {bits}, "total does not fit in {offset}");
+        scalgoproto::JaggedOut::new(elements, self.add_{lname}(total), |e, v| e.{offset}(v))
+    }}
+"""
+        )
+
+    def generate_jagged_offset_in(self, node: Value, lname: str) -> None:
+        if node.bytes == 6:
+            get = f"self._reader.get_48({node.offset})"
+            get_next = f"n.get_48({node.offset})"
+        else:
+            get = f"self._reader.get_pod::<u{node.bytes * 8}>({node.offset}).map(u64::from)"
+            get_next = f"n.get_pod::<u{node.bytes * 8}>({node.offset}).map(u64::from)"
+        assert node.jagged_list is not None
+        children = node.jagged_list
+        field = snake(self.value(children.identifier))
+        if children.table and has_jagged(children.table):
+            lt = f"scalgoproto::JaggedTableListRead<'a, {children.table.name}In<'a>>"
+            make = f"scalgoproto::with_jagged(ctx.{field}?, ctx)"
+        else:
+            lt = self.list_access_type_lt(children)
+            make = f"ctx.{field}?"
+        self.o(
+            f"""    /// Index of the first of {lname} that this element owns in the list it names.
+    #[inline]
+    pub fn {lname}_offset(&self) -> u64 {{
+        {get}.unwrap_or(0)
+    }}
+"""
+        )
+        self.output_doc(
+            node,
+            "    ",
+            suffix=["Fails with InvalidPointer on invalid offsets."],
+        )
+        self.o(
+            f"""    #[inline]
+    pub fn {lname}(&self) -> Result<scalgoproto::ListSliceIn<'a, {lt}>> {{
+        let ctx = self._jagged.ok_or(scalgoproto::Error::InvalidPointer(0, 0))?;
+        let list = {make};
+        let end = match self._next {{
+            Some(n) => {get_next}.unwrap_or(0),
+            None => list.len() as u64,
+        }};
+        scalgoproto::ListSliceIn::new(list, self.{lname}_offset(), end)
+    }}
+"""
+        )
+
+    def generate_jagged_offset_out(self, node: Value, lname: str) -> None:
+        bits = node.bytes * 8
+        if node.bytes == 6:
+            store = f"self._slice.set_u48({node.offset}, v)"
+        else:
+            store = f"self._slice.set_pod({node.offset}, &(v as u{bits}))"
+        self.output_doc(node, "    ")
+        self.o(
+            f"""    #[inline]
+    pub fn {lname}_offset(&mut self, v: u64) {{
+        assert!(v < 1 << {bits});
+        {store}
+    }}
+"""
+        )
 
     def generate_bool_in(self, node: Value, lname: str) -> None:
         if node.inplace:
@@ -929,6 +1067,8 @@ class Generator:
         assert node.type_ is not None
         if node.list_:
             self.generate_list_in(node, lname)
+        elif node.jagged:
+            self.generate_jagged_offset_in(node, lname)
         elif node.type_.type == TokenType.BOOL:
             self.generate_bool_in(node, lname)
         elif node.type_.type in typeMap:
@@ -954,6 +1094,10 @@ class Generator:
         if node.list_:
             assert table.default is not None
             self.generate_list_out(node, lname, len(table.default))
+            if node.jagged_elements is not None:
+                self.generate_jagged_out(node, lname)
+        elif node.jagged:
+            self.generate_jagged_offset_out(node, lname)
         elif node.type_.type == TokenType.BOOL:
             self.generate_bool_out(node, lname)
         elif node.type_.type in typeMap:
@@ -1203,6 +1347,8 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
             w.copy_in(v)?;
         }}"""
                     )
+                elif node.jagged:
+                    self.o(f"        self.{lname}_offset(i.{lname}_offset());")
                 elif (
                     node.type_.type in typeMap
                     or node.type_.type == TokenType.BOOL
@@ -1250,6 +1396,13 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
                     raise ICE()
 
     def generate_table(self, table: Table) -> None:
+        lists = jagged_lists(table)
+        for m in table.members:
+            if m.list_ and m.direct_table and has_jagged(m.direct_table):
+                self.jagged_owner[id(m.direct_table)] = table.name
+        if lists:
+            self.generate_jagged_ctx(table, lists)
+
         # Recursively generate direct contained members
         for value in table.members:
             if value.direct_table:
@@ -1263,24 +1416,37 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
 
         name = table.name
         magic = table.magic
+        jagged = has_jagged(table)
+        owner = self.jagged_owner.get(id(table))
+        jagged_fields = (
+            f"""
+    _jagged: std::option::Option<{owner}JaggedCtx<'a>>,
+    // The next element in the list, or None for the last
+    _next: std::option::Option<scalgoproto::Reader<'a>>,"""
+            if jagged
+            else ""
+        )
+        jagged_init = ", _jagged: None, _next: None" if jagged else ""
 
         self.output_doc(table, "")
         self.o(
             f"""
 #[derive(Clone, Copy)]
 pub struct {name}In<'a> {{
-    _reader: scalgoproto::Reader<'a>,
+    _reader: scalgoproto::Reader<'a>,{jagged_fields}
 }}
 #[allow(clippy::needless_lifetimes)]
 impl<'a> {name}In<'a> {{"""
         )
 
+        if lists:
+            self.generate_jagged_lists(table, lists)
         for node in table.members:
             self.generate_value_in(table, node)
 
         debug = "".join(
             [
-                f'\n            .field("{snake(self.value(v.identifier))}", & self.{snake(self.value(v.identifier))}())'
+                f'\n            .field("{snake(self.value(v.identifier))}{"_offset" if v.jagged else ""}", & self.{snake(self.value(v.identifier))}{"_offset" if v.jagged else ""}())'
                 for v in table.members
             ]
         )
@@ -1304,10 +1470,22 @@ impl<'a> scalgoproto::TableIn<'a> for {name}In<'a> {{
 
     #[inline]
     fn new(reader: scalgoproto::Reader<'a>) -> Self {{
-        Self {{ _reader: reader }}
+        Self {{ _reader: reader{jagged_init} }}
     }}
 }}"""
         )
+        if jagged:
+            self.o(
+                f"""
+impl<'a> scalgoproto::JaggedTableIn<'a> for {name}In<'a> {{
+    type Ctx = {owner}JaggedCtx<'a>;
+
+    #[inline]
+    fn new_jagged(reader: scalgoproto::Reader<'a>, ctx: Self::Ctx, next: std::option::Option<scalgoproto::Reader<'a>>) -> Self {{
+        Self {{ _reader: reader, _jagged: Some(ctx), _next: next }}
+    }}
+}}"""
+            )
 
         # Generate Table writer
         self.output_doc(table, "")

@@ -33,6 +33,8 @@ def error(
         end += 1
     print(data[start:end], file=sys.stderr)
     print(
-        "{}{}{}".format("\t" * t, " " * (token.index - start - t), "^" * (token.length)),
+        "{}{}{}".format(
+            "\t" * t, " " * (token.index - start - t), "^" * (token.length)
+        ),
         file=sys.stderr,
     )

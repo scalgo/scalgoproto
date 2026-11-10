@@ -46,6 +46,7 @@ class TokenType(Enum):
     SPACE = 74
     NEWLINE = 75
     COMMENT = 76
+    JAGGED = 77
 
 
 class Token(ty.NamedTuple):
@@ -93,6 +94,7 @@ def tokenize(data: str, document: int) -> ty.Iterator[Token]:
         "inplace": TokenType.INPLACE,
         "import": TokenType.IMPORT,
         "direct": TokenType.DIRECT,
+        "jagged": TokenType.JAGGED,
         "Removed": TokenType.REMOVED,
     }
 

@@ -1,0 +1,52 @@
+namespace scalgoprototest4;
+
+# Later versions of the Jagged table in jagged.spr, each with members
+# removed, for reading jagged.bin.
+
+# The list entries removed, along with the jagged member that names it.
+table RemovedEntries @95A2B5C1 {
+	nodes: direct list table @95A2B5C2 {
+		x: I16;
+		Removed: jagged entries;
+		names: jagged names;
+	}
+	Removed: direct list table @95A2B5C3 {
+		kind: U32;
+		bins: jagged bins;
+	}
+	bins: list F32;
+	names: list Text;
+	trailer: U8;
+}
+
+# The lists bins and names removed, along with the jagged members that name them.
+table RemovedBinsNames @95A2B5C1 {
+	nodes: direct list table @95A2B5C2 {
+		x: I16;
+		entries: jagged entries;
+		Removed: jagged names;
+	}
+	entries: direct list table @95A2B5C3 {
+		kind: U32;
+		Removed: jagged bins;
+	}
+	Removed: list F32;
+	Removed: list Text;
+	trailer: U8;
+}
+
+# The list nodes removed. The lists it partitioned stay as ordinary lists.
+table RemovedNodes @95A2B5C1 {
+	Removed: direct list table @95A2B5C2 {
+		x: I16;
+		entries: jagged entries;
+		names: jagged names;
+	}
+	entries: direct list table @95A2B5C3 {
+		kind: U32;
+		bins: jagged bins;
+	}
+	bins: list F32;
+	names: list Text;
+	trailer: U8;
+}

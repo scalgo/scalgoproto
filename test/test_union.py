@@ -338,7 +338,9 @@ def test_in_union(path: str) -> bool:
         v10.d is not None and v10.d.is_v10 and len(v10.d.v10) == 1, v10.d.v10[0], True
     ):
         return False
-    return not require2(v10.e is not None and v10.e.is_v10 and len(v10.e.v10) == 1, v10.e.v10[0], True)
+    return not require2(
+        v10.e is not None and v10.e.is_v10 and len(v10.e.v10) == 1, v10.e.v10[0], True
+    )
 
 
 def main() -> None:

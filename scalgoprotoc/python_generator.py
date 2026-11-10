@@ -6,7 +6,7 @@ import math
 import os
 from typing import NamedTuple, TextIO
 
-from .annotate import annotate
+from .annotate import annotate, has_jagged, owns_jagged
 from .documents import Documents
 from .parser import (
     ICE,
@@ -132,9 +132,10 @@ class Generator:
             )
         elif node.table:
             assert node.table.name is not None
+            jagged = ", jagged=self._jagged()" if has_jagged(node.table) else ""
             return (
                 node.table.name + "In",
-                f"        return self._reader._get_table_list({node.table.name}In, {os}, direct={'True' if node.direct else 'False'})",
+                f"        return self._reader._get_table_list({node.table.name}In, {os}, direct={'True' if node.direct else 'False'}{jagged})",
             )
         elif node.union:
             assert node.union.name is not None
@@ -210,6 +211,66 @@ class Generator:
             self.o(f"{indent}{line}")
         self.o(f'{indent}"""')
 
+    def generate_jagged_offset_in(self, node: Value, uname: str) -> None:
+        self.o("    @property")
+        self.o(f"    def {uname}_offset(self) -> int:")
+        self.o(
+            f'        """Index of the first of {uname} that this element owns in the list it names."""'
+        )
+        if node.bytes == 6:
+            self.o("        return self._get_uint48(%d)" % node.offset)
+        else:
+            self.o(
+                "        return self._get_uint%d(%d, 0)" % (node.bytes * 8, node.offset)
+            )
+        self.o()
+        self.o("    @property")
+        self.o(f"    def {uname}(self) -> scalgoproto.ListSlice[typing_.Any]:")
+        self.output_doc(
+            node,
+            "        ",
+            suffix=["Raises scalgoproto.OutOfBoundsError on invalid offsets."],
+        )
+        assert node.type_ is not None
+        self.o(
+            f'        return self._jagged_slice("{snake(self.value(node.type_))}", self.{uname}_offset, {node.offset}, {node.bytes})'
+        )
+        self.o()
+
+    def generate_jagged_offset_out(self, node: Value, uname: str) -> None:
+        self.o("    @scalgoproto.Adder")
+        self.o(f"    def {uname}_offset(self, value: int) -> None:")
+        self.output_doc(node, "        ")
+        self.o("        if not 0 <= value < 2**%d:" % (node.bytes * 8))
+        self.o(f'            raise ValueError("{uname}_offset out of range")')
+        self.o("        self._set_uint%d(%d, value)" % (node.bytes * 8, node.offset))
+        self.o()
+
+    def generate_jagged_out(self, node: Value, uname: str) -> None:
+        assert node.jagged_elements is not None and node.jagged_offset is not None
+        list_name = snake(self.value(node.jagged_elements.identifier))
+        offset = snake(self.value(node.jagged_offset.identifier)) + "_offset"
+        self.o(
+            f"    def add_jagged_{uname}(self, elements: {self.out_list_type(node.jagged_elements)}, total: int) -> scalgoproto.JaggedOut:"
+        )
+        self.o(
+            f'        """Add {uname} with `total` children and return a view that gives each element of'
+        )
+        self.o(
+            f"        `elements` (the list added by add_{list_name}) its range of them."
+        )
+        self.o()
+        self.o(
+            "        Claim ranges with add(element, k) in element order; Writer.finalize raises"
+        )
+        self.o('        ValueError unless all `total` children were claimed."""')
+        self.o(f"        if total >= 2**{node.jagged_offset.bytes * 8}:")
+        self.o(f'            raise ValueError("total does not fit in {offset}")')
+        self.o(
+            f'        return scalgoproto.JaggedOut(elements, self.add_{uname}(total), lambda e, v: setattr(e, "{offset}", v))'
+        )
+        self.o()
+
     def generate_list_in(self, node: Value, uname: str) -> None:
         (tn, acc) = self.in_list_help(
             node,
@@ -284,9 +345,7 @@ class Generator:
         ot = self.out_list_type(node)
         if not node.inplace:
             self.o("    @scalgoproto.Adder")
-            self.o(
-                f"    def {uname}(self, value: typing_.Union[{it},{ot}]) -> None:"
-            )
+            self.o(f"    def {uname}(self, value: typing_.Union[{it},{ot}]) -> None:")
             self.output_doc(node, "        ")
             self.o("        if isinstance(value, scalgoproto.ListIn):")
             self.o(f"            self.add_{uname}(len(value))._copy(value)")
@@ -518,9 +577,7 @@ class Generator:
             )
             self.o()
             self.o("    @property")
-            self.o(
-                f"    def {uname}(self) -> typing_.Optional[{node.struct.name}]:"
-            )
+            self.o(f"    def {uname}(self) -> typing_.Optional[{node.struct.name}]:")
             self.output_doc(node, "        ")
             if node.optional:
                 self.o(f"        if not self.has_{uname}:")
@@ -626,9 +683,7 @@ class Generator:
             self.o()
             self.o(f"    def add_{uname}(self) -> {node.table.name}Out:")
             self.output_doc(node, "        ")
-            self.o(
-                f"        res = self._writer.construct_table({node.table.name}Out)"
-            )
+            self.o(f"        res = self._writer.construct_table({node.table.name}Out)")
             self.o("        self._set_table(%d, res)" % (node.offset,))
             self.o("        return res")
             self.o()
@@ -685,9 +740,7 @@ class Generator:
             self.o()
             self.o(f"    def add_{uname}(self) -> {table.name}Out:")
             self.output_doc(node, "        ")
-            self.o(
-                f"        res = self._writer.construct_table({node.table.name}Out)"
-            )
+            self.o(f"        res = self._writer.construct_table({node.table.name}Out)")
             self.o("        self._set(%d, res._offset - 10)" % (idx,))
             self.o("        return res")
             self.o()
@@ -857,9 +910,7 @@ class Generator:
             self.o("        return self._get_uint16(%d, 0) != 0" % (node.offset,))
             self.o()
             self.o("    @property")
-            self.o(
-                f"    def {uname}(self) -> typing_.Optional[{node.union.name}In]:"
-            )
+            self.o(f"    def {uname}(self) -> typing_.Optional[{node.union.name}In]:")
             self.output_doc(node, "        ")
             self.o(f"        if not self.has_{uname}:")
             self.o("            return None")
@@ -894,7 +945,9 @@ class Generator:
         assert node.union is not None
         self.o("    @property")
         self.o(
-            "    def {}(self) -> {}{}Out:".format(uname, node.union.name, "Inplace" if node.inplace else "")
+            "    def {}(self) -> {}{}Out:".format(
+                uname, node.union.name, "Inplace" if node.inplace else ""
+            )
         )
         self.o(
             "        return %s%sOut(self._writer, self._offset + %d, self._offset + %d)"
@@ -912,6 +965,8 @@ class Generator:
         uname = snake(self.value(node.identifier))
         if node.list_:
             self.generate_list_in(node, uname)
+        elif node.jagged:
+            self.generate_jagged_offset_in(node, uname)
         elif node.type_.type == TokenType.BOOL:
             self.generate_bool_in(node, uname)
         elif node.type_.type in typeMap:
@@ -936,6 +991,10 @@ class Generator:
         uname = snake(self.value(node.identifier))
         if node.list_:
             self.generate_list_out(node, uname)
+            if node.jagged_elements is not None:
+                self.generate_jagged_out(node, uname)
+        elif node.jagged:
+            self.generate_jagged_offset_out(node, uname)
         elif node.type_.type == TokenType.BOOL:
             self.generate_bool_out(node, uname)
         elif node.type_.type in typeMap:
@@ -1123,6 +1182,8 @@ class Generator:
                         self.o(
                             f"        self.add_{uname}(len(i.{uname}))._copy(i.{uname})"
                         )
+                elif node.jagged:
+                    self.o(f"        self.{uname}_offset = i.{uname}_offset")
                 elif (
                     node.type_.type in typeMap
                     or node.type_.type == TokenType.BOOL
@@ -1147,9 +1208,7 @@ class Generator:
                         if node.table.empty:
                             self.o("            self.add_%s()")
                         else:
-                            self.o(
-                                f"            self.add_{uname}()._copy(i.{uname})"
-                            )
+                            self.o(f"            self.add_{uname}()._copy(i.{uname})")
                     else:
                         if node.table.empty:
                             self.o("        self.add_%s()")
@@ -1178,17 +1237,42 @@ class Generator:
             return
 
         # Generate table reader
+        slots = []
+        if has_jagged(table):
+            slots += ['"_jagged_ctx"', '"_jagged_next"']
+        if owns_jagged(table):
+            slots.append('"_jagged_lists"')
         self.o(f"class {table.name}In(scalgoproto.TableIn):")
         self.output_doc(table, "    ")
-        self.o("    __slots__: typing_.List[str] = []")
+        self.o(f"    __slots__: typing_.List[str] = [{', '.join(slots)}]")
         self.o(
             f"    _MAGIC: typing_.ClassVar[int] = 0x{table.magic:08X} # type: ignore"
         )
         self.o("    _MEMBERS = [")
         for node in table.members:
-            self.o(f'        "{snake(self.value(node.identifier))}",')
+            suffix = "_offset" if node.jagged else ""
+            self.o(f'        "{snake(self.value(node.identifier))}{suffix}",')
         self.o("    ]")
         self.o()
+        if has_jagged(table):
+            self.o(
+                "    def __init__(self, reader: scalgoproto.Reader, offset: int, size: int, jagged: scalgoproto.JaggedContext | None = None, next_: int | None = None) -> None:"
+            )
+            self.o(
+                '        """Private constructor. `jagged` holds the lists that jagged members name, and `next_` is the offset of the next element in the list, if any"""'
+            )
+            self.o("        super().__init__(reader, offset, size)")
+            self.o("        self._jagged_ctx = jagged")
+            self.o("        self._jagged_next = next_")
+            self.o()
+        if owns_jagged(table):
+            self.o("    def _jagged(self) -> scalgoproto.JaggedContext:")
+            self.o("        try:")
+            self.o("            return self._jagged_lists")
+            self.o("        except AttributeError:")
+            self.o("            self._jagged_lists = scalgoproto.JaggedContext(self)")
+            self.o("            return self._jagged_lists")
+            self.o()
 
         for node in table.members:
             self.generate_value_in(table, node)
@@ -1321,7 +1405,9 @@ class Generator:
         for d, imp in imports.items():
             doc = self.documents.by_id[d]
             self.o(
-                "from {}{} import {}".format(self.import_prefix, doc.name, ", ".join(imp))
+                "from {}{} import {}".format(
+                    self.import_prefix, doc.name, ", ".join(imp)
+                )
             )
 
         for node in ast:

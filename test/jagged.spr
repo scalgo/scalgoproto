@@ -1,0 +1,16 @@
+namespace scalgoprototest3;
+
+table Jagged @95A2B5C1 {
+	nodes: direct list table @95A2B5C2 {
+		x: I16;
+		entries: jagged entries;
+		names: jagged names;
+	}
+	entries: direct list table @95A2B5C3 {
+		kind: U32;
+		bins: jagged bins;
+	}
+	bins: list F32;
+	names: list Text;
+	trailer: U8;
+}

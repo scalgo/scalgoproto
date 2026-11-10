@@ -64,7 +64,9 @@ class Generator:
         elif node.table:
             if node.direct:
                 return f"scalgoproto.ListOut<{node.table.name}Out, {node.table.name}In>"
-            return f"scalgoproto.ListOut<{node.table.name}Out, {node.table.name}In | null>"
+            return (
+                f"scalgoproto.ListOut<{node.table.name}Out, {node.table.name}In | null>"
+            )
         elif node.union:
             return f"scalgoproto.ListOut<{node.union.name}Out, {node.union.name}In>"
         elif node.type_.type == TokenType.TEXT:
@@ -81,7 +83,9 @@ class Generator:
         elif node.type_.type in typeMap:
             return f"construct{typeMap[node.type_.type].n}List(size{x})"
         elif node.struct:
-            return f"constructStructList<{node.struct.name}>({node.struct.name}, size{x})"
+            return (
+                f"constructStructList<{node.struct.name}>({node.struct.name}, size{x})"
+            )
         elif node.enum:
             return f"constructEnumList<{node.enum.name}>(size{x})"
         elif node.table:
@@ -213,9 +217,7 @@ class Generator:
             self.o()
 
             self.output_doc(node, "\t")
-            self.o(
-                f"\tadd{ucamel(lname)}(size:number) : {self.out_list_type(node)} {{"
-            )
+            self.o(f"\tadd{ucamel(lname)}(size:number) : {self.out_list_type(node)} {{")
             self.o(f"\t\tconst res = this._writer.{self.out_list_constructor(node)};")
             self.o("\t\tthis._setList(%d, res);" % (node.offset))
             self.o("\t\treturn res;")
@@ -232,9 +234,7 @@ class Generator:
             self.o(
                 f"\tadd{ucamel(lname)}(size: number) : {self.out_list_type(node)} {{"
             )
-            self.o(
-                f"\t\tconsole.assert(this._writer._size == this._offset + {size});"
-            )
+            self.o(f"\t\tconsole.assert(this._writer._size == this._offset + {size});")
             self.o(
                 f"\t\tconst l = this._writer.{self.out_list_constructor(node, True)};"
             )
@@ -261,9 +261,7 @@ class Generator:
             self.o()
 
             self.output_doc(node, "\t")
-            self.o(
-                f"\tadd{ucamel(lname)}(size:number) : {self.out_list_type(node)} {{"
-            )
+            self.o(f"\tadd{ucamel(lname)}(size:number) : {self.out_list_type(node)} {{")
             self.o(f"\t\tconst res = this._writer.{self.out_list_constructor(node)};")
             self.o("\t\tthis._set(%d, res._offset - 10);" % (idx,))
             self.o("\t\treturn res;")
@@ -281,9 +279,7 @@ class Generator:
                 f"\tadd{ucamel(lname)}(size: number) : {self.out_list_type(node)} {{"
             )
             self.o("\t\tthis._set(%d, size);" % (idx,))
-            self.o(
-                f"\t\treturn this._writer.{self.out_list_constructor(node, True)};"
-            )
+            self.o(f"\t\treturn this._writer.{self.out_list_constructor(node, True)};")
             self.o("\t}")
             self.o()
 
@@ -291,7 +287,11 @@ class Generator:
         if node.inplace:
             raise ICE()
         self.output_doc(node, "\t")
-        self.o("\tget {}(): boolean{} {{".format(lname, " | null " if node.optional else ""))
+        self.o(
+            "\tget {}(): boolean{} {{".format(
+                lname, " | null " if node.optional else ""
+            )
+        )
         if node.optional:
             self.o(
                 "\t\tif (!this._getBit(%d, %s, false)) return null;"
@@ -316,7 +316,11 @@ class Generator:
             raise ICE()
         ti = typeMap[node.type_.type]
         self.output_doc(node, "\t")
-        self.o("\tget {}(): {}{} {{".format(lname, ti.p, " | null" if node.optional else ""))
+        self.o(
+            "\tget {}(): {}{} {{".format(
+                lname, ti.p, " | null" if node.optional else ""
+            )
+        )
         if node.optional:
             if node.type_.type in (TokenType.F32, TokenType.F64):
                 self.o(
@@ -377,7 +381,9 @@ class Generator:
             raise ICE()
         self.output_doc(node, "\t")
         self.o(
-            "\tget {}(): {}{} {{".format(lname, node.struct.name, " | null " if node.optional else "")
+            "\tget {}(): {}{} {{".format(
+                lname, node.struct.name, " | null " if node.optional else ""
+            )
         )
         if node.optional:
             self.o(
@@ -418,9 +424,7 @@ class Generator:
                 % ("Inplace" if node.inplace else "", node.offset, node.table.name)
             )
             self.o("\t\tif (offset === 0) return null;")
-            self.o(
-                f"\t\treturn new {node.table.name}In(this._reader, offset, size);"
-            )
+            self.o(f"\t\treturn new {node.table.name}In(this._reader, offset, size);")
             self.o("\t}")
             self.o()
 
@@ -433,9 +437,7 @@ class Generator:
                 f"\t\tconst [offset, size] = this._getPtr({node.table.name}In._MAGIC);"
             )
             self.o("\t\tif (offset === 0) return null;")
-            self.o(
-                f"\t\treturn new {node.table.name}In(this._reader, offset, size);"
-            )
+            self.o(f"\t\treturn new {node.table.name}In(this._reader, offset, size);")
             self.o("\t}")
             self.o()
 
@@ -447,9 +449,7 @@ class Generator:
             )
             self.o(f"\t\tif (value instanceof {node.table.name}In) {{")
             self.o("\t\t\tconst v = value;")
-            self.o(
-                f"\t\t\tvalue = this._writer.constructTable({node.table.name}Out);"
-            )
+            self.o(f"\t\t\tvalue = this._writer.constructTable({node.table.name}Out);")
             self.o("\t\t\tvalue._copy(v);")
             self.o("\t\t}")
             self.o(f"\t\tconsole.assert(value instanceof {node.table.name}Out);")
@@ -474,9 +474,7 @@ class Generator:
             self.o()
             self.output_doc(node, "\t")
             self.o(f"\tadd{ucamel(lname)}() : {node.table.name}Out {{")
-            self.o(
-                f"\t\tconsole.assert(this._writer._size == this._offset + {size});"
-            )
+            self.o(f"\t\tconsole.assert(this._writer._size == this._offset + {size});")
             self.o(
                 "\t\tthis._setUint48(%d, %d);" % (node.offset, len(node.table.default))
             )
@@ -505,9 +503,7 @@ class Generator:
             self.o(f"\tset {lname}(value: {table.name}Out | {table.name}In) {{")
             self.o(f"\t\tif (value instanceof {node.table.name}In) {{")
             self.o("\t\t\tconst v = value;")
-            self.o(
-                f"\t\t\tvalue = this._writer.constructTable({node.table.name}Out);"
-            )
+            self.o(f"\t\t\tvalue = this._writer.constructTable({node.table.name}Out);")
             self.o("\t\t\tvalue._copy(v);")
             self.o("\t\t}")
             self.o(f"\t\tconsole.assert(value instanceof {node.table.name}Out);")
@@ -567,9 +563,7 @@ class Generator:
         else:
             self.o(f"\tset {lname}(t: scalgoproto.TextOut | string) {{")
         if node.inplace:
-            self.o(
-                f"\t\tconsole.assert(this._writer._size == this._offset + {size});"
-            )
+            self.o(f"\t\tconsole.assert(this._writer._size == this._offset + {size});")
             self.o("\t\tthis._addInplaceText(%d, text);" % (node.offset))
         else:
             self.o("\t\tthis._setText(%d, t);" % (node.offset))
@@ -622,9 +616,7 @@ class Generator:
         else:
             self.o(f"\tset {lname}(value: scalgoproto.BytesOut | ArrayBuffer) {{")
         if node.inplace:
-            self.o(
-                f"\t\tconsole.assert(this._writer._size == this._offset + {size});"
-            )
+            self.o(f"\t\tconsole.assert(this._writer._size == this._offset + {size});")
             self.o("\t\tthis._addInplaceBytes(%d, value);" % (node.offset))
         else:
             self.o("\t\tthis._setBytes(%d, value);" % (node.offset))
@@ -664,7 +656,9 @@ class Generator:
 
     def generate_union_out(self, node: Value, lname: str, table: Table) -> None:
         self.o(
-            "\tget {}() : {}{}Out {{".format(lname, node.union.name, "Inplace" if node.inplace else "")
+            "\tget {}() : {}{}Out {{".format(
+                lname, node.union.name, "Inplace" if node.inplace else ""
+            )
         )
         self.o(
             "        return new %s%sOut(this._writer, this._offset + %d, this._offset + %d);"
@@ -879,9 +873,7 @@ class Generator:
                     or node.type_.type == TokenType.TEXT
                     or node.type_.type == TokenType.BYTES
                 ):
-                    self.o(
-                        f"\t\tif (i.{lname} !== null) this.{lname} = i.{lname};"
-                    )
+                    self.o(f"\t\tif (i.{lname} !== null) this.{lname} = i.{lname};")
                 elif (
                     node.type_.type in typeMap
                     or node.type_.type == TokenType.BOOL
@@ -1059,9 +1051,7 @@ class Generator:
                     "writer._data.setUint8(offset + %d, +ins.%s)" % (v.offset, n)
                 )
             elif v.struct:
-                ctor.append(
-                    f"public {n}: {v.struct.name} = new {v.struct.name}()"
-                )
+                ctor.append(f"public {n}: {v.struct.name} = new {v.struct.name}()")
                 write.append(
                     "%s._write(writer, offset + %d, ins.%s)"
                     % (v.struct.name, v.offset, n)
@@ -1148,6 +1138,9 @@ def run(args) -> int:
         ast = p.parse_document()
         if not annotate(documents, ast):
             print("Schema is invalid")
+            return 1
+        if documents.uses_jagged:
+            print("Jagged lists are not supported by the TypeScript generator")
             return 1
         g = Generator(documents, out, args.import_prefix)
         print(
