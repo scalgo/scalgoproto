@@ -7,7 +7,7 @@ def cescape(v: bytes) -> str:
         elif 32 <= c <= 125:
             ans.append(chr(c))
         else:
-            ans.append("\\x%02x" % c)
+            ans.append(f"\\x{c:02x}")
     return "".join(ans)
 
 

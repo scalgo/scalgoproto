@@ -1,9 +1,9 @@
 import struct
 import sys
 
-import scalgoproto
 import base
 import complex2
+import scalgoproto
 
 
 def get_v(data: bytes, i: int) -> int:
@@ -18,14 +18,14 @@ def validate_out(data: bytes, path: str) -> bool:
         return True
     print("Wrong output")
     for i in range(0, max(len(data), len(exp)), 16):
-        print("%08X | " % i, end="")
+        print(f"{i:08X} | ", end="")
         for j in range(i, i + 16):
             if get_v(exp, j) == get_v(data, j):
                 print("\033[0m", end="")
             else:
                 print("\033[92m", end="")
             if j < len(exp):
-                print("%02X" % exp[j], end="")
+                print(f"{exp[j]:02X}", end="")
             else:
                 print("  ", end="")
             if j % 4 == 3:
@@ -37,7 +37,7 @@ def validate_out(data: bytes, path: str) -> bool:
             else:
                 print("\033[91m", end="")
             if j < len(data):
-                print("%02X" % data[j], end="")
+                print(f"{data[j]:02X}", end="")
             else:
                 print("  ", end="")
             if j % 4 == 3:
@@ -83,21 +83,21 @@ def read_in(path: str) -> bytes:
 def require(v, e) -> bool:
     if e == v:
         return False
-    print("Error expected '%s' found '%s'" % (e, v), file=sys.stderr)
+    print(f"Error expected '{e}' found '{v}'", file=sys.stderr)
     return True
 
 
 def require_none(v) -> bool:
     if v is None:
         return False
-    print("Error expected None found '%s'" % (v), file=sys.stderr)
+    print(f"Error expected None found '{v}'", file=sys.stderr)
     return True
 
 
 def require_some(v) -> bool:
     if v is not None:
         return False
-    print("Error expected not None found '%s'" % (v), file=sys.stderr)
+    print(f"Error expected not None found '{v}'", file=sys.stderr)
     return True
 
 
@@ -109,7 +109,7 @@ def require2(b, v, e) -> bool:
     if e == v:
         return False
 
-    print("Error expected '%s' found '%s'" % (e, v), file=sys.stderr)
+    print(f"Error expected '{e}' found '{v}'", file=sys.stderr)
     return True
 
 
@@ -301,9 +301,7 @@ def test_in(path: str) -> bool:
         return False
     if require_none(s.nf):
         return False
-    if require_none(s.nd):
-        return False
-    return True
+    return not require_none(s.nd)
 
 
 def test_in_default(path: str) -> bool:
@@ -409,9 +407,7 @@ def test_in_default(path: str) -> bool:
         return False
     if require_none(s.nf):
         return False
-    if require_none(s.nd):
-        return False
-    return True
+    return not require_none(s.nd)
 
 
 def test_out_complex(path: str) -> bool:
@@ -666,10 +662,7 @@ def test_in_complex(path: str) -> bool:
         return False
     if require(l10[8], True):
         return False
-    if require(l10[9], False):
-        return False
-
-    return True
+    return not require(l10[9], False)
 
 
 def test_in_complex3(path: str) -> bool:
@@ -796,10 +789,35 @@ def test_in_complex3(path: str) -> bool:
         return False
     if require(l10[8], True):
         return False
-    if require(l10[9], False):
-        return False
+    return not require(l10[9], False)
 
-    return True
+
+def test_in_short_complex3(path: str) -> bool:
+    # Simulate a table written with an older schema that has none of these
+    # members: the table is empty, and the bytes after it belong to other
+    # objects. Every member must read as absent, not as the following bytes.
+    data = bytearray(read_in(path))
+    root = int.from_bytes(data[4:10], "little")
+    size = int.from_bytes(data[root + 4 : root + 10], "little")
+    data[root + 4 : root + 10] = (0).to_bytes(6, "little")
+    data[root + 10 : root + 10 + size] = b"\xff" * size
+    s = scalgoproto.Reader(bytes(data)).root(base.Complex3In)
+    checks = [
+        (s.member.id, 0),
+        (s.text, ""),
+        (s.my_bytes, b""),
+        (len(s.int_list), 0),
+        (len(s.enum_list), 0),
+        (len(s.struct_list), 0),
+        (len(s.text_list), 0),
+        (len(s.bytes_list), 0),
+        (len(s.member_list), 0),
+        (len(s.direct_member_list), 0),
+        (len(s.f32list), 0),
+        (len(s.u8list), 0),
+        (len(s.blist), 0),
+    ]
+    return not any(require(v, e) for v, e in checks)
 
 
 def test_out_complex2(path: str) -> bool:
@@ -894,10 +912,7 @@ def test_in_complex2(path: str) -> bool:
         return False
     if require(l3[1].is_my_bytes, True):
         return False
-    if require(l3[1].my_bytes, b"bytes"):
-        return False
-
-    return True
+    return not require(l3[1].my_bytes, b"bytes")
 
 
 def test_out_inplace(path: str) -> bool:
@@ -981,9 +996,7 @@ def test_in_inplace(path: str) -> bool:
         return False
     if require(ll[0], 24):
         return False
-    if require(ll[1], 99):
-        return False
-    return True
+    return not require(ll[1], 99)
 
 
 def test_out_extend1(path: str) -> bool:
@@ -1002,9 +1015,7 @@ def test_in_extend1(path: str) -> bool:
         return False
     if require(s.bb, 42):
         return False
-    if require_none(s.u):
-        return False
-    return True
+    return not require_none(s.u)
 
 
 def test_out_extend2(path: str) -> bool:
@@ -1124,9 +1135,7 @@ def test_extend2_part(s: base.Gen3In) -> bool:
         return False
     if require_none(s.bytes_list):
         return False
-    if require_none(s.member_list):
-        return False
-    return True
+    return not require_none(s.member_list)
 
 
 def test_in_extend2(path: str) -> bool:
@@ -1168,6 +1177,8 @@ def main() -> None:
         ans = test_in_complex(path)
     elif test == "in_complex3":
         ans = test_in_complex3(path)
+    elif test == "in_short_complex3":
+        ans = test_in_short_complex3(path)
     elif test == "out_complex2":
         ans = test_out_complex2(path)
     elif test == "in_complex2":

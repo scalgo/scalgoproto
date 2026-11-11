@@ -1,0 +1,14 @@
+namespace scalgoprototest6;
+
+# Jagged members with offsets of 1, 2 and 4 bytes.
+table Narrow @95A2B5C4 {
+	nodes: direct list table @95A2B5C5 {
+		x: I16;
+		entries: jagged U8 entries;
+		names: jagged U16 names;
+		bins: jagged U32 bins;
+	}
+	entries: list U32;
+	names: list Text;
+	bins: list F32;
+}

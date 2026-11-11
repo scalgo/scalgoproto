@@ -26,7 +26,7 @@ pub trait Enum: Copy + std::fmt::Debug {
     fn max_value() -> u8;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Error {
     Utf8(std::str::Utf8Error),
     InvalidPointer(usize, usize),
@@ -158,6 +158,13 @@ pub struct Reader<'a> {
 }
 
 impl<'a> Reader<'a> {
+    fn sub(&self, offset: usize, size: usize) -> Reader<'a> {
+        Reader {
+            full: self.full,
+            part: &self.part[offset..offset + size],
+        }
+    }
+
     fn slice(&self, offset: usize, size: usize) -> Option<&'a [u8]> {
         if offset + size > self.part.len() {
             None
@@ -680,6 +687,107 @@ impl<'a, A: ListRead<'a>> std::fmt::Debug for ListIn<'a, A> {
     }
 }
 
+/// The range [offset(), offset() + len()) of a list that an element of a
+/// jagged list owns.
+#[derive(Clone, Copy)]
+pub struct ListSliceIn<'a, A: ListRead<'a>> {
+    list: ListIn<'a, A>,
+    offset: usize,
+    len: usize,
+}
+
+impl<'a, A: ListRead<'a> + 'a> ListSliceIn<'a, A> {
+    /// The range [begin, end) of list. Fails with InvalidPointer unless
+    /// begin <= end <= list.len().
+    pub fn new(list: ListIn<'a, A>, begin: u64, end: u64) -> Result<Self> {
+        let n = list.len() as u64;
+        if begin > end || end > n {
+            return Err(Error::InvalidPointer(end as usize, n as usize));
+        }
+        Ok(Self {
+            list,
+            offset: begin as usize,
+            len: (end - begin) as usize,
+        })
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// Index of the first element of the slice in the list
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
+    pub fn get(&self, idx: usize) -> A::Output {
+        assert!(idx < self.len);
+        self.list.get(self.offset + idx)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = A::Output> + 'a {
+        let list = self.list;
+        (self.offset..self.offset + self.len).map(move |i| list.get(i))
+    }
+}
+
+impl<'a, A: ListRead<'a> + 'a> std::fmt::Debug for ListSliceIn<'a, A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
+
+/// A table whose elements own ranges of lists through jagged members. It is
+/// read with the looked-up lists, `Ctx`, and the next element of its list.
+pub trait JaggedTableIn<'a>: TableIn<'a> {
+    type Ctx: Copy;
+    fn new_jagged(reader: Reader<'a>, ctx: Self::Ctx, next: Option<Reader<'a>>) -> Self;
+}
+
+/// Reads a direct list of tables with jagged members, giving each element the
+/// looked-up lists and the next element.
+#[derive(Clone, Copy)]
+pub struct JaggedTableListRead<'a, T: JaggedTableIn<'a> + 'a> {
+    phantom: PhantomData<&'a T>,
+}
+
+impl<'a, T: JaggedTableIn<'a> + 'a> ListRead<'a> for JaggedTableListRead<'a, T> {
+    type Output = Result<T>;
+    /// The item size, the looked-up lists and the length of the list
+    type ItemSize = (u32, T::Ctx, usize);
+
+    fn bytes((item_size, _, _): Self::ItemSize, size: usize) -> usize {
+        item_size as usize * size
+    }
+
+    unsafe fn get((item_size, ctx, len): Self::ItemSize, reader: &Reader<'a>, idx: usize) -> Self::Output {
+        let s = item_size as usize;
+        let next = if idx + 1 < len {
+            Some(reader.sub(s * (idx + 1), s))
+        } else {
+            None
+        };
+        Ok(T::new_jagged(reader.sub(s * idx, s), ctx, next))
+    }
+}
+
+/// The direct list `list` read with the looked-up lists `ctx`
+pub fn with_jagged<'a, T: JaggedTableIn<'a> + 'a>(
+    list: ListIn<'a, DirectTableListRead<'a, T>>,
+    ctx: T::Ctx,
+) -> ListIn<'a, JaggedTableListRead<'a, T>> {
+    ListIn {
+        reader: list.reader,
+        _len: list._len,
+        item_size: (list.item_size, ctx, list._len),
+        phantom: PhantomData,
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct PodListRead<'a, T: Pod> {
     p: PhantomData<&'a T>,
@@ -906,6 +1014,8 @@ enum ArenaState {
 pub struct PArena {
     data: std::cell::UnsafeCell<Vec<u8>>,
     state: std::cell::UnsafeCell<ArenaState>,
+    /// Children that jagged writer views have yet to claim
+    unclaimed: std::cell::UnsafeCell<usize>,
 }
 
 /// Represents disjoint slice of the arena
@@ -1132,6 +1242,196 @@ impl<'a, F: Union<'a>, P: Placement> ListOut<'a, UnionListWrite<'a, F>, P> {
     pub fn get(&mut self, idx: usize) -> F::Out {
         assert!(idx < self._len);
         F::new_out(self.slice.part(idx * 8, 8))
+    }
+}
+
+impl<'a, T: ListWrite> ListOut<'a, T, Normal> {
+    /// Another handle to the same list
+    fn alias(&self) -> Self {
+        ListOut {
+            slice: ArenaSlice {
+                arena: self.slice.arena,
+                offset: self.slice.offset,
+                length: self.slice.length,
+            },
+            _len: self._len,
+            p1: PhantomData,
+            p2: PhantomData,
+        }
+    }
+}
+
+/// The range [offset(), offset() + len()) of a list that an element of a
+/// jagged list owns. Writer counterpart of ListSliceIn.
+pub struct ListSliceOut<'a, C: ListWrite> {
+    list: ListOut<'a, C, Normal>,
+    offset: usize,
+    len: usize,
+}
+
+impl<C: ListWrite> ListSliceOut<'_, C> {
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// Index of the first element of the slice in the list
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
+    fn index(&self, idx: usize) -> usize {
+        assert!(idx < self.len);
+        self.offset + idx
+    }
+}
+
+impl<T: Pod> ListSliceOut<'_, PodListWrite<T>> {
+    pub fn set(&mut self, idx: usize, v: T) {
+        let i = self.index(idx);
+        self.list.set(i, v)
+    }
+}
+
+impl ListSliceOut<'_, BoolListWrite> {
+    pub fn set(&mut self, idx: usize, v: bool) {
+        let i = self.index(idx);
+        self.list.set(i, v)
+    }
+}
+
+impl<T: Enum> ListSliceOut<'_, EnumListWrite<T>> {
+    pub fn set(&mut self, idx: usize, v: Option<T>) {
+        let i = self.index(idx);
+        self.list.set(i, v)
+    }
+}
+
+impl<'a> ListSliceOut<'a, TextListWrite> {
+    pub fn set(&mut self, idx: usize, v: Option<&TextOut<'a>>) {
+        let i = self.index(idx);
+        self.list.set(i, v)
+    }
+    pub fn add(&mut self, idx: usize, v: &str) -> TextOut<'a> {
+        let i = self.index(idx);
+        self.list.add(i, v)
+    }
+}
+
+impl<'a> ListSliceOut<'a, BytesListWrite> {
+    pub fn set(&mut self, idx: usize, v: Option<&BytesOut<'a>>) {
+        let i = self.index(idx);
+        self.list.set(i, v)
+    }
+    pub fn add(&mut self, idx: usize, v: &[u8]) -> BytesOut<'a> {
+        let i = self.index(idx);
+        self.list.add(i, v)
+    }
+}
+
+impl<'a, T: TableOut<'a, Normal> + 'a> ListSliceOut<'a, TableListWrite<'a, T>> {
+    pub fn set(&mut self, idx: usize, v: Option<&T>) {
+        let i = self.index(idx);
+        self.list.set(i, v)
+    }
+    pub fn add(&mut self, idx: usize) -> T {
+        let i = self.index(idx);
+        self.list.add(i)
+    }
+}
+
+impl<'a, T: TableOut<'a, Normal> + 'a> ListSliceOut<'a, DirectTableListWrite<'a, T>> {
+    pub fn get(&mut self, idx: usize) -> T {
+        let i = self.index(idx);
+        self.list.get(i)
+    }
+}
+
+impl<'a, S: StructOut<'a>> ListSliceOut<'a, StructListWrite<'a, S>> {
+    pub fn get(&mut self, idx: usize) -> S {
+        let i = self.index(idx);
+        self.list.get(i)
+    }
+}
+
+impl<'a, F: Union<'a>> ListSliceOut<'a, UnionListWrite<'a, F>> {
+    pub fn get(&mut self, idx: usize) -> F::Out {
+        let i = self.index(idx);
+        self.list.get(i)
+    }
+}
+
+/// Writer view of a jagged list. Elements of `elements` are claimed in
+/// strictly increasing order with add(element, k); each claim gives the
+/// element the next k children. Elements that are skipped, and elements after
+/// the last claim, own no children. Misuse panics, and Arena::finalize panics
+/// unless every view claimed all its children.
+pub struct JaggedOut<'a, T: TableOut<'a, Normal> + 'a, C: ListWrite> {
+    elements: ListOut<'a, DirectTableListWrite<'a, T>, Normal>,
+    children: ListOut<'a, C, Normal>,
+    set_offset: fn(&mut T, u64),
+    cursor: usize,
+    next_element: usize,
+}
+
+impl<'a, T: TableOut<'a, Normal> + 'a, C: ListWrite> JaggedOut<'a, T, C> {
+    pub fn new(
+        elements: &ListOut<'a, DirectTableListWrite<'a, T>, Normal>,
+        children: ListOut<'a, C, Normal>,
+        set_offset: fn(&mut T, u64),
+    ) -> Self {
+        if elements.slice.arena_id() != children.slice.arena_id() {
+            panic!("Jagged elements not allocated in the same arena")
+        }
+        let mut elements = elements.alias();
+        let total = children.len();
+        for i in 0..elements.len() {
+            set_offset(&mut elements.get(i), total as u64);
+        }
+        unsafe { *children.slice.arena.unclaimed.get() += total };
+        Self {
+            elements,
+            children,
+            set_offset,
+            cursor: 0,
+            next_element: 0,
+        }
+    }
+
+    /// The list of children, to pass as the elements of a nested jagged list
+    pub fn children(&self) -> ListOut<'a, C, Normal> {
+        self.children.alias()
+    }
+
+    /// Give element number `element` of the elements the next k children
+    pub fn add(&mut self, element: usize, k: usize) -> ListSliceOut<'a, C> {
+        assert!(
+            element < self.elements.len(),
+            "jagged add: not an element of the list of this view"
+        );
+        assert!(
+            element >= self.next_element,
+            "jagged add: elements must be claimed once, in increasing order"
+        );
+        assert!(
+            k <= self.children.len() - self.cursor,
+            "jagged add: more children claimed than the total"
+        );
+        for i in self.next_element..=element {
+            (self.set_offset)(&mut self.elements.get(i), self.cursor as u64);
+        }
+        self.next_element = element + 1;
+        let offset = self.cursor;
+        self.cursor += k;
+        unsafe { *self.children.slice.arena.unclaimed.get() -= k };
+        ListSliceOut {
+            list: self.children.alias(),
+            offset,
+            len: k,
+        }
     }
 }
 
@@ -1633,6 +1933,19 @@ impl<'a, 'b, Out: TableOut<'a, Normal> + 'a + CopyIn<In>, P: Placement, In: Tabl
     }
 }
 
+impl<'a, 'b, Out: TableOut<'a, Normal> + 'a + CopyIn<In>, P: Placement, In: JaggedTableIn<'b> + 'b>
+    CopyIn<ListIn<'b, JaggedTableListRead<'b, In>>>
+    for ListOut<'a, DirectTableListWrite<'a, Out>, P>
+{
+    fn copy_in(&mut self, i: ListIn<'b, JaggedTableListRead<'b, In>>) -> Result<()> {
+        assert!(i.len() == self.len());
+        for n in 0..i.len() {
+            self.get(n).copy_in(i.get(n)?)?;
+        }
+        Ok(())
+    }
+}
+
 impl<'a, 'b, U: Union<'a> + 'a, P: Placement, In: UnionIn<'b> + 'b>
     CopyIn<ListIn<'b, UnionListRead<'b, In>>> for ListOut<'a, UnionListWrite<'a, U>, P>
 where
@@ -1692,6 +2005,7 @@ impl Arena {
             arena: PArena {
                 data: std::cell::UnsafeCell::new(data),
                 state: std::cell::UnsafeCell::<ArenaState>::new(ArenaState::BeforeWriter),
+                unclaimed: std::cell::UnsafeCell::new(0),
             },
         }
     }
@@ -1704,6 +2018,9 @@ impl Arena {
             if let ArenaState::AfterRoot = *self.arena.state.get() {
             } else {
                 panic!("A root should be set before finalize is called")
+            }
+            if *self.arena.unclaimed.get() != 0 {
+                panic!("A jagged view claimed fewer children than its total")
             }
         };
         self.arena.data.into_inner()

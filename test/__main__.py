@@ -3,10 +3,10 @@ Test that everything works
 """
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
-import shutil
 from collections.abc import Callable
 
 failures = []
@@ -51,6 +51,7 @@ def runRustSetup(schemas: list[str], main_file: str) -> bool:
     os.makedirs("tmp/rust/src", exist_ok=True)
     shutil.copyfile("lib/rust/scalgoproto.rs", "tmp/rust/src/scalgoproto.rs")
     shutil.copyfile("test/test_all.rs", "tmp/rust/src/test_all.rs")
+    shutil.copyfile("test/test_jagged.rs", "tmp/rust/src/test_jagged.rs")
     with open("tmp/rust/Cargo.toml", "w") as f:
         f.write(
             """
@@ -91,7 +92,7 @@ def runPySetup(schemas: list[str]) -> bool:
 
 def runPy(name: str, bin: str, mod="test_base.py") -> bool:
     subprocess.check_call(
-        ["python3", "test/%s" % mod, name, bin],
+        ["python3", f"test/{mod}", name, bin],
         env={**os.environ, "PYTHONPATH": "lib/python:tmp:test"},
     )
     return True
@@ -129,7 +130,7 @@ def runTs(
     if capacity:
         env["SP_WRITER_CAPACITY"] = str(capacity)
     subprocess.check_call(
-        ["./node_modules/.bin/tsx", "./%s" % mod, name, bin],
+        ["./node_modules/.bin/tsx", f"./{mod}", name, bin],
         cwd="test/",
         env=env,
     )
@@ -137,13 +138,13 @@ def runTs(
 
 
 def runTsScript(script: str) -> bool:
-    subprocess.check_call(["./node_modules/.bin/tsx", "./%s" % script], cwd="test/")
+    subprocess.check_call(["./node_modules/.bin/tsx", f"./{script}"], cwd="test/")
     return True
 
 
 def runTest(name: str, func: Callable[[], bool]) -> bool:
     pad = 80 - len(name) - 4
-    print("%s> %s <%s" % ("=" * (pad // 2), name, "=" * (pad - pad // 2)))
+    print("{}> {} <{}".format("=" * (pad // 2), name, "=" * (pad - pad // 2)))
     ok = False
     try:
         ok = func()
@@ -160,7 +161,7 @@ def runTest(name: str, func: Callable[[], bool]) -> bool:
 
 def runNeg(name: str, base: str, bad: str, good: str) -> None:
     pad = 80 - len(name) - 4
-    print("%s> %s <%s" % ("=" * (pad // 2), name, "=" * (pad - pad // 2)))
+    print("{}> {} <{}".format("=" * (pad // 2), name, "=" * (pad - pad // 2)))
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as f:
         f.write(base % bad)
         f.flush()
@@ -189,10 +190,10 @@ def main():
 
     # Test names
     for bad, good in (("monkey", "Monkey"), ("Monkey_Cat", "MonkeyCat")):
-        runNeg("bad table name %s" % bad, "table %s @8908828A {}", bad, good)
+        runNeg(f"bad table name {bad}", "table %s @8908828A {}", bad, good)
     for bad, good in (("Cat", "cat"), ("type", "myType"), ("cat_dog", "catDog")):
         runNeg(
-            "bad table member name %s" % bad,
+            f"bad table member name {bad}",
             "table Monkey @8908828A {%s : U32}",
             bad,
             good,
@@ -207,7 +208,7 @@ def main():
         ("String", "Text"),
     ):
         runNeg(
-            "bad table member type %s" % bad,
+            f"bad table member type {bad}",
             "table Monkey @8908828A {a: %s}",
             bad,
             good,
@@ -222,7 +223,7 @@ def main():
         ("Text", "U16"),
         ("union {}", "F32"),
     ):
-        runNeg("bad struct member type %s" % bad, "struct Monkey {a: %s}", bad, good)
+        runNeg(f"bad struct member type {bad}", "struct Monkey {a: %s}", bad, good)
 
     # Test table id
     for bad, good in (
@@ -232,7 +233,7 @@ def main():
         ("@8908828A78", "@8908828A"),
         ("", "@8908828A"),
     ):
-        runNeg("table id %s" % bad, "table Monkey %s {}", bad, good)
+        runNeg(f"table id {bad}", "table Monkey %s {}", bad, good)
     runNeg(
         "table id inplace a", "table Monkey @8908828A {a: table %s {}}", "", "@8908828B"
     )
@@ -278,7 +279,89 @@ def main():
         "table @8908828B {}",
     )
 
+    runNeg(
+        "jagged unknown list",
+        "table M @8908828A {n: direct list table @8908828B {e: jagged %s} c: list U8}",
+        "d",
+        "c",
+    )
+    runNeg(
+        "jagged not list",
+        "table M @8908828A {n: direct list table @8908828B {e: jagged c} c: %s}",
+        "U8",
+        "list U8",
+    )
+    runNeg(
+        "jagged top-level",
+        "table M @8908828A {e: %s; c: list U8}",
+        "jagged c",
+        "U8",
+    )
+    runNeg(
+        "jagged inline non-list",
+        "table M @8908828A {n: table @8908828B {e: %s} c: list U8}",
+        "jagged c",
+        "U8",
+    )
+    runNeg(
+        "jagged named table",
+        "table T @8908828B {e: %s} table M @8908828A {n: list T; c: list U8}",
+        "jagged c",
+        "U8",
+    )
+    runNeg(
+        "jagged union table",
+        "table M @8908828A {u: union {a: table @8908828B {e: %s}} c: list U8}",
+        "jagged c",
+        "U8",
+    )
+    for modifier in ("optional", "list", "inplace"):
+        runNeg(
+            f"jagged {modifier}",
+            "table M @8908828A {n: direct list table @8908828B {e: %s jagged c} c: list U8}",
+            modifier,
+            "",
+        )
+    runNeg(
+        "jagged optional children",
+        "table M @8908828A {n: direct list table @8908828B {e: jagged c} c: %s list U8}",
+        "optional",
+        "",
+    )
+    runNeg(
+        "jagged shared list",
+        "table M @8908828A {n: direct list table @8908828B {e: jagged c; f: jagged %s} c: list U8; d: list U8}",
+        "c",
+        "d",
+    )
+    for bad in ("I32", "U64", "F32"):
+        runNeg(
+            f"jagged offset type {bad}",
+            "table M @8908828A {n: direct list table @8908828B {e: jagged %s c} c: list U8}",
+            bad,
+            "U16",
+        )
+    runNeg(
+        "jagged not direct",
+        "table M @8908828A {n: %s list table @8908828B {e: jagged c} c: list U8}",
+        "",
+        "direct",
+    )
+    runNeg(
+        "jagged offset name",
+        "table M @8908828A {n: direct list table @8908828B {e: jagged c; %s} c: list U8}",
+        "eOffset: U8;",
+        "eOffs: U8;",
+    )
+    runNeg(
+        "jagged writer name",
+        "table M @8908828A {n: direct list table @8908828B {e: jagged c} c: list U8; %s}",
+        "jaggedC: U8;",
+        "jaggedD: U8;",
+    )
+
     runTest("validate base", lambda: runValidate("test/base.spr"))
+    runTest("validate jagged", lambda: runValidate("test/jagged.spr"))
     runTest("validate complex2", lambda: runValidate("test/complex2.spr"))
     runTest("validate union", lambda: runValidate("test/union.spr"))
     if runTest(
@@ -323,6 +406,36 @@ def main():
         runTest("cpp in union", lambda: runCpp("in", "test/union.bin"))
 
     if runTest(
+        "cpp jagged setup",
+        lambda: runCppSetup(
+            [
+                "test/jagged.spr",
+                "test/jagged_added.spr",
+                "test/jagged_narrow.spr",
+                "test/jagged_removed.spr",
+            ],
+            "test/test_jagged.cc",
+        ),
+    ):
+        runTest("cpp out jagged", lambda: runCpp("out", "test/jagged.bin"))
+        runTest("cpp in jagged", lambda: runCpp("in", "test/jagged.bin"))
+        runTest("cpp claim jagged", lambda: runCpp("claim", "test/jagged.bin"))
+        runTest("cpp removed jagged", lambda: runCpp("removed", "test/jagged.bin"))
+        runTest("cpp added jagged", lambda: runCpp("added", "test/jagged.bin"))
+        runTest("cpp narrow jagged", lambda: runCpp("narrow", "test/jagged.bin"))
+        runTest(
+            "cpp claim errors jagged",
+            lambda: (
+                subprocess.check_call(["tmp/bin", "claim_errors", "test/jagged.bin"])
+                == 0
+            ),
+        )
+        runTest(
+            "cpp bad jagged",
+            lambda: subprocess.check_call(["tmp/bin", "bad", "test/jagged.bin"]) == 0,
+        )
+
+    if runTest(
         "py setup",
         lambda: runPySetup(["test/base.spr", "test/complex2.spr", "test/union.spr"]),
     ):
@@ -339,6 +452,10 @@ def main():
         runTest("py out complex", lambda: runPy("out_complex", "test/complex.bin"))
         runTest("py in complex", lambda: runPy("in_complex", "test/complex.bin"))
         runTest("py in complex3", lambda: runPy("in_complex3", "test/complex.bin"))
+        runTest(
+            "py in short complex3",
+            lambda: runPy("in_short_complex3", "test/complex.bin"),
+        )
         runTest("py out complex2", lambda: runPy("out_complex2", "test/complex2.bin"))
         runTest("py in complex2", lambda: runPy("in_complex2", "test/complex2.bin"))
         runTest("py out inplace", lambda: runPy("out_inplace", "test/inplace.bin"))
@@ -357,6 +474,42 @@ def main():
         runTest(
             "py in union", lambda: runPy("in_union", "test/union.bin", "test_union.py")
         )
+
+    if runTest(
+        "py setup jagged",
+        lambda: runPySetup(
+            [
+                "test/jagged.spr",
+                "test/jagged_added.spr",
+                "test/jagged_narrow.spr",
+                "test/jagged_removed.spr",
+            ]
+        ),
+    ):
+        for name in (
+            "out_jagged",
+            "in_jagged",
+            "claim_jagged",
+            "bad_jagged",
+            "short_jagged",
+            "removed_jagged",
+            "added_jagged",
+            "narrow_jagged",
+        ):
+            runTest(
+                f"py {name}",
+                lambda name=name: runPy(name, "test/jagged.bin", "test_jagged.py"),
+            )
+
+    runTest(
+        "ts rejects jagged",
+        lambda: (
+            subprocess.call(
+                ["python3", "-m", "scalgoprotoc", "ts", "test/jagged.spr", "tmp"]
+            )
+            != 0
+        ),
+    )
 
     if runTest(
         "ts setup",
@@ -401,7 +554,7 @@ def main():
             ("in_extend2", "test/extend2.bin"),
         ]:
             runTest(
-                "ts %s unaligned" % name.replace("_", " "),
+                "ts {} unaligned".format(name.replace("_", " ")),
                 lambda name=name, bin=bin: runTs(name, bin, shift=3),
             )
         for name, bin in [
@@ -414,7 +567,7 @@ def main():
             ("out_extend2", "test/extend2.bin"),
         ]:
             runTest(
-                "ts %s small buffer" % name.replace("_", " "),
+                "ts {} small buffer".format(name.replace("_", " ")),
                 lambda name=name, bin=bin: runTs(name, bin, capacity=16),
             )
         runTest("ts read", lambda: runTsScript("test_read.ts"))
@@ -440,7 +593,15 @@ def main():
     if runTest(
         "rs setup",
         lambda: runRustSetup(
-            ["test/base.spr", "test/complex2.spr", "test/union.spr"],
+            [
+                "test/base.spr",
+                "test/complex2.spr",
+                "test/union.spr",
+                "test/jagged.spr",
+                "test/jagged_added.spr",
+                "test/jagged_narrow.spr",
+                "test/jagged_removed.spr",
+            ],
             "test/test_base.rs",
         ),
     ):
@@ -467,6 +628,20 @@ def main():
         runTest("rs in extend2", lambda: runRust("in_extend2", "test/extend2.bin"))
         runTest("rs out union", lambda: runRust("out_union", "test/union.bin"))
         runTest("rs in union", lambda: runRust("in_union", "test/union.bin"))
+        for name in (
+            "out_jagged",
+            "claim_jagged",
+            "claim_errors_jagged",
+            "in_jagged",
+            "bad_jagged",
+            "removed_jagged",
+            "added_jagged",
+            "narrow_jagged",
+        ):
+            runTest(
+                f"rs {name}",
+                lambda name=name: runRust(name, "test/jagged.bin"),
+            )
 
     print("=" * 80)
     if not failures:
@@ -474,7 +649,7 @@ def main():
         sys.exit(0)
     else:
         for t in failures:
-            print("%s failed" % t)
+            print(f"{t} failed")
         sys.exit(1)
 
 

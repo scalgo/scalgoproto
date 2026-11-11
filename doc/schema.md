@@ -188,6 +188,63 @@ For regular list tabels. The list stores a pointer to a table. At the pointer lo
 and size of the table is stored. With a direct list table the table content is stored directly
 in the list. So the pointer indirection, magic and size is saved.
 
+##### Jagged list
+
+A jagged list lets each element of a direct list of tables own a variable-length range of a shared list of children. Many short per-element lists then cost one list header in total instead of one each. The shared list is an ordinary list member of the table. A jagged member in the element table names it and holds the index of the element's first child. In the example below every node owns a range of entries, and every entry owns a range of bins:
+
+    table Tile @5D99E0AD {
+        nodes: direct list table @5D99E0AE {
+            x: I16;
+            entries: jagged entries;
+        }
+        entries: direct list table @5D99E0AF {
+            kind: U32;
+            bins: jagged bins;
+        }
+        bins: list F32;
+    }
+
+A jagged member is encoded as a 6-byte unsigned integer. Element `i` owns the children from its offset up to the offset of element `i + 1`. The last element owns the children up to the end of the shared list. An element with no children has the same offset as the next element.
+
+A jagged member may name a smaller offset type, `U8`, `U16` or `U32`, before the list, as in `bins: jagged U16 bins;`. It is then encoded as that type, and the shared list can hold at most 255, 65535 or 4294967295 children.
+
+Both the jagged member and the shared list are ordinary members, so the usual rules for extending tables apply. To give the elements another jagged list later, add a jagged member at the bottom of the element table and the list at the bottom of the table.
+
+Writers add the direct list, then call `add_jagged_<child>(elements, total)` (`addJagged<Child>` in C++) on the table that holds the shared list. It allocates the shared list with `total` children and returns a view. The view's `add(element, k)` gives `element` the next `k` children and returns a slice of the shared list to fill. Nested lists pass the view's `children` (`children()` in C++) as the elements of the next call:
+
+    nodes = root.add_nodes(4)
+    ne = root.add_jagged_entries(nodes, 3)
+    e = ne.add(nodes[1], 2)        # node 1 owns entries 0 and 1
+    e[0].kind = 7
+    ne.add(nodes[3], 1)[0].kind = 11
+    eb = root.add_jagged_bins(ne.children, 3)
+    eb.add(e[0], 2)
+
+Elements must be claimed at most once and in increasing order. Elements that are skipped, and elements after the last claim, own no children. An element that is not in `elements`, an element claimed out of order or twice, a claim past `total`, and a `total` that does not fit in the offset type are caller errors: they throw `std::logic_error` in C++ and raise `ValueError` in Python. `finalize` throws or raises the same error if a view has claimed fewer than `total` children.
+
+In Rust, `add(element, k)` takes the index of the element instead of the element, so nested lists pass a child's index in the shared list, `slice.offset() + k`. Caller errors panic, and `Arena::finalize` panics if a view has claimed fewer than `total` children.
+
+Writers that cannot claim elements in order can instead use `add_<child>(total)` and set every element's offset directly with `<name>Offset` (`set<Name>Offset` in C++, `<name>_offset` in Python and Rust), with non-decreasing offsets. Do not mix this with a view on the same list.
+
+Readers get the children of an element from the element, through an accessor named after the jagged member. It returns a slice of the shared list, whose `offset()` (`offset` in Python) is the index of its first child in the shared list. The raw offset is available as `<name>Offset()` (`<name>_offset` in Python and Rust):
+
+    for node in tile.nodes:
+        for entry in node.entries:
+            for b in entry.bins:
+                ...
+
+When a list of elements with jagged members is read, the shared lists are looked up once and given to its elements, so reading the children of an element only reads its own offset and that of the next element. In C++ and Rust this lookup happens on every call of the list accessor, such as `tile.nodes()`, so keep the list in a variable rather than calling the accessor for every element. A shared list that fails to look up, for example because of a wrong magic, fails when an element reads its children, not when the list of elements is read.
+
+Edge cases:
+
+- A jagged member must be in an inline table that is the element type of a direct list in a table, and must name a list member of that table. Other placements are errors.
+- A jagged member cannot be `optional`, `list`, `inplace` or `direct`. The shared list cannot be `optional` or `inplace`, and only one jagged member may name it.
+- The `<name>Offset` accessor of a jagged member and the `addJagged<Child>` writer must not clash with other member names.
+- Remove a jagged member or a shared list like any other member, as in `Removed: jagged names;`. The name after `jagged` of a removed member is not checked. A shared list whose jagged member is removed remains an ordinary list.
+- Data written before a jagged list was added reads as if every element owns no children.
+- Reading an element whose offsets decrease, or point past the end of the shared list, throws `scalgoproto::OutOfBoundsError` in C++, raises `scalgoproto.OutOfBoundsError` in Python and returns `Error::InvalidPointer` in Rust.
+- Only the C++, Python and Rust generators support jagged lists. The TypeScript generator rejects schemas that use them.
+
 ##### Inplace
 
 Within a table atmost one table, union, text or bytes, member may be declared inplace. An inplace member in encoded directly after its table, and 8 bytes are saved. In the example below an inplace union is used;
@@ -332,9 +389,10 @@ A grammar for schemas is defined below:
     TableContent = "{" TableItem* "}"
     TableId = "@[0-9A-F]{8,8}"
     BriefTable = "table" TableId? TableContent
-    TableItem = LIdentifier (TableContent | TableItemDesc) Split
+    TableItem = LIdentifier (TableContent | TableItemDesc | JaggedItemDesc) Split
     TableItemDesc = ":" TableItemMod* TableItemType ("=" Number | LIdentifier)?
-    TableItemMod = "list" | "optional" | "inplace"
+    TableItemMod = "list" | "optional" | "inplace" | "direct"
+    JaggedItemDesc = ":" "jagged" ("U8" | "U16" | "U32")? LIdentifier
     TableItemType = BasicType | "Text" | "Bytes" | UIdentifier | BriefUnion | BriefTable | BriefEnum
     Number = "-?[0-9]*(\.[0-9]*)?(e-?[0-9]+)?
 

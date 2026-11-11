@@ -5,10 +5,11 @@ Generate python reader/wirter
 import math
 import os
 from typing import NamedTuple, TextIO
-from .documents import Documents
 
-from .annotate import annotate
+from .annotate import annotate, has_jagged, jagged_lists
+from .documents import Documents
 from .parser import (
+    ICE,
     AstNode,
     Enum,
     Namespace,
@@ -18,7 +19,6 @@ from .parser import (
     Table,
     Union,
     Value,
-    ICE,
 )
 from .sp_tokenize import Token, TokenType
 from .util import snake, ucamel
@@ -59,7 +59,7 @@ def byte_encode(b: bytes) -> str:
         elif 32 <= c <= 126:
             x.append(chr(c))
         else:
-            x.append("\\x%02x" % c)
+            x.append(f"\\x{c:02x}")
     return "".join(x)
 
 
@@ -67,34 +67,32 @@ def add_lifetime(t: str, lt="a") -> str:
     if "<" not in t:
         t = t + "<>"
     left, r = t.split("<", 1)
-    return "%s<'%s, %s" % (left, lt, r)
+    return f"{left}<'{lt}, {r}"
 
 
 class Generator:
     def __init__(self, documents: Documents, out: TextIO) -> None:
         self.documents: Documents = documents
         self.out: TextIO = out
+        # Name of the table that holds the list of each element table with jagged members
+        self.jagged_owner: dict[int, str] = {}
 
     def out_list_type(self, node: Value) -> str:
         assert node.type_ is not None
         if node.type_.type == TokenType.BOOL:
             return "scalgoproto::BoolListWrite"
         elif node.type_.type in typeMap:
-            return "scalgoproto::PodListWrite<%s>" % (typeMap[node.type_.type].p)
+            return f"scalgoproto::PodListWrite<{typeMap[node.type_.type].p}>"
         elif node.struct:
-            return "scalgoproto::StructListWrite<'a, %sOut<'a>>" % (node.struct.name)
+            return f"scalgoproto::StructListWrite<'a, {node.struct.name}Out<'a>>"
         elif node.enum:
-            return "scalgoproto::EnumListWrite<%s>" % (node.enum.name)
+            return f"scalgoproto::EnumListWrite<{node.enum.name}>"
         elif node.table and node.direct:
-            return "scalgoproto::DirectTableListWrite<'a, %sOut<'a, Normal>>" % (
-                node.table.name
-            )
+            return f"scalgoproto::DirectTableListWrite<'a, {node.table.name}Out<'a, Normal>>"
         elif node.table:
-            return "scalgoproto::TableListWrite<'_, %sOut<'a, Normal>>" % (
-                node.table.name
-            )
+            return f"scalgoproto::TableListWrite<'_, {node.table.name}Out<'a, Normal>>"
         elif node.union:
-            return "scalgoproto::UnionListWrite<'_, %s>" % (node.union.name)
+            return f"scalgoproto::UnionListWrite<'_, {node.union.name}>"
         elif node.type_.type == TokenType.TEXT:
             return "scalgoproto::TextListWrite"
         elif node.type_.type == TokenType.BYTES:
@@ -106,80 +104,64 @@ class Generator:
         assert node.type_ is not None
         x = ", true" if inplace else ""
         if node.type_.type == TokenType.BOOL:
-            return "constructBoolList(size%s)" % x
+            return f"constructBoolList(size{x})"
         elif node.type_.type in typeMap:
-            return "construct%sList(size%s)" % (typeMap[node.type_.type].n, x)
+            return f"construct{typeMap[node.type_.type].n}List(size{x})"
         elif node.struct:
-            return "constructStructList<%sOut>(%sOut, size%s)" % (
-                node.struct.name,
-                node.struct.name,
-                x,
-            )
+            return f"constructStructList<{node.struct.name}Out>({node.struct.name}Out, size{x})"
         elif node.enum:
-            return "constructEnumList<%s>(size%s)" % (node.enum.name, x)
+            return f"constructEnumList<{node.enum.name}>(size{x})"
         elif node.table:
-            return "constructTableList<%sOut>(%sOut, size%s)" % (
-                node.table.name,
-                node.table.name,
-                x,
-            )
+            return f"constructTableList<{node.table.name}Out>({node.table.name}Out, size{x})"
         elif node.union:
-            return "constructUnionList<%sOut>(%sOut, size%s)" % (
-                node.union.name,
-                node.union.name,
-                x,
-            )
+            return f"constructUnionList<{node.union.name}Out>({node.union.name}Out, size{x})"
         elif node.type_.type == TokenType.TEXT:
-            return "constructTextList(size%s)" % (x)
+            return f"constructTextList(size{x})"
         elif node.type_.type == TokenType.BYTES:
-            return "constructBytesList(size%s)" % (x)
+            return f"constructBytesList(size{x})"
         else:
             raise ICE()
 
     def in_list_help(self, node: Value, os: str) -> tuple[str, str]:
         assert node.type_ is not None
         if node.type_.type == TokenType.BOOL:
-            return ("boolean", "        return this._reader._getBoolList(%s)" % (os))
+            return ("boolean", f"        return this._reader._getBoolList({os})")
         elif node.type_.type in typeMap:
             ti = typeMap[node.type_.type]
-            return (ti.p, "        return this._reader._get%sList(%s)" % (ti.n, os))
+            return (ti.p, f"        return this._reader._get{ti.n}List({os})")
         elif node.struct:
             assert node.struct.name is not None
             return (
                 node.struct.name,
-                "        return this._reader._getStructList(%s, %s)"
-                % (os, node.struct.name),
+                f"        return this._reader._getStructList({os}, {node.struct.name})",
             )
         elif node.enum:
             assert node.enum.name is not None
             return (
                 node.enum.name + " | null",
-                "        return this._reader._getEnumList<%s>(%s)"
-                % (node.enum.name, os),
+                f"        return this._reader._getEnumList<{node.enum.name}>({os})",
             )
         elif node.table:
             assert node.table.name is not None
             return (
                 node.table.name + "In | null",
-                "        return this._reader._getTableList(%s, %sIn)"
-                % (os, node.table.name),
+                f"        return this._reader._getTableList({os}, {node.table.name}In)",
             )
         elif node.union:
             assert node.union.name is not None
             return (
                 node.union.name + "In",
-                "        return this._reader._getUnionList(%s, %sIn)"
-                % (os, node.union.name),
+                f"        return this._reader._getUnionList({os}, {node.union.name}In)",
             )
         elif node.type_.type == TokenType.TEXT:
             return (
                 "string | null",
-                "        return this._reader._getTextList(%s)" % (os,),
+                f"        return this._reader._getTextList({os})",
             )
         elif node.type_.type == TokenType.BYTES:
             return (
                 "ArrayBuffer | null",
-                "        return this._reader._getBytesList(%s)" % (os,),
+                f"        return this._reader._getBytesList({os})",
             )
         else:
             raise ICE()
@@ -189,17 +171,17 @@ class Generator:
         if node.type_.type == TokenType.BOOL:
             return "scalgoproto::BoolListRead<'a>"
         elif node.type_.type in typeMap:
-            return "scalgoproto::PodListRead<'a, %s>" % (typeMap[node.type_.type].p)
+            return f"scalgoproto::PodListRead<'a, {typeMap[node.type_.type].p}>"
         elif node.struct:
-            return "scalgoproto::StructListRead<'a, %sIn<'a>>" % (node.struct.name)
+            return f"scalgoproto::StructListRead<'a, {node.struct.name}In<'a>>"
         elif node.enum:
-            return "scalgoproto::EnumListRead<'a, %s>" % (node.enum.name)
+            return f"scalgoproto::EnumListRead<'a, {node.enum.name}>"
         elif node.table and node.direct:
-            return "scalgoproto::DirectTableListRead<'a, %sIn<'a>>" % (node.table.name)
+            return f"scalgoproto::DirectTableListRead<'a, {node.table.name}In<'a>>"
         elif node.table:
-            return "scalgoproto::TableListRead<'a, %sIn<'a>>" % (node.table.name)
+            return f"scalgoproto::TableListRead<'a, {node.table.name}In<'a>>"
         elif node.union:
-            return "scalgoproto::UnionListRead<'a, %sIn<'a>>" % (node.union.name)
+            return f"scalgoproto::UnionListRead<'a, {node.union.name}In<'a>>"
         elif node.type_.type == TokenType.TEXT:
             return "scalgoproto::TextListRead<'a>"
         elif node.type_.type == TokenType.BYTES:
@@ -217,30 +199,58 @@ class Generator:
         self,
         node: AstNode,
         indent: str = "",
-        prefix: list[str] = [],
-        suffix: list[str] = [],
+        prefix: list[str] | None = None,
+        suffix: list[str] | None = None,
     ):
+        if suffix is None:
+            suffix = []
+        if prefix is None:
+            prefix = []
         if not node.docstring and not suffix and not prefix:
             return
-        self.o("%s/**" % indent)
+        self.o(f"{indent}/**")
         for line in prefix:
-            self.o("%s * %s" % (indent, line))
+            self.o(f"{indent} * {line}")
         if prefix and (node.docstring or suffix):
-            self.o("%s *" % indent)
+            self.o(f"{indent} *")
         if node.docstring:
             for line in node.docstring:
-                self.o("%s * %s" % (indent, line))
+                self.o(f"{indent} * {line}")
         if node.docstring and suffix:
-            self.o("%s *" % indent)
+            self.o(f"{indent} *")
         for line in suffix:
-            self.o("%s * %s" % (indent, line))
-        self.o("%s */" % indent)
+            self.o(f"{indent} * {line}")
+        self.o(f"{indent} */")
 
     def generate_list_in(self, node: Value, lname: str) -> None:
         tn = self.list_access_type_lt(node)
         self.output_doc(node, "    ")
         directTable_ = "direct_table_" if node.direct else ""
         an = f"{node.table.name}In" if node.direct else tn
+        if node.table and has_jagged(node.table):
+            jt = f"scalgoproto::JaggedTableListRead<'a, {node.table.name}In<'a>>"
+            if node.optional:
+                self.o(
+                    f"""    #[inline]
+    pub fn {lname}(&self) -> Result<std::option::Option<scalgoproto::ListIn<'a, {jt}>>> {{
+        Ok(self._reader.get_optional_direct_table_list::<{an}>({node.offset})?.map(|l| scalgoproto::with_jagged(l, self._jagged_ctx())))
+    }}
+"""
+                )
+                return
+            self.o(
+                f"""    #[inline]
+    pub fn __opt_{lname}(&self) -> Result<std::option::Option<scalgoproto::ListIn<'a, {tn}>>> {{
+        self._reader.get_optional_direct_table_list::<{an}>({node.offset})
+    }}
+
+    #[inline]
+    pub fn {lname}(&self) -> Result<scalgoproto::ListIn<'a, {jt}>> {{
+        Ok(scalgoproto::with_jagged(self._reader.get_direct_table_list::<{an}>({node.offset})?, self._jagged_ctx()))
+    }}
+"""
+            )
+            return
         if node.optional:
             self.o(
                 f"""    #[inline]
@@ -360,6 +370,118 @@ class Generator:
 """
             )
 
+    def list_get_expr(self, node: Value) -> str:
+        tn = self.list_access_type_lt(node)
+        directTable_ = "direct_table_" if node.direct else ""
+        an = f"{node.table.name}In" if node.direct and node.table else tn
+        return f"self._reader.get_{directTable_}list{'_inplace' if node.inplace else ''}::<{an}>({node.offset})"
+
+    def generate_jagged_ctx(self, table: Table, lists: list[Value]) -> None:
+        self.o(
+            f"""/// The lists of {table.name} that jagged members name, looked up once.
+#[derive(Clone, Copy)]
+pub struct {table.name}JaggedCtx<'a> {{"""
+        )
+        for c in lists:
+            self.o(
+                f"    {snake(self.value(c.identifier))}: Result<scalgoproto::ListIn<'a, {self.list_access_type_lt(c)}>>,"
+            )
+        self.o("}")
+        self.o()
+
+    def generate_jagged_lists(self, table: Table, lists: list[Value]) -> None:
+        fields = "".join(
+            f"\n            {snake(self.value(c.identifier))}: {self.list_get_expr(c)},"
+            for c in lists
+        )
+        self.o(
+            f"""    /// Look up the lists that jagged members name. A failed lookup is
+    /// returned when an element reads the list.
+    fn _jagged_ctx(&self) -> {table.name}JaggedCtx<'a> {{
+        {table.name}JaggedCtx {{{fields}
+        }}
+    }}
+"""
+        )
+
+    def generate_jagged_out(self, node: Value, lname: str) -> None:
+        assert node.jagged_elements is not None and node.jagged_offset is not None
+        elements = node.jagged_elements
+        assert elements.table is not None
+        el = snake(self.value(elements.identifier))
+        offset = snake(self.value(node.jagged_offset.identifier)) + "_offset"
+        bits = node.jagged_offset.bytes * 8
+        et = f"{elements.table.name}Out<'a, Normal>"
+        self.o(
+            f"""    /// Add {lname} with `total` children and return a view that gives each element of
+    /// `elements` (the list added by add_{el}) its range of them.
+    #[inline]
+    pub fn add_jagged_{lname}(&mut self, elements: &scalgoproto::ListOut<'a, {self.out_list_type(elements)}, Normal>, total: usize) -> scalgoproto::JaggedOut<'a, {et}, {self.out_list_type(node)}> {{
+        assert!((total as u64) < 1 << {bits}, "total does not fit in {offset}");
+        scalgoproto::JaggedOut::new(elements, self.add_{lname}(total), |e, v| e.{offset}(v))
+    }}
+"""
+        )
+
+    def generate_jagged_offset_in(self, node: Value, lname: str) -> None:
+        if node.bytes == 6:
+            get = f"self._reader.get_48({node.offset})"
+            get_next = f"n.get_48({node.offset})"
+        else:
+            get = f"self._reader.get_pod::<u{node.bytes * 8}>({node.offset}).map(u64::from)"
+            get_next = f"n.get_pod::<u{node.bytes * 8}>({node.offset}).map(u64::from)"
+        assert node.jagged_list is not None
+        children = node.jagged_list
+        field = snake(self.value(children.identifier))
+        if children.table and has_jagged(children.table):
+            lt = f"scalgoproto::JaggedTableListRead<'a, {children.table.name}In<'a>>"
+            make = f"scalgoproto::with_jagged(ctx.{field}?, ctx)"
+        else:
+            lt = self.list_access_type_lt(children)
+            make = f"ctx.{field}?"
+        self.o(
+            f"""    /// Index of the first of {lname} that this element owns in the list it names.
+    #[inline]
+    pub fn {lname}_offset(&self) -> u64 {{
+        {get}.unwrap_or(0)
+    }}
+"""
+        )
+        self.output_doc(
+            node,
+            "    ",
+            suffix=["Fails with InvalidPointer on invalid offsets."],
+        )
+        self.o(
+            f"""    #[inline]
+    pub fn {lname}(&self) -> Result<scalgoproto::ListSliceIn<'a, {lt}>> {{
+        let ctx = self._jagged.ok_or(scalgoproto::Error::InvalidPointer(0, 0))?;
+        let list = {make};
+        let end = match self._next {{
+            Some(n) => {get_next}.unwrap_or(0),
+            None => list.len() as u64,
+        }};
+        scalgoproto::ListSliceIn::new(list, self.{lname}_offset(), end)
+    }}
+"""
+        )
+
+    def generate_jagged_offset_out(self, node: Value, lname: str) -> None:
+        bits = node.bytes * 8
+        if node.bytes == 6:
+            store = f"self._slice.set_u48({node.offset}, v)"
+        else:
+            store = f"self._slice.set_pod({node.offset}, &(v as u{bits}))"
+        self.output_doc(node, "    ")
+        self.o(
+            f"""    #[inline]
+    pub fn {lname}_offset(&mut self, v: u64) {{
+        assert!(v < 1 << {bits});
+        {store}
+    }}
+"""
+        )
+
     def generate_bool_in(self, node: Value, lname: str) -> None:
         if node.inplace:
             raise ICE()
@@ -448,7 +570,7 @@ class Generator:
         self._reader.get_pod({node.offset}).unwrap_or({
                     node.parsed_value
                     if not math.isnan(node.parsed_value)
-                    else "%s::NAN" % ti.p
+                    else f"{ti.p}::NAN"
                 })
     }}
 """
@@ -945,6 +1067,8 @@ class Generator:
         assert node.type_ is not None
         if node.list_:
             self.generate_list_in(node, lname)
+        elif node.jagged:
+            self.generate_jagged_offset_in(node, lname)
         elif node.type_.type == TokenType.BOOL:
             self.generate_bool_in(node, lname)
         elif node.type_.type in typeMap:
@@ -970,6 +1094,10 @@ class Generator:
         if node.list_:
             assert table.default is not None
             self.generate_list_out(node, lname, len(table.default))
+            if node.jagged_elements is not None:
+                self.generate_jagged_out(node, lname)
+        elif node.jagged:
+            self.generate_jagged_offset_out(node, lname)
         elif node.type_.type == TokenType.BOOL:
             self.generate_bool_out(node, lname)
         elif node.type_.type in typeMap:
@@ -1014,15 +1142,14 @@ pub enum {union.name}In<'a> {{
             uname = ucamel(self.value(member.identifier))
             if member.list_:
                 self.o(
-                    "    %s(scalgoproto::ListIn<'a, %s>),"
-                    % (uname, self.list_access_type_lt(member))
+                    f"    {uname}(scalgoproto::ListIn<'a, {self.list_access_type_lt(member)}>),"
                 )
             elif member.table:
-                self.o("    %s(%sIn<'a>)," % (uname, member.table.name))
+                self.o(f"    {uname}({member.table.name}In<'a>),")
             elif member.type_.type == TokenType.BYTES:
-                self.o("    %s(&'a [u8])," % (uname))
+                self.o(f"    {uname}(&'a [u8]),")
             elif member.type_.type == TokenType.TEXT:
-                self.o("    %s(&'a str)," % (uname))
+                self.o(f"    {uname}(&'a str),")
             elif member.type_.type == TokenType.REMOVED:
                 continue
             else:
@@ -1220,6 +1347,8 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
             w.copy_in(v)?;
         }}"""
                     )
+                elif node.jagged:
+                    self.o(f"        self.{lname}_offset(i.{lname}_offset());")
                 elif (
                     node.type_.type in typeMap
                     or node.type_.type == TokenType.BOOL
@@ -1267,6 +1396,13 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
                     raise ICE()
 
     def generate_table(self, table: Table) -> None:
+        lists = jagged_lists(table)
+        for m in table.members:
+            if m.list_ and m.direct_table and has_jagged(m.direct_table):
+                self.jagged_owner[id(m.direct_table)] = table.name
+        if lists:
+            self.generate_jagged_ctx(table, lists)
+
         # Recursively generate direct contained members
         for value in table.members:
             if value.direct_table:
@@ -1280,24 +1416,37 @@ impl<'a, 'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'a, Inplace> {{
 
         name = table.name
         magic = table.magic
+        jagged = has_jagged(table)
+        owner = self.jagged_owner.get(id(table))
+        jagged_fields = (
+            f"""
+    _jagged: std::option::Option<{owner}JaggedCtx<'a>>,
+    // The next element in the list, or None for the last
+    _next: std::option::Option<scalgoproto::Reader<'a>>,"""
+            if jagged
+            else ""
+        )
+        jagged_init = ", _jagged: None, _next: None" if jagged else ""
 
         self.output_doc(table, "")
         self.o(
             f"""
 #[derive(Clone, Copy)]
 pub struct {name}In<'a> {{
-    _reader: scalgoproto::Reader<'a>,
+    _reader: scalgoproto::Reader<'a>,{jagged_fields}
 }}
 #[allow(clippy::needless_lifetimes)]
 impl<'a> {name}In<'a> {{"""
         )
 
+        if lists:
+            self.generate_jagged_lists(table, lists)
         for node in table.members:
             self.generate_value_in(table, node)
 
         debug = "".join(
             [
-                f'\n            .field("{snake(self.value(v.identifier))}", & self.{snake(self.value(v.identifier))}())'
+                f'\n            .field("{snake(self.value(v.identifier))}{"_offset" if v.jagged else ""}", & self.{snake(self.value(v.identifier))}{"_offset" if v.jagged else ""}())'
                 for v in table.members
             ]
         )
@@ -1321,10 +1470,22 @@ impl<'a> scalgoproto::TableIn<'a> for {name}In<'a> {{
 
     #[inline]
     fn new(reader: scalgoproto::Reader<'a>) -> Self {{
-        Self {{ _reader: reader }}
+        Self {{ _reader: reader{jagged_init} }}
     }}
 }}"""
         )
+        if jagged:
+            self.o(
+                f"""
+impl<'a> scalgoproto::JaggedTableIn<'a> for {name}In<'a> {{
+    type Ctx = {owner}JaggedCtx<'a>;
+
+    #[inline]
+    fn new_jagged(reader: scalgoproto::Reader<'a>, ctx: Self::Ctx, next: std::option::Option<scalgoproto::Reader<'a>>) -> Self {{
+        Self {{ _reader: reader, _jagged: Some(ctx), _next: next }}
+    }}
+}}"""
+            )
 
         # Generate Table writer
         self.output_doc(table, "")
@@ -1574,7 +1735,7 @@ impl<'b> scalgoproto::CopyIn<{name}In<'b> > for {name}Out<'_> {{
 pub enum {node.name} {{"""
         )
         for ev in node.members:
-            self.o("    %s," % (ucamel(self.value(ev.identifier))))
+            self.o(f"    {ucamel(self.value(ev.identifier))},")
         self.o(
             f"""}}
 
@@ -1596,20 +1757,13 @@ impl scalgoproto::Enum for {node.name} {{
                 if u.document == 0:
                     continue
                 i = imports.setdefault(u.document, set())
-                if isinstance(u, Struct):
+                if isinstance(u, (Struct, Enum)):
                     assert u.name is not None
                     i.add(u.name)
-                elif isinstance(u, Enum):
-                    assert u.name is not None
-                    i.add(u.name)
-                elif isinstance(u, Table):
-                    i.add("%s" % u.name)
-                    i.add("%sIn" % u.name)
-                    i.add("%sOut" % u.name)
-                elif isinstance(u, Union):
-                    i.add("%s" % u.name)
-                    i.add("%sIn" % u.name)
-                    i.add("%sOut" % u.name)
+                elif isinstance(u, (Table, Union)):
+                    i.add(f"{u.name}")
+                    i.add(f"{u.name}In")
+                    i.add(f"{u.name}Out")
                 else:
                     raise ICE()
 
@@ -1639,7 +1793,7 @@ def run(args) -> int:
     documents = Documents()
     documents.read_root(args.schema)
     p = Parser(documents)
-    out = open(os.path.join(args.output, "%s.rs" % documents.root.name), "w")
+    out = open(os.path.join(args.output, f"{documents.root.name}.rs"), "w")
     try:
         ast = p.parse_document()
         if not annotate(documents, ast):

@@ -2,21 +2,24 @@
 Parse a protocol description and generate an ast
 """
 
+from .documents import Documents
 from .error import error
 from .sp_tokenize import Token, TokenType, tokenize
-from .documents import Documents
+
+# Offset types a jagged member may name; without one it uses 6 bytes.
+JAGGED_TYPES = [TokenType.U8, TokenType.U16, TokenType.UI32]
 
 
 class AstNode:
     __slots__ = [
-        "token",
-        "doc_comment",
         "bytes",
-        "offset",
+        "doc_comment",
         "docstring",
         "document",
-        "uses",
         "namespace",
+        "offset",
+        "token",
+        "uses",
     ]
     token: Token | None
     doc_comment: Token | None
@@ -72,7 +75,7 @@ class Struct(AstNode):
 
 
 class Enum(AstNode):
-    __slots__ = ["identifier", "members", "annotatedValues", "name", "removed"]
+    __slots__ = ["annotatedValues", "identifier", "members", "name", "removed"]
     identifier: Token | None
     members: list["Value"]
     name: str | None
@@ -96,7 +99,7 @@ class Enum(AstNode):
 
 
 class Table(AstNode):
-    __slots__ = ["identifier", "id_", "members", "default", "magic", "name", "empty"]
+    __slots__ = ["default", "empty", "id_", "identifier", "magic", "members", "name"]
     identifier: Token | None
     id_: Token | None
     members: list["Value"]
@@ -125,7 +128,7 @@ class Table(AstNode):
 
 
 class Union(AstNode):
-    __slots__ = ["members", "identifier", "name"]
+    __slots__ = ["identifier", "members", "name"]
     members: list["Value"]
     identifier: Token | None
     name: str | None
@@ -146,25 +149,30 @@ class Union(AstNode):
 
 class Value(AstNode):
     __slots__ = [
-        "identifier",
-        "value",
-        "type_",
-        "optional",
-        "list_",
-        "inplace",
-        "direct",
-        "direct_table",
-        "direct_union",
-        "has_offset",
-        "has_bit",
         "bit",
-        "table",
-        "enum",
-        "struct",
-        "union",
-        "parsed_value",
+        "direct",
         "direct_enum",
         "direct_struct",
+        "direct_table",
+        "direct_union",
+        "enum",
+        "has_bit",
+        "has_offset",
+        "identifier",
+        "inplace",
+        "jagged",
+        "jagged_elements",
+        "jagged_list",
+        "jagged_offset",
+        "jagged_type",
+        "list_",
+        "optional",
+        "parsed_value",
+        "struct",
+        "table",
+        "type_",
+        "union",
+        "value",
     ]
     identifier: Token
     value: Token | None
@@ -223,6 +231,16 @@ class Value(AstNode):
         self.struct = None
         self.union = None
         self.parsed_value = 0
+        self.jagged: Token | None = None
+        # The offset type of a jagged member; None means 6 bytes.
+        self.jagged_type: Token | None = None
+        # Set by annotate on a jagged member and on the list it names: the
+        # list whose elements hold the offsets.
+        self.jagged_elements: Value | None = None
+        # Set by annotate on a list named by a jagged member: that member.
+        self.jagged_offset: Value | None = None
+        # Set by annotate on a jagged member: the list it names.
+        self.jagged_list: Value | None = None
 
 
 class ParseError(Exception):
@@ -258,7 +276,7 @@ class Parser:
         if t.type not in types:
             raise ParseError(
                 t,
-                "Expected one of %s got %s" % (", ".join(map(str, types)), t.type),
+                "Expected one of {} got {}".format(", ".join(map(str, types)), t.type),
                 self.context,
             )
 
@@ -354,9 +372,7 @@ class Parser:
                 )
                 colon: Token | None = None
                 if self.strict:
-                    if not is_union:
-                        colon = self.consume_token([TokenType.COLON])
-                    elif self.token.type == TokenType.COLON:
+                    if not is_union or self.token.type == TokenType.COLON:
                         colon = self.consume_token([TokenType.COLON])
                     self.consume_space()
                 elif self.token.type == TokenType.COLON:
@@ -365,6 +381,8 @@ class Parser:
                 list_: Token | None = None
                 inplace: Token | None = None
                 direct: Token | None = None
+                jagged: Token | None = None
+                jagged_type: Token | None = None
                 value: Token | None = None
                 direct_table: Table | None = None
                 direct_union: Union | None = None
@@ -375,6 +393,7 @@ class Parser:
                     TokenType.LIST,
                     TokenType.INPLACE,
                     TokenType.DIRECT,
+                    TokenType.JAGGED,
                 ]
                 while self.token.type in modifiers:
                     if self.token.type == TokenType.OPTIONAL:
@@ -389,7 +408,17 @@ class Parser:
                     elif self.token.type == TokenType.DIRECT:
                         direct = self.consume_token([TokenType.DIRECT])
                         self.consume_space()
+                    elif self.token.type == TokenType.JAGGED:
+                        jagged = self.consume_token([TokenType.JAGGED])
+                        self.consume_space()
                 type_ = self.token
+                if jagged is not None:
+                    if self.token.type in JAGGED_TYPES:
+                        jagged_type = self.consume_token(JAGGED_TYPES)
+                        self.consume_space()
+                        type_ = self.token
+                    # The name of the list that holds the children.
+                    self.check_token(self.token, [TokenType.IDENTIFIER])
                 self.check_token(
                     self.token,
                     [
@@ -480,24 +509,25 @@ class Parser:
                                 TokenType.IDENTIFIER,
                             ]
                         )
-                members.append(
-                    Value(
-                        colon,
-                        self.document.id,
-                        t,
-                        value,
-                        type_,
-                        optional,
-                        list_,
-                        inplace,
-                        direct,
-                        direct_table,
-                        direct_union,
-                        direct_enum,
-                        direct_struct,
-                        doc_comment,
-                    )
+                member = Value(
+                    colon,
+                    self.document.id,
+                    t,
+                    value,
+                    type_,
+                    optional,
+                    list_,
+                    inplace,
+                    direct,
+                    direct_table,
+                    direct_union,
+                    direct_enum,
+                    direct_struct,
+                    doc_comment,
                 )
+                member.jagged = jagged
+                member.jagged_type = jagged_type
+                members.append(member)
                 doc_comment = None
             else:
                 raise ICE()
@@ -689,7 +719,7 @@ class Parser:
                 self.consume_space()
                 i = self.consume_token([TokenType.IDENTIFIER])
                 self.consume_space()
-                self.context = "struct %s" % self.value(i)
+                self.context = f"struct {self.value(i)}"
                 ans.append(
                     Struct(
                         t,
@@ -705,7 +735,7 @@ class Parser:
                 self.consume_space()
                 i = self.consume_token([TokenType.IDENTIFIER])
                 self.consume_space()
-                self.context = "table %s" % self.value(i)
+                self.context = f"table {self.value(i)}"
                 id_ = (
                     self.consume_token([TokenType.ID])
                     if self.token.type == TokenType.ID
@@ -729,7 +759,7 @@ class Parser:
                 self.consume_space()
                 i = self.consume_token([TokenType.IDENTIFIER])
                 self.consume_space()
-                self.context = "enum %s" % self.value(i)
+                self.context = f"enum {self.value(i)}"
                 ans.append(
                     Enum(t, self.document.id, i, self.parse_enum(1), doc_comment)
                 )
@@ -739,7 +769,7 @@ class Parser:
                 self.consume_space()
                 i = self.consume_token([TokenType.IDENTIFIER])
                 self.consume_space()
-                self.context = "union %s" % self.value(i)
+                self.context = f"union {self.value(i)}"
                 ans.append(
                     Union(
                         t, self.document.id, i, self.parse_content(1, True), doc_comment

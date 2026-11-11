@@ -1,0 +1,20 @@
+namespace scalgoprototest5;
+
+# A later version of the Jagged table in jagged.spr with a jagged list added,
+# for reading jagged.bin.
+table AddedTags @95A2B5C1 {
+	nodes: direct list table @95A2B5C2 {
+		x: I16;
+		entries: jagged entries;
+		names: jagged names;
+		tags: jagged tags;
+	}
+	entries: direct list table @95A2B5C3 {
+		kind: U32;
+		bins: jagged bins;
+	}
+	bins: list F32;
+	names: list Text;
+	trailer: U8;
+	tags: list U32;
+}
