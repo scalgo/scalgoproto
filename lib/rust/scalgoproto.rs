@@ -764,7 +764,11 @@ impl<'a, T: JaggedTableIn<'a> + 'a> ListRead<'a> for JaggedTableListRead<'a, T> 
         item_size as usize * size
     }
 
-    unsafe fn get((item_size, ctx, len): Self::ItemSize, reader: &Reader<'a>, idx: usize) -> Self::Output {
+    unsafe fn get(
+        (item_size, ctx, len): Self::ItemSize,
+        reader: &Reader<'a>,
+        idx: usize,
+    ) -> Self::Output {
         let s = item_size as usize;
         let next = if idx + 1 < len {
             Some(reader.sub(s * (idx + 1), s))
