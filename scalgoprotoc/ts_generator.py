@@ -327,9 +327,7 @@ class Generator:
             elif spec[0] == "bit":
                 self.o(f"\t\tconst c_{spec[1]} = new globalThis.Uint8Array(_n);")
             else:
-                self.o(
-                    f"\t\tconst c_{spec[1]} = new globalThis.Array<{spec[2]}>(_n);"
-                )
+                self.o(f"\t\tconst c_{spec[1]} = new globalThis.Array<{spec[2]}>(_n);")
         objs = [spec for spec in specs if spec[0] == "obj"]
         if cursor:
             self.o("\t\tconst c = this.cursor();")
@@ -353,7 +351,9 @@ class Generator:
             row("i", "o")
             self.o("\t\t}")
             self.o(
-                "\t\treturn {{{}}};".format(", ".join(f"{sp[1]}: c_{sp[1]}" for sp in specs))
+                "\t\treturn {{{}}};".format(
+                    ", ".join(f"{sp[1]}: c_{sp[1]}" for sp in specs)
+                )
             )
             self.o("\t}")
             self.o()
@@ -398,7 +398,9 @@ class Generator:
             self.o("\t\t\t}")
         self.o("\t\t}")
         self.o(
-            "\t\treturn {{{}}};".format(", ".join(f"{sp[1]}: c_{sp[1]}" for sp in specs))
+            "\t\treturn {{{}}};".format(
+                ", ".join(f"{sp[1]}: c_{sp[1]}" for sp in specs)
+            )
         )
         self.o("\t}")
         self.o()
@@ -431,7 +433,9 @@ class Generator:
         if node.inplace:
             raise ICE()
         self.output_doc(node, "\t")
-        self.o("\tget {}(): boolean{} {{".format(lname, " | null" if node.optional else ""))
+        self.o(
+            "\tget {}(): boolean{} {{".format(lname, " | null" if node.optional else "")
+        )
         if node.optional:
             self.o(f"\t\tif (!{self.has_expr(node)}) return null;")
         self.o(
@@ -464,7 +468,11 @@ class Generator:
             tt, "this._off + %d" % node.offset, "this._dv", "this._r"
         )
         self.output_doc(node, "\t")
-        self.o("\tget {}(): {}{} {{".format(lname, ti.p, " | null" if node.optional else ""))
+        self.o(
+            "\tget {}(): {}{} {{".format(
+                lname, ti.p, " | null" if node.optional else ""
+            )
+        )
         if node.optional and is_float:
             self.o("\t\tif (%d >= this._size) return null;" % node.offset)
             self.o(f"\t\tconst v = {read};")
@@ -479,11 +487,11 @@ class Generator:
         self.o("\t}")
         self.o()
         if tt in (TokenType.I64, TokenType.UI64):
-            self.output_doc(
-                node, "\t", suffix=[f"Exact value of {lname} as a bigint"]
-            )
+            self.output_doc(node, "\t", suffix=[f"Exact value of {lname} as a bigint"])
             self.o(
-                "\tget {}_bigint(): bigint{} {{".format(lname, " | null" if node.optional else "")
+                "\tget {}_bigint(): bigint{} {{".format(
+                    lname, " | null" if node.optional else ""
+                )
             )
             if node.optional:
                 self.o(f"\t\tif (!{self.has_expr(node)}) return null;")
@@ -522,9 +530,15 @@ class Generator:
         if has:
             self.o("\t\t" + self.set_has(node))
         self.o(
-            "\t\t{};".format(self.write_basic(
-                tt, "this._off + %d" % node.offset, "value", "this._w._dv", "this._w"
-            ))
+            "\t\t{};".format(
+                self.write_basic(
+                    tt,
+                    "this._off + %d" % node.offset,
+                    "value",
+                    "this._w._dv",
+                    "this._w",
+                )
+            )
         )
         self.o("\t}")
         self.o()
@@ -570,7 +584,9 @@ class Generator:
             raise ICE()
         self.output_doc(node, "\t")
         self.o(
-            "\tget {}(): {}{} {{".format(lname, node.struct.name, " | null" if node.optional else "")
+            "\tget {}(): {}{} {{".format(
+                lname, node.struct.name, " | null" if node.optional else ""
+            )
         )
         if node.optional:
             self.o(f"\t\tif (!{self.has_expr(node)}) return null;")
@@ -1082,9 +1098,7 @@ class Generator:
         self.o()
 
         n = table.name
-        self.o(
-            f"export class {n}_ListIn extends scalgoproto.TableListIn<{n}In> {{"
-        )
+        self.o(f"export class {n}_ListIn extends scalgoproto.TableListIn<{n}In> {{")
         self.o(f"\tget(i: number): {n}In | null {{")
         self.o(
             "\t\tif (!((i >>> 0) === i && i < this.length)) scalgoproto._indexError(i, this.length);"
@@ -1163,7 +1177,19 @@ class Generator:
                 else:
                     ctor.append(f"{n}: {ti.p} = 0")
 
-                if v.type_.type == TokenType.I8 or v.type_.type == TokenType.I16 or v.type_.type == TokenType.I32 or v.type_.type == TokenType.I64 or v.type_.type == TokenType.U8 or v.type_.type == TokenType.U16 or v.type_.type == TokenType.UI32 or v.type_.type == TokenType.UI64 or v.type_.type == TokenType.F32 or v.type_.type == TokenType.F64 or v.type_.type == TokenType.BOOL:
+                if (
+                    v.type_.type == TokenType.I8
+                    or v.type_.type == TokenType.I16
+                    or v.type_.type == TokenType.I32
+                    or v.type_.type == TokenType.I64
+                    or v.type_.type == TokenType.U8
+                    or v.type_.type == TokenType.U16
+                    or v.type_.type == TokenType.UI32
+                    or v.type_.type == TokenType.UI64
+                    or v.type_.type == TokenType.F32
+                    or v.type_.type == TokenType.F64
+                    or v.type_.type == TokenType.BOOL
+                ):
                     read.append(
                         self.read_basic(
                             v.type_.type, "offset + %d" % v.offset, "dv", "reader"
@@ -1405,7 +1431,9 @@ class Generator:
     ) -> None:
         if inplace:
             self.o(
-                "\tset {}(value: {}) {{".format(lname, "string" if text else "scalgoproto.BytesLike")
+                "\tset {}(value: {}) {{".format(
+                    lname, "string" if text else "scalgoproto.BytesLike"
+                )
             )
             self.o("\t\tconst w = this._w;")
             self.o(f"\t\tw._checkInplace({check});")
@@ -1423,7 +1451,9 @@ class Generator:
             self.o(f"\tset {lname}(value: {t}) {{")
             self.o("\t\tconst w = this._w;")
             self.o(
-                "\t\tconst v = value instanceof scalgoproto.{} ? w._own(value) : w.construct{}(value);".format(c, "Text" if text else "Bytes")
+                "\t\tconst v = value instanceof scalgoproto.{} ? w._own(value) : w.construct{}(value);".format(
+                    c, "Text" if text else "Bytes"
+                )
             )
             self.o("\t\t" + store % "v._off" + ";")
         self.o("\t}")
@@ -1601,9 +1631,7 @@ class Generator:
 
     def generate_struct_writers(self, node: Struct) -> None:
         n = node.name
-        self.o(
-            f"export class {n}_ListOut extends scalgoproto.StructListOut<{n}> {{"
-        )
+        self.o(f"export class {n}_ListOut extends scalgoproto.StructListOut<{n}> {{")
         self.o("\tget _width(): number {")
         self.o("\t\treturn %d;" % node.bytes)
         self.o("\t}")
